@@ -56,7 +56,11 @@ pub struct DispatchTarget {
 pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
     fn handles_appid(&self, appid: &str) -> bool;
-    fn dispatch_targets(&self, _notification: &Notification, device: &Device) -> Vec<DispatchTarget> {
+    fn dispatch_targets(
+        &self,
+        _notification: &Notification,
+        device: &Device,
+    ) -> Vec<DispatchTarget> {
         vec![DispatchTarget {
             app_id: device.app_id.clone(),
             pushkey: device.pushkey.clone(),

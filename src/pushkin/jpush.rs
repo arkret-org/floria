@@ -389,7 +389,7 @@ impl Pushkin for JpushPushkin {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey = %device.pushkey,
+                    pushkey_hash = %device.redacted_pushkey(),
                     "rejecting JPush pushkey due to invalid default_payload"
                 );
                 return Ok(vec![device.pushkey.clone()]);
@@ -544,6 +544,7 @@ mod tests {
         Notification {
             room_name: Some("Mission Control".to_owned()),
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -558,13 +559,16 @@ mod tests {
             ),
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: Some(true),
             r#type: Some("m.room.message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(2),
                 missed_calls: Some(1),
+                highlight_count: None,
             },
         }
     }

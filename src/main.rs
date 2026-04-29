@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use salvo::prelude::*;
 use floria::AppState;
 use floria::config::Config;
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
 use floria::pushkin::PushkinRegistry;
 use floria::service::build_router_with_access_log;
+use salvo::prelude::*;
 use tokio::task::JoinSet;
 use tracing_subscriber::EnvFilter;
 
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         bail!("no app IDs are configured; define at least one entry under apps");
     }
 
-    let state = Arc::new(if config.http.notify_dedup_ttl_seconds > 0 {
+    let mut state = if config.http.notify_dedup_ttl_seconds > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_dedup_ttl_seconds);
         tracing::info!(
             ttl_secs = ttl.as_secs(),
@@ -34,7 +34,9 @@ async fn main() -> Result<()> {
         AppState::with_notify_deduplicator(registry, Arc::new(NotifyDeduplicator::new(ttl)))
     } else {
         AppState::new(registry)
-    });
+    };
+    state.notify_auth = config.http.notify_auth.clone();
+    let state = Arc::new(state);
     let router = Arc::new(build_router_with_access_log(state, &config.log.access));
 
     let mut servers = JoinSet::new();

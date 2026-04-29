@@ -273,7 +273,8 @@ impl FcmPushkin {
                             if attempt + 1 >= FCM_MAX_TRIES {
                                 tracing::info!(
                                     pushkin = self.name(),
-                                    retry_pushkeys = ?outcome.retry_pushkeys,
+                                    retry_pushkey_hashes =
+                                        ?crate::models::redact_push_tokens(&outcome.retry_pushkeys),
                                     "giving up retrying individual legacy FCM pushkeys"
                                 );
                                 return Ok(rejected);
@@ -614,6 +615,18 @@ impl FcmPushkin {
                     },
                 );
             }
+            if let Some(highlight_count) = notification.counts.highlight_count
+                && highlight_count > 0
+            {
+                counts.insert(
+                    "highlight_count".to_owned(),
+                    if self.api_version == ApiVersion::V1 {
+                        Value::String(highlight_count.to_string())
+                    } else {
+                        Value::Number(highlight_count.into())
+                    },
+                );
+            }
         }
 
         let has_routable_context = data.contains_key("space_id")
@@ -699,10 +712,15 @@ impl Pushkin for FcmPushkin {
         self.matcher.handles_appid(appid)
     }
 
-    fn dispatch_targets(&self, notification: &Notification, device: &Device) -> Vec<DispatchTarget> {
+    fn dispatch_targets(
+        &self,
+        notification: &Notification,
+        device: &Device,
+    ) -> Vec<DispatchTarget> {
         match self.api_version {
             ApiVersion::Legacy => {
-                let Some(pushkeys) = self.legacy_pushkeys_for_notification(notification, device) else {
+                let Some(pushkeys) = self.legacy_pushkeys_for_notification(notification, device)
+                else {
                     return vec![];
                 };
                 notification
@@ -743,7 +761,7 @@ impl Pushkin for FcmPushkin {
                     Ok(default_payload) => default_payload,
                     Err(_) => {
                         tracing::warn!(
-                            pushkeys = ?pushkeys,
+                            pushkey_hashes = ?crate::models::redact_push_tokens(&pushkeys),
                             "rejecting legacy FCM pushkeys due to invalid default_payload"
                         );
                         return Ok(pushkeys);
@@ -759,7 +777,7 @@ impl Pushkin for FcmPushkin {
                     Ok(default_payload) => default_payload,
                     Err(_) => {
                         tracing::warn!(
-                            pushkey = %device.pushkey,
+                            pushkey_hash = %device.redacted_pushkey(),
                             "rejecting FCM pushkey due to invalid default_payload"
                         );
                         return Ok(vec![device.pushkey.clone()]);
@@ -931,6 +949,7 @@ mod tests {
         let notification = Notification {
             room_name: Some("Mission Control".to_owned()),
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -945,13 +964,16 @@ mod tests {
             ),
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: Some("m.room.message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(2),
                 missed_calls: Some(1),
+                highlight_count: Some(1),
             },
         };
 
@@ -965,8 +987,10 @@ mod tests {
                 "event_id": "$event",
                 "type": "m.room.message",
                 "sender": "@major:example.com",
+                "space_name": "Mission Control",
                 "room_name": "Mission Control",
                 "sender_display_name": "Major Tom",
+                "space_id": "!room:example.com",
                 "room_id": "!room:example.com",
                 "content": {
                     "msgtype": "m.text",
@@ -974,7 +998,8 @@ mod tests {
                 },
                 "prio": "high",
                 "unread": 2,
-                "missed_calls": 1
+                "missed_calls": 1,
+                "highlight_count": 1
             })
             .as_object()
             .unwrap()
@@ -988,6 +1013,7 @@ mod tests {
         let notification = Notification {
             room_name: Some("Mission Control".to_owned()),
             room_alias: None,
+            space_name: None,
             prio: Some("low".to_owned()),
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -1002,13 +1028,16 @@ mod tests {
             ),
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: Some("m.room.message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(2),
                 missed_calls: Some(1),
+                highlight_count: Some(1),
             },
         };
 
@@ -1022,14 +1051,17 @@ mod tests {
                 "event_id": "$event",
                 "type": "m.room.message",
                 "sender": "@major:example.com",
+                "space_name": "Mission Control",
                 "room_name": "Mission Control",
                 "sender_display_name": "Major Tom",
+                "space_id": "!room:example.com",
                 "room_id": "!room:example.com",
                 "content_msgtype": "m.text",
                 "content_body": "I'm floating in a most peculiar way.",
                 "prio": "normal",
                 "unread": "2",
-                "missed_calls": "1"
+                "missed_calls": "1",
+                "highlight_count": "1"
             })
             .as_object()
             .unwrap()
@@ -1045,15 +1077,18 @@ mod tests {
         let notification = Notification {
             room_name: None,
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
             content: None,
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: None,
             sender: None,
+            push_hint: None,
             devices: vec![first.clone(), second.clone()],
             counts: Counts::default(),
         };
@@ -1074,15 +1109,18 @@ mod tests {
         let notification = Notification {
             room_name: None,
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
             content: None,
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: None,
             sender: None,
+            push_hint: None,
             devices: vec![device()],
             counts: Counts::default(),
         };
@@ -1113,19 +1151,23 @@ mod tests {
         let notification = Notification {
             room_name: None,
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
             content: None,
             event_id: None,
             room_id: None,
+            space_id: None,
             user_is_target: None,
             r#type: None,
             sender: None,
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(0),
                 missed_calls: Some(0),
+                highlight_count: Some(0),
             },
         };
 

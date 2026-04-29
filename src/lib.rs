@@ -8,6 +8,7 @@ pub mod service;
 
 use std::sync::Arc;
 
+use config::NotifyAuthConfig;
 use dedup::NotifyDeduplicator;
 use pushkin::PushkinRegistry;
 
@@ -15,6 +16,7 @@ use pushkin::PushkinRegistry;
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
+    pub notify_auth: NotifyAuthConfig,
 }
 
 impl AppState {
@@ -22,6 +24,7 @@ impl AppState {
         Self {
             registry,
             notify_deduplicator: None,
+            notify_auth: NotifyAuthConfig::default(),
         }
     }
 
@@ -32,6 +35,7 @@ impl AppState {
         Self {
             registry,
             notify_deduplicator: Some(notify_deduplicator),
+            notify_auth: NotifyAuthConfig::default(),
         }
     }
 }

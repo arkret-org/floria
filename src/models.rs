@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use blake2::Blake2s256;
+use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -11,7 +13,35 @@ pub struct NotifyRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotifyResponse {
+    pub request_id: String,
+    pub accepted: usize,
     pub rejected: Vec<RejectedDevice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_retries: Vec<ProviderRetry>,
+}
+
+impl NotifyResponse {
+    pub fn with_request_id(&self, request_id: impl Into<String>) -> Self {
+        let mut cloned = self.clone();
+        cloned.request_id = request_id.into();
+        cloned
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderRetry {
+    pub provider: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<u64>,
+}
+
+impl ProviderRetry {
+    pub fn new(provider: impl Into<String>, retry_after: Option<std::time::Duration>) -> Self {
+        Self {
+            provider: provider.into(),
+            retry_after_ms: retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,8 +53,9 @@ pub struct RejectedDevice {
 
 impl RejectedDevice {
     pub fn new(app_id: Option<&str>, push_key: impl Into<String>) -> Self {
+        let push_key = push_key.into();
         Self {
-            push_key: push_key.into(),
+            push_key: redact_push_token(&push_key),
             app_id: app_id
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
@@ -157,6 +188,10 @@ impl Device {
             .cloned()
             .unwrap_or_default()
     }
+
+    pub fn redacted_pushkey(&self) -> String {
+        redact_push_token(&self.pushkey)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -174,13 +209,64 @@ pub struct Tweaks {
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Counts {
     #[serde(default)]
+    #[serde(alias = "notification_count")]
     pub unread: Option<u64>,
     #[serde(default)]
     pub missed_calls: Option<u64>,
+    #[serde(default)]
+    #[serde(alias = "highlight")]
+    pub highlight_count: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 pub struct NotificationContext {
     pub request_id: String,
     pub start_time: Instant,
+}
+
+pub fn redact_push_token(token: &str) -> String {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return "pkh_empty".to_owned();
+    }
+
+    let mut hasher = Blake2s256::new();
+    hasher.update(trimmed.as_bytes());
+    let digest = hex::encode(hasher.finalize());
+    format!("pkh_{}", &digest[..12])
+}
+
+pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
+    tokens
+        .iter()
+        .map(|token| redact_push_token(token))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::Counts;
+
+    #[test]
+    fn counts_accept_notification_and_highlight_aliases() {
+        let counts: Counts = serde_json::from_value(json!({
+            "notification_count": 3,
+            "highlight_count": 1
+        }))
+        .unwrap();
+
+        assert_eq!(counts.unread, Some(3));
+        assert_eq!(counts.highlight_count, Some(1));
+    }
+
+    #[test]
+    fn rejected_device_redacts_push_key() {
+        let rejected = super::RejectedDevice::new(Some("com.example.app"), "token-123");
+
+        assert_eq!(rejected.app_id.as_deref(), Some("com.example.app"));
+        assert!(rejected.push_key.starts_with("pkh_"));
+        assert_ne!(rejected.push_key, "token-123");
+    }
 }

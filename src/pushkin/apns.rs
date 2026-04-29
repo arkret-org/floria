@@ -341,6 +341,12 @@ impl ApnsPushkin {
                     Value::Number(missed_calls.into()),
                 );
             }
+            if let Some(highlight_count) = notification.counts.highlight_count {
+                payload.insert(
+                    "highlight_count".to_owned(),
+                    Value::Number(highlight_count.into()),
+                );
+            }
         }
         Value::Object(payload)
     }
@@ -483,7 +489,10 @@ impl ApnsPushkin {
                     }
                 } else if let Some(body) = notification.content_body() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                    loc_args = vec![from_display.clone(), trim_chars(body, APNS_MAX_FIELD_LENGTH)];
+                    loc_args = vec![
+                        from_display.clone(),
+                        trim_chars(body, APNS_MAX_FIELD_LENGTH),
+                    ];
                 } else {
                     loc_key = Some("MSG_FROM_USER");
                     loc_args = vec![from_display.clone()];
@@ -544,6 +553,14 @@ impl ApnsPushkin {
                 default_payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
             }
         }
+        if self.send_badge_counts
+            && let Some(highlight_count) = notification.counts.highlight_count
+        {
+            default_payload.insert(
+                "highlight_count".to_owned(),
+                Value::Number(highlight_count.into()),
+            );
+        }
 
         let mut payload = Value::Object(default_payload);
         trim_apns_payload(&mut payload, APNS_MAX_JSON_BODY_SIZE);
@@ -572,7 +589,10 @@ impl Pushkin for ApnsPushkin {
         let default_payload = match device.default_payload() {
             Ok(default_payload) => default_payload,
             Err(_) => {
-                tracing::warn!(pushkey = %device.pushkey, "rejecting APNS pushkey due to invalid default_payload");
+                tracing::warn!(
+                    pushkey_hash = %device.redacted_pushkey(),
+                    "rejecting APNS pushkey due to invalid default_payload"
+                );
                 return Ok(vec![device.pushkey.clone()]);
             }
         };
@@ -824,6 +844,7 @@ mod tests {
         let notification = Notification {
             room_name: Some("Mission Control".to_owned()),
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -838,13 +859,16 @@ mod tests {
             ),
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: Some("m.room.message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(3),
                 missed_calls: None,
+                highlight_count: Some(1),
             },
         };
 
@@ -856,6 +880,7 @@ mod tests {
         assert_eq!(
             payload,
             json!({
+                "space_id": "!room:example.com",
                 "room_id": "!room:example.com",
                 "event_id": "$event",
                 "aps": {
@@ -868,7 +893,8 @@ mod tests {
                         ]
                     },
                     "badge": 3
-                }
+                },
+                "highlight_count": 1
             })
         );
     }
@@ -896,19 +922,23 @@ mod tests {
         let notification = Notification {
             room_name: None,
             room_alias: None,
+            space_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
             content: None,
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: None,
             r#type: None,
             sender: None,
+            push_hint: None,
             devices: vec![device.clone()],
             counts: Counts {
                 unread: Some(2),
                 missed_calls: None,
+                highlight_count: None,
             },
         };
 
@@ -920,6 +950,7 @@ mod tests {
         assert_eq!(
             payload,
             json!({
+                "space_id": "!room:example.com",
                 "room_id": "!room:example.com",
                 "event_id": "$event",
                 "unread_count": 2,

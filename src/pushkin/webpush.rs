@@ -190,6 +190,12 @@ impl WebpushPushkin {
                 Value::Number(missed_calls.into()),
             );
         }
+        if let Some(highlight_count) = notification.counts.highlight_count {
+            payload.insert(
+                "highlight_count".to_owned(),
+                Value::Number(highlight_count.into()),
+            );
+        }
 
         if let Some(content) = &notification.content {
             let mut content = content.clone();
@@ -306,7 +312,10 @@ impl WebpushPushkin {
             Err(WebPushError::InvalidUri)
             | Err(WebPushError::MissingCryptoKeys)
             | Err(WebPushError::InvalidCryptoKeys) => {
-                tracing::warn!(pushkey = %device.pushkey, "rejecting invalid webpush crypto material");
+                tracing::warn!(
+                    pushkey_hash = %device.redacted_pushkey(),
+                    "rejecting invalid webpush crypto material"
+                );
                 return Ok(vec![device.pushkey.clone()]);
             }
             Err(WebPushError::InvalidTopic | WebPushError::InvalidClaims) => {
@@ -388,7 +397,10 @@ impl Pushkin for WebpushPushkin {
         let _permit = self.gate.acquire(self.name())?;
 
         if device.data.is_none() {
-            tracing::warn!(pushkey = %device.pushkey, "rejecting webpush device without data object");
+            tracing::warn!(
+                pushkey_hash = %device.redacted_pushkey(),
+                "rejecting webpush device without data object"
+            );
             return Ok(vec![device.pushkey.clone()]);
         }
 
@@ -399,7 +411,11 @@ impl Pushkin for WebpushPushkin {
         let subscription = match self.subscription_from_device(device) {
             Ok(subscription) => subscription,
             Err(error) => {
-                tracing::warn!(pushkey = %device.pushkey, error = %error, "rejecting invalid webpush subscription");
+                tracing::warn!(
+                    pushkey_hash = %device.redacted_pushkey(),
+                    error = %error,
+                    "rejecting invalid webpush subscription"
+                );
                 return Ok(vec![device.pushkey.clone()]);
             }
         };
@@ -407,14 +423,18 @@ impl Pushkin for WebpushPushkin {
         let endpoint_domain = match Self::endpoint_domain(&subscription.endpoint) {
             Ok(endpoint_domain) => endpoint_domain,
             Err(error) => {
-                tracing::warn!(pushkey = %device.pushkey, error = %error, "rejecting invalid webpush endpoint");
+                tracing::warn!(
+                    pushkey_hash = %device.redacted_pushkey(),
+                    error = %error,
+                    "rejecting invalid webpush endpoint"
+                );
                 return Ok(vec![device.pushkey.clone()]);
             }
         };
 
         if !self.allows_endpoint(&endpoint_domain) {
             tracing::error!(
-                pushkey = %device.pushkey,
+                pushkey_hash = %device.redacted_pushkey(),
                 endpoint = %endpoint_domain,
                 "webpush endpoint not allowed by configuration"
             );
@@ -468,6 +488,7 @@ mod tests {
         Notification {
             room_name: Some("Mission Control".to_owned()),
             room_alias: None,
+            space_name: None,
             prio: Some("low".to_owned()),
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -484,13 +505,16 @@ mod tests {
             ),
             event_id: Some("$event".to_owned()),
             room_id: Some("!room:example.com".to_owned()),
+            space_id: None,
             user_is_target: Some(true),
             r#type: Some("m.room.message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
+            push_hint: None,
             devices: vec![device()],
             counts: Counts {
                 unread: Some(2),
                 missed_calls: Some(1),
+                highlight_count: Some(1),
             },
         }
     }
@@ -516,6 +540,10 @@ mod tests {
         );
         assert_eq!(payload.get("unread"), Some(&Value::Number(2.into())));
         assert_eq!(payload.get("missed_calls"), Some(&Value::Number(1.into())));
+        assert_eq!(
+            payload.get("highlight_count"),
+            Some(&Value::Number(1.into()))
+        );
         assert_eq!(payload.get("user_is_target"), Some(&Value::Bool(true)));
 
         let content = payload.get("content").and_then(Value::as_object).unwrap();
@@ -531,7 +559,7 @@ mod tests {
 
     #[test]
     fn topic_is_base64url_and_short_enough() {
-        let topic = WebpushPushkin::room_topic("!room:example.com");
+        let topic = WebpushPushkin::scope_topic("!room:example.com");
         assert!(topic.len() <= 32);
         assert!(
             topic

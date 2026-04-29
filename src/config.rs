@@ -84,6 +84,7 @@ pub struct HttpConfig {
     #[serde(deserialize_with = "string_or_vec")]
     pub bind_addresses: Vec<String>,
     pub notify_dedup_ttl_seconds: u64,
+    pub notify_auth: NotifyAuthConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -127,6 +128,7 @@ impl Default for HttpConfig {
             port: 5000,
             bind_addresses: vec!["127.0.0.1".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_auth: NotifyAuthConfig::default(),
             extra: Map::new(),
         }
     }
@@ -146,6 +148,34 @@ impl HttpConfig {
     fn emit_startup_warnings(&self) {
         warn_unknown_fields(
             "http",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+        self.notify_auth.emit_startup_warnings();
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct NotifyAuthConfig {
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_tokens: Vec<String>,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub trusted_service_dids: Vec<String>,
+    pub gateway_service_did: Option<String>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl NotifyAuthConfig {
+    pub fn enabled(&self) -> bool {
+        !self.bearer_tokens.is_empty()
+            || !self.trusted_service_dids.is_empty()
+            || self.gateway_service_did.is_some()
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.notify_auth",
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
     }
@@ -571,6 +601,7 @@ apps: {}
             port: 5000,
             bind_addresses: vec!["127.0.0.1:7000".to_owned(), "example.com:7100".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_auth: NotifyAuthConfig::default(),
             extra: Map::new(),
         };
 
@@ -586,6 +617,7 @@ apps: {}
             port: 5000,
             bind_addresses: vec!["[::1]".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_auth: NotifyAuthConfig::default(),
             extra: Map::new(),
         };
 

@@ -15,6 +15,7 @@ pub struct CachedNotifyResponse {
 #[derive(Debug)]
 struct CacheEntry {
     expires_at: Instant,
+    request_fingerprint: String,
     response: CachedNotifyResponse,
 }
 
@@ -38,17 +39,30 @@ impl NotifyDeduplicator {
         self.ttl
     }
 
-    pub fn get(&self, key: &str) -> Option<CachedNotifyResponse> {
+    pub fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
         let now = Instant::now();
         let mut entries = self
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries.retain(|_, entry| entry.expires_at > now);
-        entries.get(key).map(|entry| entry.response.clone())
+        let entry = entries.get(key)?;
+        (entry.request_fingerprint == request_fingerprint).then(|| entry.response.clone())
     }
 
-    pub fn insert_success(&self, key: &str, response: NotifyResponse) {
+    pub fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
+        let now = Instant::now();
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.retain(|_, entry| entry.expires_at > now);
+        entries
+            .get(key)
+            .is_some_and(|entry| entry.request_fingerprint != request_fingerprint)
+    }
+
+    pub fn insert_success(&self, key: &str, request_fingerprint: &str, response: NotifyResponse) {
         if self.ttl.is_zero() {
             return;
         }
@@ -63,6 +77,7 @@ impl NotifyDeduplicator {
             key.to_owned(),
             CacheEntry {
                 expires_at: now + self.ttl,
+                request_fingerprint: request_fingerprint.to_owned(),
                 response: CachedNotifyResponse { response },
             },
         );
@@ -119,19 +134,23 @@ fn delivered_device_key(notification_key: &str, app_id: &str, pushkey: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::RejectedDevice;
 
     #[test]
     fn returns_inserted_response_before_expiry() {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
         let response = NotifyResponse {
-            rejected: vec!["pushkey".to_owned()],
+            request_id: "request-1".to_owned(),
+            accepted: 1,
+            rejected: vec![RejectedDevice::new(Some("com.example.app"), "pushkey")],
+            provider_retries: vec![],
         };
         let key = request_hash(br#"{"notification":{}}"#);
 
-        dedup.insert_success(&key, response.clone());
+        dedup.insert_success(&key, &key, response.clone());
 
         assert_eq!(
-            dedup.get(&key).map(|cached| cached.response),
+            dedup.lookup(&key, &key).map(|cached| cached.response),
             Some(response)
         );
     }
@@ -140,11 +159,20 @@ mod tests {
     fn expires_entries_after_ttl() {
         let dedup = NotifyDeduplicator::new(Duration::from_millis(1));
         let key = request_hash(br#"{"notification":{}}"#);
-        dedup.insert_success(&key, NotifyResponse { rejected: vec![] });
+        dedup.insert_success(
+            &key,
+            &key,
+            NotifyResponse {
+                request_id: "request-1".to_owned(),
+                accepted: 0,
+                rejected: vec![],
+                provider_retries: vec![],
+            },
+        );
 
         std::thread::sleep(Duration::from_millis(5));
 
-        assert!(dedup.get(&key).is_none());
+        assert!(dedup.lookup(&key, &key).is_none());
     }
 
     #[test]
@@ -154,10 +182,27 @@ mod tests {
 
         dedup.mark_delivered_device(&notification_key, "com.example.app", "pushkey");
 
-        assert!(dedup.contains_delivered_device(
-            &notification_key,
-            "com.example.app",
-            "pushkey"
-        ));
+        assert!(dedup.contains_delivered_device(&notification_key, "com.example.app", "pushkey"));
+    }
+
+    #[test]
+    fn detects_duplicate_conflict_for_different_request_body() {
+        let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
+        let key = request_hash(b"idempotency-key");
+        let first_fingerprint = request_hash(br#"{"notification":{"event_id":"first"}}"#);
+        let second_fingerprint = request_hash(br#"{"notification":{"event_id":"second"}}"#);
+        dedup.insert_success(
+            &key,
+            &first_fingerprint,
+            NotifyResponse {
+                request_id: "request-1".to_owned(),
+                accepted: 1,
+                rejected: vec![],
+                provider_retries: vec![],
+            },
+        );
+
+        assert!(dedup.lookup(&key, &first_fingerprint).is_some());
+        assert!(dedup.conflicts(&key, &second_fingerprint));
     }
 }

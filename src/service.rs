@@ -14,14 +14,26 @@ use crate::AppState;
 use crate::config::AccessLogConfig;
 use crate::dedup::request_hash;
 use crate::metrics;
-use crate::models::{Notification, NotificationContext, NotifyResponse, RejectedDevice};
+use crate::models::{
+    Notification, NotificationContext, NotifyResponse, ProviderRetry, RejectedDevice,
+};
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
+const ORIGIN_SERVICE_DID_HEADER: &str = "x-contrix-origin-service-did";
+const DESTINATION_SERVICE_DID_HEADER: &str = "x-contrix-destination-service-did";
+
+fn notify_route(path: &'static str) -> Router {
+    Router::with_path(path)
+        .post(notify)
+        .get(notify_method_not_allowed)
+        .put(notify_method_not_allowed)
+        .delete(notify_method_not_allowed)
+}
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
-        .push(Router::with_path("api/v1/push/notify").post(notify))
-        .push(Router::with_path("contrix/push/v1/notify").post(notify))
+        .push(notify_route("api/v1/push/notify"))
+        .push(notify_route("contrix/push/v1/notify"))
         .push(Router::with_path("health").get(health))
 }
 
@@ -29,8 +41,8 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
     let use_forwarded_for = access_log.x_forwarded_for;
     Router::with_hoop(affix_state::inject(state))
         .hoop(AccessLogger { use_forwarded_for })
-        .push(Router::with_path("api/v1/push/notify").post(notify))
-        .push(Router::with_path("contrix/push/v1/notify").post(notify))
+        .push(notify_route("api/v1/push/notify"))
+        .push(notify_route("contrix/push/v1/notify"))
         .push(Router::with_path("health").get(health))
 }
 
@@ -99,6 +111,257 @@ async fn health(res: &mut Response) {
     res.render(Text::Plain(""));
 }
 
+#[derive(Debug)]
+struct AuthFailure {
+    status: StatusCode,
+    code: &'static str,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorEnvelope<'a> {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<&'a str>,
+    error: ErrorBody<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorBody<'a> {
+    code: &'a str,
+    message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after_ms: Option<u64>,
+}
+
+#[handler]
+async fn notify_method_not_allowed(res: &mut Response) {
+    let _ = res.add_header(
+        HeaderName::from_static("allow"),
+        HeaderValue::from_static("POST"),
+        true,
+    );
+    finish_error(
+        res,
+        StatusCode::METHOD_NOT_ALLOWED,
+        "method_not_allowed",
+        "method not allowed",
+        None,
+        None,
+        Instant::now(),
+    );
+}
+
+fn authenticate_notify_request(
+    req: &Request,
+    state: &AppState,
+    request_id: &str,
+) -> Result<(), AuthFailure> {
+    let auth = &state.notify_auth;
+    if !auth.enabled() {
+        return Ok(());
+    }
+
+    let origin_did = req
+        .header::<String>(ORIGIN_SERVICE_DID_HEADER)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let destination_did = req
+        .header::<String>(DESTINATION_SERVICE_DID_HEADER)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let redacted_origin = origin_did.as_deref().unwrap_or("<missing>").to_owned();
+    let redacted_destination = destination_did.as_deref().unwrap_or("<missing>").to_owned();
+
+    let token = req
+        .header::<String>("authorization")
+        .and_then(|value| parse_bearer_token(&value).map(ToOwned::to_owned));
+
+    let Some(token) = token else {
+        tracing::warn!(
+            request_id,
+            origin_service_did = %redacted_origin,
+            destination_service_did = %redacted_destination,
+            "rejecting unauthenticated /notify request"
+        );
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthenticated",
+            message: "missing bearer service token".to_owned(),
+        });
+    };
+
+    if !auth
+        .bearer_tokens
+        .iter()
+        .any(|candidate| candidate == &token)
+    {
+        tracing::warn!(
+            request_id,
+            origin_service_did = %redacted_origin,
+            destination_service_did = %redacted_destination,
+            "rejecting /notify request with invalid bearer token"
+        );
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthenticated",
+            message: "invalid bearer service token".to_owned(),
+        });
+    }
+
+    if !auth.trusted_service_dids.is_empty() {
+        let Some(origin_did) = origin_did else {
+            tracing::warn!(
+                request_id,
+                destination_service_did = %redacted_destination,
+                "rejecting /notify request without origin service DID"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::FORBIDDEN,
+                code: "capability_denied",
+                message: "origin service DID is required".to_owned(),
+            });
+        };
+        if !auth
+            .trusted_service_dids
+            .iter()
+            .any(|candidate| candidate == &origin_did)
+        {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %origin_did,
+                destination_service_did = %redacted_destination,
+                "rejecting /notify request from non-allowlisted service DID"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::FORBIDDEN,
+                code: "capability_denied",
+                message: "origin service DID is not allowlisted".to_owned(),
+            });
+        }
+    }
+
+    if let Some(gateway_service_did) = auth.gateway_service_did.as_deref() {
+        let Some(destination_did) = destination_did else {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %redacted_origin,
+                "rejecting /notify request without destination service DID"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::FORBIDDEN,
+                code: "capability_denied",
+                message: "destination service DID is required".to_owned(),
+            });
+        };
+        if destination_did != gateway_service_did {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %redacted_origin,
+                destination_service_did = %destination_did,
+                expected_destination_service_did = %gateway_service_did,
+                "rejecting /notify request for a different gateway DID"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::FORBIDDEN,
+                code: "capability_denied",
+                message: "destination service DID does not match this gateway".to_owned(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_bearer_token(value: &str) -> Option<&str> {
+    let value = value.trim();
+    let token = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))?;
+    let token = token.trim();
+    (!token.is_empty()).then_some(token)
+}
+
+fn parse_optional_idempotency_key(
+    value: Option<&str>,
+    source: &str,
+) -> Result<Option<String>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(format!("{source} must not be empty"));
+    }
+    Ok(Some(value.to_owned()))
+}
+
+fn resolve_idempotency_key(req: &Request, raw: &Value) -> Result<Option<String>, String> {
+    let header = parse_optional_idempotency_key(
+        req.header::<String>("idempotency-key").as_deref(),
+        "Idempotency-Key header",
+    )?;
+    let body = match raw.get("idempotency_key") {
+        None => Ok(None),
+        Some(Value::String(value)) => {
+            parse_optional_idempotency_key(Some(value), "idempotency_key")
+        }
+        Some(_) => Err("idempotency_key must be a string".to_owned()),
+    }?;
+
+    if let (Some(header), Some(body)) = (header.as_deref(), body.as_deref())
+        && header != body
+    {
+        return Err("Idempotency-Key header does not match body idempotency_key".to_owned());
+    }
+
+    Ok(header.or(body))
+}
+
+fn validate_notification_contract(notification: &Notification) -> Result<(), String> {
+    let is_contrix_request = notification.space_id.is_some()
+        || notification.push_hint.is_some()
+        || notification
+            .event_kind()
+            .is_some_and(|kind| kind.starts_with("cx."));
+    if !is_contrix_request {
+        return Ok(());
+    }
+
+    let Some(content) = notification.content.as_ref() else {
+        return Ok(());
+    };
+
+    if content.contains_key("body") {
+        return Err("Contrix blind wakeup payloads must not include message body".to_owned());
+    }
+    if content.contains_key("ciphertext") || content.contains_key("encrypted_payload") {
+        return Err(
+            "Contrix blind wakeup payloads must not include encrypted payload bytes".to_owned(),
+        );
+    }
+    if content.get("offer").is_some() || content.get("sdp").is_some() {
+        return Err("Contrix blind wakeup payloads must not include SDP".to_owned());
+    }
+    if content.get("ice_candidate").is_some() || content.get("ice_candidates").is_some() {
+        return Err("Contrix blind wakeup payloads must not include ICE candidates".to_owned());
+    }
+    if content.get("turn").is_some() || content.get("turn_credentials").is_some() {
+        return Err("Contrix blind wakeup payloads must not include TURN credentials".to_owned());
+    }
+
+    Ok(())
+}
+
+fn dedup_provider_retries(provider_retries: &mut Vec<ProviderRetry>) {
+    provider_retries.sort_by(|left, right| {
+        left.provider
+            .cmp(&right.provider)
+            .then(left.retry_after_ms.cmp(&right.retry_after_ms))
+    });
+    provider_retries.dedup();
+}
+
 #[handler]
 async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();
@@ -107,47 +370,89 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let state = match depot.obtain::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
-            finish_text(
+            finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
                 "application state missing",
+                None,
+                None,
                 started,
             );
             return;
         }
     };
+    let request_id = Uuid::new_v4().to_string();
+
+    if let Err(error) = authenticate_notify_request(req, &state, &request_id) {
+        finish_error(
+            res,
+            error.status,
+            error.code,
+            &error.message,
+            None,
+            Some(&request_id),
+            started,
+        );
+        return;
+    }
 
     let body = match req.payload_with_max_size(MAX_REQUEST_SIZE).await {
         Ok(bytes) => bytes,
         Err(ParseError::PayloadTooLarge) => {
-            finish_text(
+            finish_error(
                 res,
                 StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large",
                 "request body exceeds 512 KiB",
+                None,
+                Some(&request_id),
                 started,
             );
             return;
         }
         Err(error) => {
             tracing::warn!(error = %error, "failed to read request body");
-            finish_text(
+            finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
+                "invalid_request",
                 "failed to read request body",
+                None,
+                Some(&request_id),
                 started,
             );
             return;
         }
     };
+    let raw_request_hash = request_hash(body.as_ref());
 
     let raw = match serde_json::from_slice::<Value>(body) {
         Ok(raw) => raw,
         Err(error) => {
             tracing::warn!(error = %error, "expected JSON request body");
-            finish_text(
+            finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
+                "invalid_request",
                 "expected JSON request body",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    };
+    let idempotency_key = match resolve_idempotency_key(req, &raw) {
+        Ok(idempotency_key) => idempotency_key,
+        Err(message) => {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                &message,
+                None,
+                Some(&request_id),
                 started,
             );
             return;
@@ -155,20 +460,26 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     };
 
     let Some(notification_value) = raw.get("notification").cloned() else {
-        finish_text(
+        finish_error(
             res,
             StatusCode::BAD_REQUEST,
+            "invalid_request",
             "missing notification field",
+            None,
+            Some(&request_id),
             started,
         );
         return;
     };
 
     if !notification_value.is_object() {
-        finish_text(
+        finish_error(
             res,
             StatusCode::BAD_REQUEST,
+            "invalid_request",
             "notification must be an object",
+            None,
+            Some(&request_id),
             started,
         );
         return;
@@ -178,51 +489,94 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         Ok(notification) => notification,
         Err(error) => {
             tracing::warn!(error = %error, "invalid notification payload");
-            finish_text(
+            finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
+                "invalid_request",
                 "invalid notification payload",
+                None,
+                Some(&request_id),
                 started,
             );
             return;
         }
     };
 
-    let dedup_key = normalized_notify_dedup_key(&notification);
-    if let Some(deduplicator) = state.notify_deduplicator.as_ref()
-        && let Some(cached) = dedup_key
-            .as_deref()
-            .and_then(|key| deduplicator.get(key))
-    {
-        metrics::notify_request_cache_hit();
-        tracing::info!(
-            request_id = %Uuid::new_v4(),
-            ttl_secs = deduplicator.ttl().as_secs(),
-            "serving /notify response from normalized dedup cache"
+    if let Err(message) = validate_notification_contract(&notification) {
+        finish_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            &message,
+            None,
+            Some(&request_id),
+            started,
         );
-        finish_json(res, StatusCode::OK, cached.response, started);
         return;
+    }
+
+    let request_fingerprint =
+        normalized_notify_dedup_key(&notification).unwrap_or(raw_request_hash);
+    let dedup_key = idempotency_key
+        .as_deref()
+        .map(idempotency_cache_key)
+        .unwrap_or_else(|| request_fingerprint.clone());
+    if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
+        if deduplicator.conflicts(&dedup_key, &request_fingerprint) {
+            finish_error(
+                res,
+                StatusCode::CONFLICT,
+                "duplicate_conflict",
+                "same idempotency key maps to different canonical request body",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+        if let Some(cached) = deduplicator.lookup(&dedup_key, &request_fingerprint) {
+            metrics::notify_request_cache_hit();
+            tracing::info!(
+                request_id = %request_id,
+                ttl_secs = deduplicator.ttl().as_secs(),
+                idempotency_key = idempotency_key
+                    .as_deref()
+                    .unwrap_or("<canonical-request-hash>"),
+                "serving /notify response from dedup cache"
+            );
+            finish_json(
+                res,
+                StatusCode::OK,
+                cached.response.with_request_id(request_id),
+                started,
+            );
+            return;
+        }
     }
     metrics::notification_received();
 
     if notification.devices.is_empty() {
-        finish_text(
+        finish_error(
             res,
             StatusCode::BAD_REQUEST,
+            "invalid_request",
             "no devices in notification",
+            None,
+            Some(&request_id),
             started,
         );
         return;
     }
 
     let context = NotificationContext {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: request_id.clone(),
         start_time: Instant::now(),
     };
 
     let mut rejected = Vec::new();
     let mut delivered_now = 0usize;
     let mut skipped_delivered = 0usize;
+    let mut provider_retries = Vec::new();
     let mut seen_devices = HashSet::new();
     let mut first_remote_error: Option<String> = None;
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
@@ -234,7 +588,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
             tracing::warn!(
                 request_id = %context.request_id,
                 app_id = %device.app_id,
-                pushkey = %device.pushkey,
+                pushkey_hash = %device.redacted_pushkey(),
                 "rejecting device with empty app_id or pushkey"
             );
             rejected.push(rejected_device(device, Some(&device.pushkey)));
@@ -245,7 +599,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
             tracing::info!(
                 request_id = %context.request_id,
                 app_id,
-                pushkey,
+                pushkey_hash = %device.redacted_pushkey(),
                 "skipping duplicate device entry"
             );
             continue;
@@ -255,18 +609,17 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         let pushkins = state.registry.find_pushkins(&device.app_id);
         match pushkins.as_slice() {
             [] => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey = %device.pushkey, "unknown app id");
+                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey_hash = %device.redacted_pushkey(), "unknown app id");
                 rejected.push(rejected_device(device, Some(&device.pushkey)));
                 continue;
             }
             [pushkin] => {
-                if let Some(dedup_key) = dedup_key.as_deref()
-                    && state
-                        .notify_deduplicator
-                        .as_ref()
-                        .is_some_and(|deduplicator| {
-                            deduplicator.contains_delivered_device(dedup_key, app_id, pushkey)
-                        })
+                if state
+                    .notify_deduplicator
+                    .as_ref()
+                    .is_some_and(|deduplicator| {
+                        deduplicator.contains_delivered_device(&dedup_key, app_id, pushkey)
+                    })
                 {
                     skipped_delivered += 1;
                     metrics::notify_device_skip_hit(1);
@@ -274,7 +627,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                     tracing::info!(
                         request_id = %context.request_id,
                         app_id,
-                        pushkey,
+                        pushkey_hash = %device.redacted_pushkey(),
                         pushkin = %pushkin.name(),
                         "skipping device already delivered within dedup ttl"
                     );
@@ -288,8 +641,10 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                     .await
                 {
                     Ok(mut pushkin_rejected) => {
-                        let rejected_set =
-                            pushkin_rejected.iter().cloned().collect::<HashSet<String>>();
+                        let rejected_set = pushkin_rejected
+                            .iter()
+                            .cloned()
+                            .collect::<HashSet<String>>();
                         let delivered_targets = dispatch_targets
                             .iter()
                             .filter(|target| !rejected_set.contains(&target.pushkey))
@@ -298,7 +653,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                             delivered_now += delivered_targets.len();
                             mark_delivered_devices(
                                 &state,
-                                dedup_key.as_deref(),
+                                &dedup_key,
                                 delivered_targets.iter().copied(),
                             );
                         }
@@ -313,9 +668,11 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey = %device.pushkey,
+                            pushkey_hash = %device.redacted_pushkey(),
                             "temporary dispatch failure"
                         );
+                        provider_retries
+                            .push(ProviderRetry::new(pushkin.name(), error.retry_after()));
                         first_temporary_error
                             .get_or_insert_with(|| (error.to_string(), error.retry_after()));
                     }
@@ -324,7 +681,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey = %device.pushkey,
+                            pushkey_hash = %device.redacted_pushkey(),
                             "remote dispatch failure"
                         );
                         first_remote_error.get_or_insert_with(|| error.to_string());
@@ -334,7 +691,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey = %device.pushkey,
+                            pushkey_hash = %device.redacted_pushkey(),
                             "internal dispatch failure"
                         );
                         first_internal_error.get_or_insert_with(|| error.to_string());
@@ -342,11 +699,13 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                 }
             }
             _ => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey = %device.pushkey, "ambiguous app id");
+                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey_hash = %device.redacted_pushkey(), "ambiguous app id");
                 rejected.push(rejected_device(device, Some(&device.pushkey)));
             }
         }
     }
+
+    dedup_provider_retries(&mut provider_retries);
 
     let fully_settled = first_internal_error.is_none()
         && first_temporary_error.is_none()
@@ -397,9 +756,14 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                 "returning success with cached delivered devices"
             );
         }
-        let response = NotifyResponse { rejected };
+        let response = NotifyResponse {
+            request_id: context.request_id.clone(),
+            accepted: delivered_now + skipped_delivered,
+            rejected,
+            provider_retries,
+        };
         if fully_settled {
-            cache_success_response(&state, dedup_key.as_deref(), &response);
+            cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
         }
         finish_json(res, StatusCode::OK, response, started);
         return;
@@ -425,47 +789,73 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     }
 
     if let Some(message) = first_internal_error {
-        finish_text(res, StatusCode::INTERNAL_SERVER_ERROR, &message, started);
+        finish_error(
+            res,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            &message,
+            None,
+            Some(&context.request_id),
+            started,
+        );
         return;
     }
 
     if let Some((message, retry_after)) = first_temporary_error {
-        finish_text_with_retry_after(
+        finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
+            "provider_unavailable",
             &message,
             retry_after,
+            Some(&context.request_id),
             started,
         );
         return;
     }
 
     if let Some(message) = first_remote_error {
-        finish_text(res, StatusCode::BAD_GATEWAY, &message, started);
+        finish_error(
+            res,
+            StatusCode::BAD_GATEWAY,
+            "provider_unavailable",
+            &message,
+            None,
+            Some(&context.request_id),
+            started,
+        );
         return;
     }
 
-    let response = NotifyResponse { rejected };
+    let response = NotifyResponse {
+        request_id: context.request_id.clone(),
+        accepted: delivered_now + skipped_delivered,
+        rejected,
+        provider_retries,
+    };
     if fully_settled {
-        cache_success_response(&state, dedup_key.as_deref(), &response);
+        cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
     }
     finish_json(res, StatusCode::OK, response, started);
 }
 
-fn cache_success_response(state: &Arc<AppState>, key: Option<&str>, response: &NotifyResponse) {
-    if let (Some(deduplicator), Some(key)) = (state.notify_deduplicator.as_ref(), key) {
-        deduplicator.insert_success(key, response.clone());
+fn cache_success_response(
+    state: &Arc<AppState>,
+    key: &str,
+    request_fingerprint: &str,
+    response: &NotifyResponse,
+) {
+    if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
+        deduplicator.insert_success(key, request_fingerprint, response.clone());
     }
 }
 
 fn mark_delivered_devices<'a>(
     state: &Arc<AppState>,
-    notification_key: Option<&str>,
+    notification_key: &str,
     targets: impl Iterator<Item = &'a crate::pushkin::DispatchTarget>,
 ) {
-    if let (Some(deduplicator), Some(notification_key)) =
-        (state.notify_deduplicator.as_ref(), notification_key)
-    {
+    if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         for target in targets {
             deduplicator.mark_delivered_device(notification_key, &target.app_id, &target.pushkey);
         }
@@ -474,6 +864,10 @@ fn mark_delivered_devices<'a>(
 
 fn rejected_device(device: &crate::models::Device, push_key: Option<&str>) -> RejectedDevice {
     RejectedDevice::new(Some(&device.app_id), push_key.unwrap_or(&device.pushkey))
+}
+
+fn idempotency_cache_key(idempotency_key: &str) -> String {
+    request_hash(format!("idempotency-key\0{idempotency_key}").as_bytes())
 }
 
 fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
@@ -498,7 +892,10 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
         );
     }
     if let Some(value) = notification.content.as_ref() {
-        normalized.insert("content".to_owned(), canonical_json_value(&Value::Object(value.clone())));
+        normalized.insert(
+            "content".to_owned(),
+            canonical_json_value(&Value::Object(value.clone())),
+        );
     }
     if let Some(value) = notification.event_id.as_ref() {
         normalized.insert("event_id".to_owned(), Value::String(value.clone()));
@@ -578,18 +975,13 @@ fn canonical_sort_key(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-fn finish_text(res: &mut Response, status: StatusCode, body: &str, started: Instant) {
-    res.status_code(status);
-    res.render(Text::Plain(body.to_owned()));
-    metrics::pushgateway_response(status);
-    metrics::observe_notify_handle(status, started.elapsed());
-}
-
-fn finish_text_with_retry_after(
+fn finish_error(
     res: &mut Response,
     status: StatusCode,
+    code: &str,
     body: &str,
     retry_after: Option<Duration>,
+    request_id: Option<&str>,
     started: Instant,
 ) {
     if let Some(retry_after) = retry_after {
@@ -600,7 +992,19 @@ fn finish_text_with_retry_after(
             true,
         );
     }
-    finish_text(res, status, body, started);
+    let body = ErrorEnvelope {
+        ok: false,
+        request_id,
+        error: ErrorBody {
+            code,
+            message: body,
+            retry_after_ms: retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
+        },
+    };
+    res.status_code(status);
+    res.render(Json(body));
+    metrics::pushgateway_response(status);
+    metrics::observe_notify_handle(status, started.elapsed());
 }
 
 fn finish_json<T: Serialize + Send>(
@@ -628,6 +1032,7 @@ mod tests {
     use tokio::time::sleep;
 
     use super::*;
+    use crate::config::NotifyAuthConfig;
     use crate::dedup::NotifyDeduplicator;
     use crate::error::DispatchError;
     use crate::models::{Device, Notification, NotificationContext, RejectedDevice};
@@ -740,6 +1145,29 @@ mod tests {
         Service::new(build_router(state))
     }
 
+    fn test_service_with_auth(
+        pushkins: Vec<(&str, Arc<dyn Pushkin>)>,
+        notify_auth: NotifyAuthConfig,
+    ) -> Service {
+        let registry = PushkinRegistry::new(
+            pushkins
+                .into_iter()
+                .map(|(name, pushkin)| (name.to_owned(), pushkin))
+                .collect::<HashMap<_, _>>(),
+        );
+        let mut state = AppState::new(Arc::new(registry));
+        state.notify_auth = notify_auth;
+        Service::new(build_router(Arc::new(state)))
+    }
+
+    fn notify_auth_config() -> NotifyAuthConfig {
+        let mut config = NotifyAuthConfig::default();
+        config.bearer_tokens = vec!["secret-token".to_owned()];
+        config.trusted_service_dids = vec!["did:web:sync.example.com".to_owned()];
+        config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+        config
+    }
+
     fn payload(devices: Vec<Value>) -> Value {
         json!({
             "notification": {
@@ -772,6 +1200,11 @@ mod tests {
         })
     }
 
+    fn with_idempotency_key(mut request_body: Value, idempotency_key: &str) -> Value {
+        request_body["idempotency_key"] = Value::String(idempotency_key.to_owned());
+        request_body
+    }
+
     fn device(app_id: &str, pushkey: &str) -> Value {
         json!({
             "app_id": app_id,
@@ -792,6 +1225,37 @@ mod tests {
         RejectedDevice::new(app_id, push_key)
     }
 
+    async fn assert_notify_error<T: ResponseExt + ?Sized>(
+        response: &mut T,
+        code: &str,
+        expect_request_id: bool,
+    ) -> Value {
+        let body = response.take_json::<Value>().await.unwrap();
+        assert_eq!(body["ok"], json!(false));
+        assert_eq!(body["error"]["code"], json!(code));
+        match (expect_request_id, body.get("request_id")) {
+            (true, Some(Value::String(request_id))) => assert!(!request_id.is_empty()),
+            (true, _) => panic!("expected request_id in error response"),
+            (false, None) => {}
+            (false, Some(Value::Null)) => {}
+            (false, Some(_)) => panic!("did not expect request_id in error response"),
+        }
+        body
+    }
+
+    async fn assert_notify_ok<T: ResponseExt + ?Sized>(
+        response: &mut T,
+        accepted: usize,
+        rejected_devices: Vec<RejectedDevice>,
+        provider_retries: usize,
+    ) {
+        let body = response.take_json::<NotifyResponse>().await.unwrap();
+        assert!(!body.request_id.is_empty());
+        assert_eq!(body.accepted, accepted);
+        assert_eq!(body.rejected, rejected_devices);
+        assert_eq!(body.provider_retries.len(), provider_retries);
+    }
+
     #[tokio::test]
     async fn accepted_devices_are_not_rejected() {
         let service = test_service(vec![(
@@ -805,10 +1269,7 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse { rejected: vec![] }
-        );
+        assert_notify_ok(&mut response, 1, vec![], 0).await;
     }
 
     #[tokio::test]
@@ -827,9 +1288,219 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+        assert_notify_ok(&mut response, 1, vec![], 0).await;
+    }
+
+    #[tokio::test]
+    async fn notify_method_not_allowed_returns_standard_error_envelope() {
+        let service = test_service(vec![]);
+
+        let mut get_response = TestClient::get("http://127.0.0.1/api/v1/push/notify")
+            .send(&service)
+            .await;
         assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse { rejected: vec![] }
+            get_response.status_code.unwrap(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            get_response
+                .headers()
+                .get("allow")
+                .and_then(|value| value.to_str().ok()),
+            Some("POST")
+        );
+        assert_notify_error(&mut get_response, "method_not_allowed", false).await;
+
+        let mut put_response = TestClient::put("http://127.0.0.1/api/v1/push/notify")
+            .send(&service)
+            .await;
+        assert_eq!(
+            put_response.status_code.unwrap(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_notify_error(&mut put_response, "method_not_allowed", false).await;
+
+        let mut delete_response = TestClient::delete("http://127.0.0.1/api/v1/push/notify")
+            .send(&service)
+            .await;
+        assert_eq!(
+            delete_response.status_code.unwrap(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_notify_error(&mut delete_response, "method_not_allowed", false).await;
+    }
+
+    #[tokio::test]
+    async fn notify_accepts_authenticated_allowlisted_service() {
+        let service = test_service_with_auth(
+            vec![(
+                "com.example.app",
+                Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+            )],
+            notify_auth_config(),
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("authorization", "Bearer secret-token", true)
+            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                DESTINATION_SERVICE_DID_HEADER,
+                "did:web:push.example.com",
+                true,
+            )
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+        assert_notify_ok(&mut response, 1, vec![], 0).await;
+    }
+
+    #[tokio::test]
+    async fn notify_requires_bearer_token_when_auth_enabled() {
+        let service = test_service_with_auth(
+            vec![(
+                "com.example.app",
+                Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+            )],
+            notify_auth_config(),
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+        let body = assert_notify_error(&mut response, "unauthenticated", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("missing bearer service token")
+        );
+    }
+
+    #[tokio::test]
+    async fn notify_rejects_invalid_bearer_token() {
+        let service = test_service_with_auth(
+            vec![(
+                "com.example.app",
+                Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+            )],
+            notify_auth_config(),
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("authorization", "Bearer wrong-token", true)
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+        let body = assert_notify_error(&mut response, "unauthenticated", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("invalid bearer service token")
+        );
+    }
+
+    #[tokio::test]
+    async fn notify_rejects_non_allowlisted_origin_service_did() {
+        let service = test_service_with_auth(
+            vec![(
+                "com.example.app",
+                Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+            )],
+            notify_auth_config(),
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("authorization", "Bearer secret-token", true)
+            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
+            .add_header(
+                DESTINATION_SERVICE_DID_HEADER,
+                "did:web:push.example.com",
+                true,
+            )
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
+        let body = assert_notify_error(&mut response, "capability_denied", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("origin service DID is not allowlisted")
+        );
+    }
+
+    #[tokio::test]
+    async fn notify_rejects_mismatched_destination_service_did() {
+        let service = test_service_with_auth(
+            vec![(
+                "com.example.app",
+                Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+            )],
+            notify_auth_config(),
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("authorization", "Bearer secret-token", true)
+            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                DESTINATION_SERVICE_DID_HEADER,
+                "did:web:other-gateway.example.com",
+                true,
+            )
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
+        let body = assert_notify_error(&mut response, "capability_denied", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("destination service DID does not match this gateway")
+        );
+    }
+
+    #[tokio::test]
+    async fn contrix_payload_with_message_body_is_rejected() {
+        let service = test_service(vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )]);
+        let mut request_body =
+            contrix_payload(vec![device_with_push_key("com.example.app", "accept")]);
+        request_body["notification"]["content"] = json!({
+            "msgtype": "m.text",
+            "body": "hello"
+        });
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .json(&request_body)
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+        let body = assert_notify_error(&mut response, "invalid_request", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("Contrix blind wakeup payloads must not include message body")
         );
     }
 
@@ -846,12 +1517,13 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse {
-                rejected: vec![rejected(Some("com.example.app"), "reject")]
-            }
-        );
+        assert_notify_ok(
+            &mut response,
+            0,
+            vec![rejected(Some("com.example.app"), "reject")],
+            0,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -873,12 +1545,13 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse {
-                rejected: vec![rejected(Some("com.example.app"), "spqr")]
-            }
-        );
+        assert_notify_ok(
+            &mut response,
+            0,
+            vec![rejected(Some("com.example.app"), "spqr")],
+            0,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1007,12 +1680,13 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse {
-                rejected: vec![rejected(Some("com.example.app"), "dup")]
-            }
-        );
+        assert_notify_ok(
+            &mut response,
+            0,
+            vec![rejected(Some("com.example.app"), "dup")],
+            0,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1031,15 +1705,16 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse {
-                rejected: vec![
-                    rejected(None, "blank-app"),
-                    rejected(Some("com.example.app"), "   "),
-                ]
-            }
-        );
+        assert_notify_ok(
+            &mut response,
+            0,
+            vec![
+                rejected(None, "blank-app"),
+                rejected(Some("com.example.app"), "   "),
+            ],
+            0,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1067,10 +1742,7 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-        assert_eq!(
-            response.take_json::<NotifyResponse>().await.unwrap(),
-            NotifyResponse { rejected: vec![] }
-        );
+        assert_notify_ok(&mut response, 1, vec![], 1).await;
     }
 
     #[tokio::test]
@@ -1098,6 +1770,79 @@ mod tests {
                 .get("retry-after")
                 .and_then(|value| value.to_str().ok()),
             Some("7")
+        );
+    }
+
+    #[tokio::test]
+    async fn notify_supports_header_idempotency_key_replay() {
+        let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+        let calls = pushkin.calls.clone();
+        let service = test_service_with_dedup(
+            vec![("com.example.app", pushkin as Arc<dyn Pushkin>)],
+            Duration::from_secs(60),
+        );
+        let request_body = payload(vec![device("com.example.app", "cached")]);
+
+        for _ in 0..2 {
+            let response = TestClient::post("http://127.0.0.1/contrix/push/v1/notify")
+                .add_header("idempotency-key", "notify-123", true)
+                .json(&request_body)
+                .send(&service)
+                .await;
+            assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+        }
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict() {
+        let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+        let calls = pushkin.calls.clone();
+        let service = test_service_with_dedup(
+            vec![("com.example.app", pushkin as Arc<dyn Pushkin>)],
+            Duration::from_secs(60),
+        );
+
+        let first = TestClient::post("http://127.0.0.1/contrix/push/v1/notify")
+            .add_header("idempotency-key", "notify-123", true)
+            .json(&payload(vec![device("com.example.app", "one")]))
+            .send(&service)
+            .await;
+        assert_eq!(first.status_code.unwrap(), StatusCode::OK);
+
+        let mut second = TestClient::post("http://127.0.0.1/contrix/push/v1/notify")
+            .add_header("idempotency-key", "notify-123", true)
+            .json(&payload(vec![device("com.example.app", "two")]))
+            .send(&service)
+            .await;
+        assert_eq!(second.status_code.unwrap(), StatusCode::CONFLICT);
+        let body = assert_notify_error(&mut second, "duplicate_conflict", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("same idempotency key maps to different canonical request body")
+        );
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn notify_rejects_mismatched_header_and_body_idempotency_keys() {
+        let service = test_service_with_dedup(vec![], Duration::from_secs(60));
+        let request_body =
+            with_idempotency_key(payload(vec![device("com.example.app", "one")]), "body-key");
+
+        let mut response = TestClient::post("http://127.0.0.1/contrix/push/v1/notify")
+            .add_header("idempotency-key", "header-key", true)
+            .json(&request_body)
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+        let body = assert_notify_error(&mut response, "invalid_request", true).await;
+        assert_eq!(
+            body["error"]["message"],
+            json!("Idempotency-Key header does not match body idempotency_key")
         );
     }
 
