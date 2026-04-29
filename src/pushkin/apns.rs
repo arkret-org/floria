@@ -324,8 +324,9 @@ impl ApnsPushkin {
         default_payload: Map<String, Value>,
     ) -> Value {
         let mut payload = default_payload;
-        if let Some(room_id) = &notification.room_id {
-            payload.insert("room_id".to_owned(), Value::String(room_id.clone()));
+        if let Some(space_id) = notification.scope_id() {
+            payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
+            payload.insert("room_id".to_owned(), Value::String(space_id.to_owned()));
         }
         if let Some(event_id) = &notification.event_id {
             payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
@@ -350,9 +351,8 @@ impl ApnsPushkin {
         mut default_payload: Map<String, Value>,
     ) -> Option<Value> {
         let from_display = notification
-            .sender_display_name
-            .clone()
-            .or_else(|| notification.sender.clone())
+            .sender_label()
+            .map(ToOwned::to_owned)
             .unwrap_or_else(|| " ".to_owned());
         let from_display = trim_chars(&from_display, APNS_MAX_FIELD_LENGTH);
 
@@ -360,22 +360,19 @@ impl ApnsPushkin {
         let mut loc_args: Vec<String> = Vec::new();
 
         match notification.r#type.as_deref() {
-            Some("m.room.message") | Some("m.room.encrypted") => {
+            Some("m.room.message")
+            | Some("m.room.encrypted")
+            | Some("cx.message.create")
+            | Some("cx.message.revise") => {
                 let room_display = notification
-                    .room_name
-                    .as_ref()
-                    .or(notification.room_alias.as_ref())
+                    .scope_name()
                     .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
                 let msgtype = notification
                     .content
                     .as_ref()
                     .and_then(|content| content.get("msgtype"))
                     .and_then(Value::as_str);
-                let body = notification
-                    .content
-                    .as_ref()
-                    .and_then(|content| content.get("body"))
-                    .and_then(Value::as_str);
+                let body = notification.content_body();
                 let content_display = body.map(|body| trim_chars(body, APNS_MAX_FIELD_LENGTH));
                 let action_display = if msgtype == Some("m.emote") {
                     content_display.clone()
@@ -428,32 +425,36 @@ impl ApnsPushkin {
                     }
                 }
             }
-            Some("m.call.invite") => {
-                let is_video = notification
-                    .content
-                    .as_ref()
-                    .and_then(|content| content.get("offer"))
-                    .and_then(Value::as_object)
-                    .and_then(|offer| offer.get("sdp"))
-                    .and_then(Value::as_str)
-                    .map(|sdp| sdp.contains("m=video"))
-                    .unwrap_or(false);
-                loc_key = Some(if is_video {
-                    "VIDEO_CALL_FROM_USER"
+            Some("m.call.invite") | Some("cx.call.signal") => {
+                if let Some(push_hint) = notification.push_hint_text() {
+                    loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
+                    loc_args = vec![
+                        from_display.clone(),
+                        trim_chars(push_hint, APNS_MAX_FIELD_LENGTH),
+                    ];
                 } else {
-                    "VOICE_CALL_FROM_USER"
-                });
-                loc_args = vec![from_display.clone()];
+                    let is_video = notification
+                        .content
+                        .as_ref()
+                        .and_then(|content| content.get("offer"))
+                        .and_then(Value::as_object)
+                        .and_then(|offer| offer.get("sdp"))
+                        .and_then(Value::as_str)
+                        .map(|sdp| sdp.contains("m=video"))
+                        .unwrap_or(false);
+                    loc_key = Some(if is_video {
+                        "VIDEO_CALL_FROM_USER"
+                    } else {
+                        "VOICE_CALL_FROM_USER"
+                    });
+                    loc_args = vec![from_display.clone()];
+                }
             }
-            Some("m.room.member")
+            Some("m.room.member") | Some("cx.space.member")
                 if notification.user_is_target == Some(true)
                     && notification.membership.as_deref() == Some("invite") =>
             {
-                if let Some(room_name) = notification
-                    .room_name
-                    .as_ref()
-                    .or(notification.room_alias.as_ref())
-                {
+                if let Some(room_name) = notification.scope_name() {
                     loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
                     loc_args = vec![
                         from_display.clone(),
@@ -465,8 +466,28 @@ impl ApnsPushkin {
                 }
             }
             Some(_) => {
-                loc_key = Some("MSG_FROM_USER");
-                loc_args = vec![from_display.clone()];
+                if let Some(room_name) = notification.scope_name() {
+                    if let Some(body) = notification.content_body() {
+                        loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
+                        loc_args = vec![
+                            from_display.clone(),
+                            trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
+                            trim_chars(body, APNS_MAX_FIELD_LENGTH),
+                        ];
+                    } else {
+                        loc_key = Some("MSG_FROM_USER_IN_ROOM");
+                        loc_args = vec![
+                            from_display.clone(),
+                            trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
+                        ];
+                    }
+                } else if let Some(body) = notification.content_body() {
+                    loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
+                    loc_args = vec![from_display.clone(), trim_chars(body, APNS_MAX_FIELD_LENGTH)];
+                } else {
+                    loc_key = Some("MSG_FROM_USER");
+                    loc_args = vec![from_display.clone()];
+                }
             }
             None => {}
         }
@@ -515,8 +536,9 @@ impl ApnsPushkin {
         }
 
         if loc_key.is_some() {
-            if let Some(room_id) = &notification.room_id {
-                default_payload.insert("room_id".to_owned(), Value::String(room_id.clone()));
+            if let Some(space_id) = notification.scope_id() {
+                default_payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
+                default_payload.insert("room_id".to_owned(), Value::String(space_id.to_owned()));
             }
             if let Some(event_id) = &notification.event_id {
                 default_payload.insert("event_id".to_owned(), Value::String(event_id.clone()));

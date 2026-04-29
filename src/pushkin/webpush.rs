@@ -157,8 +157,10 @@ impl WebpushPushkin {
         let mut payload = device.default_payload_lossy();
 
         for (key, value) in [
-            ("room_id", notification.room_id.as_ref()),
-            ("room_name", notification.room_name.as_ref()),
+            ("space_id", notification.scope_id()),
+            ("room_id", notification.scope_id()),
+            ("space_name", notification.scope_name()),
+            ("room_name", notification.scope_name()),
             ("room_alias", notification.room_alias.as_ref()),
             ("membership", notification.membership.as_ref()),
             ("event_id", notification.event_id.as_ref()),
@@ -168,6 +170,7 @@ impl WebpushPushkin {
                 notification.sender_display_name.as_ref(),
             ),
             ("type", notification.r#type.as_ref()),
+            ("push_hint", notification.push_hint.as_ref()),
         ] {
             if let Some(value) = value.filter(|value| !value.is_empty()) {
                 payload.insert(key.to_owned(), Value::String(value.clone()));
@@ -205,14 +208,22 @@ impl WebpushPushkin {
                 content.remove("ciphertext");
             }
             payload.insert("content".to_owned(), Value::Object(content));
+        } else if let Some(push_hint) = notification.push_hint_text() {
+            payload.insert(
+                "content".to_owned(),
+                Value::Object(Map::from_iter([(
+                    "body".to_owned(),
+                    Value::String(push_hint.to_owned()),
+                )])),
+            );
         }
 
         payload
     }
 
-    fn room_topic(room_id: &str) -> String {
+    fn scope_topic(scope_id: &str) -> String {
         let mut hasher = Blake2s256::new();
-        hasher.update(room_id.as_bytes());
+        hasher.update(scope_id.as_bytes());
         let digest = hasher.finalize();
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest[..22])
     }
@@ -280,12 +291,12 @@ impl WebpushPushkin {
         } else {
             Urgency::Normal
         });
-        if let Some(room_id) = notification
-            .room_id
+        if let Some(space_id) = notification
+            .scope_id()
             .as_deref()
             .filter(|_| device.data_bool("only_last_per_room") == Some(true))
         {
-            builder.set_topic(Self::room_topic(room_id));
+            builder.set_topic(Self::scope_topic(space_id));
         }
         builder.set_payload(ContentEncoding::Aes128Gcm, &payload);
         builder.set_vapid_signature(signature);

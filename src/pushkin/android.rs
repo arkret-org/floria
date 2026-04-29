@@ -49,8 +49,10 @@ fn merge_notification_data(
     send_badge_counts: bool,
 ) {
     for (key, value) in [
-        ("room_id", notification.room_id.as_ref()),
-        ("room_name", notification.room_name.as_ref()),
+        ("space_id", notification.scope_id()),
+        ("room_id", notification.scope_id()),
+        ("space_name", notification.scope_name()),
+        ("room_name", notification.scope_name()),
         ("room_alias", notification.room_alias.as_ref()),
         ("membership", notification.membership.as_ref()),
         ("event_id", notification.event_id.as_ref()),
@@ -60,6 +62,7 @@ fn merge_notification_data(
             notification.sender_display_name.as_ref(),
         ),
         ("type", notification.r#type.as_ref()),
+        ("push_hint", notification.push_hint.as_ref()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             let (value, _) = truncate_str(value, CONTENT_BODY_MAX_BYTES);
@@ -127,23 +130,21 @@ fn sanitized_content(content: &Map<String, Value>) -> Map<String, Value> {
 
 fn derive_alert(notification: &Notification) -> Option<(String, String)> {
     let sender = notification
-        .sender_display_name
-        .as_ref()
-        .or(notification.sender.as_ref())
-        .filter(|value| !value.is_empty())
+        .sender_label()
         .cloned()
         .unwrap_or_else(|| "New activity".to_owned());
-    let room = notification
-        .room_name
-        .as_ref()
-        .or(notification.room_alias.as_ref())
-        .filter(|value| !value.is_empty())
-        .cloned();
+    let room = notification.scope_name().map(ToOwned::to_owned);
 
     let title = room.clone().unwrap_or_else(|| sender.clone());
     let summary = match notification.r#type.as_deref() {
-        Some("m.room.message") | Some("m.room.encrypted") => message_summary(notification, &sender),
-        Some("m.call.invite") => {
+        Some("m.room.message")
+        | Some("m.room.encrypted")
+        | Some("cx.message.create")
+        | Some("cx.message.revise") => message_summary(notification, &sender),
+        Some("m.call.invite") | Some("cx.call.signal") => {
+            if let Some(push_hint) = notification.push_hint_text() {
+                push_hint.to_owned()
+            } else {
             if notification
                 .content
                 .as_ref()
@@ -157,8 +158,9 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
             } else {
                 format!("{sender} started a voice call")
             }
+            }
         }
-        Some("m.room.member")
+        Some("m.room.member") | Some("cx.space.member")
             if notification.user_is_target == Some(true)
                 && notification.membership.as_deref() == Some("invite") =>
         {
@@ -186,7 +188,7 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
 }
 
 fn message_summary(notification: &Notification, sender: &str) -> String {
-    let has_room = notification.room_name.is_some() || notification.room_alias.is_some();
+    let has_room = notification.scope_name().is_some();
     let msgtype = notification
         .content
         .as_ref()
@@ -221,7 +223,7 @@ fn message_summary(notification: &Notification, sender: &str) -> String {
 fn fallback_summary(notification: &Notification, sender: &str) -> String {
     if let Some(body) = content_body(notification) {
         return maybe_prefix_sender(
-            notification.room_name.is_some() || notification.room_alias.is_some(),
+            notification.scope_name().is_some(),
             sender,
             body,
         );
@@ -242,12 +244,7 @@ fn maybe_prefix_sender(has_room: bool, sender: &str, body: String) -> String {
 }
 
 fn content_body(notification: &Notification) -> Option<String> {
-    let text = notification
-        .content
-        .as_ref()
-        .and_then(|content| content.get("body"))
-        .and_then(Value::as_str)?
-        .trim();
+    let text = notification.content_body()?;
     if text.is_empty() {
         return None;
     }

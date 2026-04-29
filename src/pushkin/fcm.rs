@@ -534,27 +534,22 @@ impl FcmPushkin {
         let mut data = default_payload;
         let mut overflow_fields: usize = 0;
 
-        for attr in [
-            "event_id",
-            "type",
-            "sender",
-            "room_name",
-            "room_alias",
-            "membership",
-            "sender_display_name",
-            "room_id",
+        for (attr, value) in [
+            ("event_id", notification.event_id.as_deref()),
+            ("type", notification.event_kind()),
+            ("sender", notification.sender.as_deref()),
+            ("space_name", notification.scope_name()),
+            ("room_name", notification.scope_name()),
+            ("room_alias", notification.room_alias.as_deref()),
+            ("membership", notification.membership.as_deref()),
+            (
+                "sender_display_name",
+                notification.sender_display_name.as_deref(),
+            ),
+            ("space_id", notification.scope_id()),
+            ("room_id", notification.scope_id()),
+            ("push_hint", notification.push_hint.as_deref()),
         ] {
-            let value = match attr {
-                "event_id" => notification.event_id.as_ref(),
-                "type" => notification.r#type.as_ref(),
-                "sender" => notification.sender.as_ref(),
-                "room_name" => notification.room_name.as_ref(),
-                "room_alias" => notification.room_alias.as_ref(),
-                "membership" => notification.membership.as_ref(),
-                "sender_display_name" => notification.sender_display_name.as_ref(),
-                "room_id" => notification.room_id.as_ref(),
-                _ => None,
-            };
             if let Some(value) = value {
                 let (value, truncated) = truncate_str(value, FCM_MAX_BYTES_PER_FIELD);
                 if truncated {
@@ -621,7 +616,11 @@ impl FcmPushkin {
             }
         }
 
-        if !data.contains_key("room_id") && !data.contains_key("event_id") && counts.is_empty() {
+        let has_routable_context = data.contains_key("space_id")
+            || data.contains_key("room_id")
+            || data.contains_key("event_id")
+            || data.contains_key("push_hint");
+        if !has_routable_context && counts.is_empty() {
             return Ok(None);
         }
 

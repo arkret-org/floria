@@ -14,12 +14,13 @@ use crate::AppState;
 use crate::config::AccessLogConfig;
 use crate::dedup::request_hash;
 use crate::metrics;
-use crate::models::{Notification, NotificationContext, NotifyResponse};
+use crate::models::{Notification, NotificationContext, NotifyResponse, RejectedDevice};
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
+        .push(Router::with_path("api/v1/push/notify").post(notify))
         .push(Router::with_path("contrix/push/v1/notify").post(notify))
         .push(Router::with_path("health").get(health))
 }
@@ -28,6 +29,7 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
     let use_forwarded_for = access_log.x_forwarded_for;
     Router::with_hoop(affix_state::inject(state))
         .hoop(AccessLogger { use_forwarded_for })
+        .push(Router::with_path("api/v1/push/notify").post(notify))
         .push(Router::with_path("contrix/push/v1/notify").post(notify))
         .push(Router::with_path("health").get(health))
 }
@@ -172,7 +174,21 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         return;
     }
 
-    let dedup_key = normalized_notify_dedup_key(&notification_value);
+    let notification: Notification = match serde_json::from_value(notification_value) {
+        Ok(notification) => notification,
+        Err(error) => {
+            tracing::warn!(error = %error, "invalid notification payload");
+            finish_text(
+                res,
+                StatusCode::BAD_REQUEST,
+                "invalid notification payload",
+                started,
+            );
+            return;
+        }
+    };
+
+    let dedup_key = normalized_notify_dedup_key(&notification);
     if let Some(deduplicator) = state.notify_deduplicator.as_ref()
         && let Some(cached) = dedup_key
             .as_deref()
@@ -187,20 +203,6 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         finish_json(res, StatusCode::OK, cached.response, started);
         return;
     }
-
-    let notification: Notification = match serde_json::from_value(notification_value) {
-        Ok(notification) => notification,
-        Err(error) => {
-            tracing::warn!(error = %error, "invalid notification payload");
-            finish_text(
-                res,
-                StatusCode::BAD_REQUEST,
-                "invalid notification payload",
-                started,
-            );
-            return;
-        }
-    };
     metrics::notification_received();
 
     if notification.devices.is_empty() {
@@ -235,7 +237,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                 pushkey = %device.pushkey,
                 "rejecting device with empty app_id or pushkey"
             );
-            rejected.push(device.pushkey.clone());
+            rejected.push(rejected_device(device, Some(&device.pushkey)));
             continue;
         }
 
@@ -254,7 +256,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         match pushkins.as_slice() {
             [] => {
                 tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey = %device.pushkey, "unknown app id");
-                rejected.push(device.pushkey.clone());
+                rejected.push(rejected_device(device, Some(&device.pushkey)));
                 continue;
             }
             [pushkin] => {
@@ -300,7 +302,11 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
                                 delivered_targets.iter().copied(),
                             );
                         }
-                        rejected.append(&mut pushkin_rejected);
+                        rejected.extend(
+                            pushkin_rejected
+                                .drain(..)
+                                .map(|pushkey| rejected_device(device, Some(&pushkey))),
+                        );
                     }
                     Err(error) if error.is_temporary() => {
                         tracing::warn!(
@@ -337,7 +343,7 @@ async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
             }
             _ => {
                 tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey = %device.pushkey, "ambiguous app id");
-                rejected.push(device.pushkey.clone());
+                rejected.push(rejected_device(device, Some(&device.pushkey)));
             }
         }
     }
@@ -466,59 +472,87 @@ fn mark_delivered_devices<'a>(
     }
 }
 
-fn normalized_notify_dedup_key(notification_value: &Value) -> Option<String> {
-    let object = notification_value.as_object()?;
+fn rejected_device(device: &crate::models::Device, push_key: Option<&str>) -> RejectedDevice {
+    RejectedDevice::new(Some(&device.app_id), push_key.unwrap_or(&device.pushkey))
+}
+
+fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     let mut normalized = Map::new();
 
-    for key in [
-        "room_name",
-        "room_alias",
-        "prio",
-        "membership",
-        "sender_display_name",
-        "content",
-        "event_id",
-        "room_id",
-        "user_is_target",
-        "type",
-        "sender",
-        "counts",
-    ] {
-        if let Some(value) = object.get(key) {
-            normalized.insert(key.to_owned(), canonical_json_value(value));
-        }
+    if let Some(value) = notification.scope_name() {
+        normalized.insert("space_name".to_owned(), Value::String(value.to_owned()));
     }
+    if let Some(value) = notification.room_alias.as_ref() {
+        normalized.insert("room_alias".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.prio.as_ref() {
+        normalized.insert("prio".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.membership.as_ref() {
+        normalized.insert("membership".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.sender_display_name.as_ref() {
+        normalized.insert(
+            "sender_display_name".to_owned(),
+            Value::String(value.clone()),
+        );
+    }
+    if let Some(value) = notification.content.as_ref() {
+        normalized.insert("content".to_owned(), canonical_json_value(&Value::Object(value.clone())));
+    }
+    if let Some(value) = notification.event_id.as_ref() {
+        normalized.insert("event_id".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.scope_id() {
+        normalized.insert("space_id".to_owned(), Value::String(value.to_owned()));
+    }
+    if let Some(value) = notification.user_is_target {
+        normalized.insert("user_is_target".to_owned(), Value::Bool(value));
+    }
+    if let Some(value) = notification.event_kind() {
+        normalized.insert("type".to_owned(), Value::String(value.to_owned()));
+    }
+    if let Some(value) = notification.sender.as_ref() {
+        normalized.insert("sender".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.push_hint.as_ref() {
+        normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
+    }
+    normalized.insert(
+        "counts".to_owned(),
+        canonical_json_value(&serde_json::to_value(&notification.counts).ok()?),
+    );
 
-    let devices = object
-        .get("devices")
-        .and_then(Value::as_array)
-        .map(|devices| canonical_devices(devices))
+    let mut devices = notification
+        .devices
+        .iter()
+        .map(|device| {
+            let mut normalized = Map::new();
+            normalized.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
+            normalized.insert("push_key".to_owned(), Value::String(device.pushkey.clone()));
+            normalized.insert(
+                "push_key_ts".to_owned(),
+                Value::Number(device.pushkey_ts.into()),
+            );
+            if let Some(data) = device.data.as_ref() {
+                normalized.insert(
+                    "data".to_owned(),
+                    canonical_json_value(&Value::Object(data.clone())),
+                );
+            }
+            let tweaks = serde_json::to_value(&device.tweaks).ok()?;
+            normalized.insert("tweaks".to_owned(), canonical_json_value(&tweaks));
+            Some(Value::Object(normalized))
+        })
+        .collect::<Option<Vec<_>>>()
         .unwrap_or_default();
+    devices.sort_by_key(canonical_sort_key);
+    devices.dedup();
     normalized.insert("devices".to_owned(), Value::Array(devices));
 
     serde_json::to_vec(&Value::Object(normalized))
         .ok()
         .map(|bytes| request_hash(&bytes))
-}
-
-fn canonical_devices(devices: &[Value]) -> Vec<Value> {
-    let mut normalized = devices
-        .iter()
-        .filter_map(Value::as_object)
-        .map(|device| {
-            let mut normalized = Map::new();
-            for key in ["app_id", "pushkey", "pushkey_ts", "data", "tweaks"] {
-                if let Some(value) = device.get(key) {
-                    normalized.insert(key.to_owned(), canonical_json_value(value));
-                }
-            }
-            Value::Object(normalized)
-        })
-        .collect::<Vec<_>>();
-
-    normalized.sort_by_key(canonical_sort_key);
-    normalized.dedup();
-    normalized
 }
 
 fn canonical_json_value(value: &Value) -> Value {
@@ -596,7 +630,7 @@ mod tests {
     use super::*;
     use crate::dedup::NotifyDeduplicator;
     use crate::error::DispatchError;
-    use crate::models::{Device, Notification, NotificationContext};
+    use crate::models::{Device, Notification, NotificationContext, RejectedDevice};
     use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 
     #[derive(Debug, Clone)]
@@ -723,12 +757,39 @@ mod tests {
         })
     }
 
+    fn contrix_payload(devices: Vec<Value>) -> Value {
+        json!({
+            "notification": {
+                "event_id": "cx:event:01JS0EV000000000000000000",
+                "space_id": "cx:space:01JS0SP000000000000000000",
+                "space_name": "Engineering",
+                "sender": "did:web:alice.example.com",
+                "sender_display_name": "Alice",
+                "type": "cx.message.create",
+                "push_hint": "New message",
+                "devices": devices
+            }
+        })
+    }
+
     fn device(app_id: &str, pushkey: &str) -> Value {
         json!({
             "app_id": app_id,
             "pushkey": pushkey,
             "pushkey_ts": 42
         })
+    }
+
+    fn device_with_push_key(app_id: &str, push_key: &str) -> Value {
+        json!({
+            "app_id": app_id,
+            "push_key": push_key,
+            "push_key_ts": 42
+        })
+    }
+
+    fn rejected(app_id: Option<&str>, push_key: &str) -> RejectedDevice {
+        RejectedDevice::new(app_id, push_key)
     }
 
     #[tokio::test]
@@ -740,6 +801,28 @@ mod tests {
 
         let mut response = TestClient::post("http://127.0.0.1/contrix/push/v1/notify")
             .json(&payload(vec![device("com.example.app", "accept")]))
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+        assert_eq!(
+            response.take_json::<NotifyResponse>().await.unwrap(),
+            NotifyResponse { rejected: vec![] }
+        );
+    }
+
+    #[tokio::test]
+    async fn contrix_endpoint_accepts_contrix_payload_shape() {
+        let service = test_service(vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )]);
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .json(&contrix_payload(vec![device_with_push_key(
+                "com.example.app",
+                "accept",
+            )]))
             .send(&service)
             .await;
 
@@ -766,7 +849,7 @@ mod tests {
         assert_eq!(
             response.take_json::<NotifyResponse>().await.unwrap(),
             NotifyResponse {
-                rejected: vec!["reject".to_owned()]
+                rejected: vec![rejected(Some("com.example.app"), "reject")]
             }
         );
     }
@@ -793,7 +876,7 @@ mod tests {
         assert_eq!(
             response.take_json::<NotifyResponse>().await.unwrap(),
             NotifyResponse {
-                rejected: vec!["spqr".to_owned()]
+                rejected: vec![rejected(Some("com.example.app"), "spqr")]
             }
         );
     }
@@ -927,7 +1010,7 @@ mod tests {
         assert_eq!(
             response.take_json::<NotifyResponse>().await.unwrap(),
             NotifyResponse {
-                rejected: vec!["dup".to_owned()]
+                rejected: vec![rejected(Some("com.example.app"), "dup")]
             }
         );
     }
@@ -951,7 +1034,10 @@ mod tests {
         assert_eq!(
             response.take_json::<NotifyResponse>().await.unwrap(),
             NotifyResponse {
-                rejected: vec!["blank-app".to_owned(), "   ".to_owned()]
+                rejected: vec![
+                    rejected(None, "blank-app"),
+                    rejected(Some("com.example.app"), "   "),
+                ]
             }
         );
     }
