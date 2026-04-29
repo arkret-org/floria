@@ -1,0 +1,7 @@
+target/
+.git/
+.github/
+Dockerfile
+README.md
+LICENSE
+sygnal.yaml

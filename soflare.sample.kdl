@@ -1,0 +1,248 @@
+// Soflare configuration (KDL format)
+//
+// soflare currently uses tracing / RUST_LOG instead of custom YAML logging setup.
+
+log {
+  access {
+    // Proxied access log formatting is not implemented yet.
+    x_forwarded_for false
+  }
+}
+
+http {
+  bind_addresses "127.0.0.1"
+  port 5000
+}
+
+metrics {
+  prometheus {
+    enabled false
+    address "127.0.0.1"
+    port 8000
+  }
+  opentracing {
+    enabled false
+    implementation "jaeger"
+    service_name "soflare"
+  }
+  sentry {
+    enabled false
+  }
+}
+
+// Optional outbound proxy for APNS / FCM / WebPush.
+// If omitted, HTTPS_PROXY will be used when present.
+// proxy "http://user:pass@proxy.example.com:8080"
+
+apps {
+  // Example APNS token auth
+  // com.example.ios {
+  //   type "apns"
+  //   keyfile "./AuthKey_ABC123DEFG.p8"
+  //   key_id "ABC123DEFG"
+  //   team_id "DEF456GHIJ"
+  //   topic "com.example.ios"
+  //   platform "production"
+  //   convert_device_token_to_hex false
+  //   inflight_request_limit 512
+  // }
+
+  // Example APNS certificate auth
+  // com.example.ios.cert {
+  //   type "apns"
+  //   certfile "./apns-client.pem"
+  //   topic "com.example.ios"
+  // }
+
+  // Example FCM legacy
+  // com.example.android.legacy {
+  //   type "gcm"
+  //   api_version "legacy"
+  //   api_key "your-fcm-server-key"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  // }
+
+  // Example FCM HTTP v1
+  // com.example.android {
+  //   type "gcm"
+  //   api_version "v1"
+  //   project_id "your-google-project-id"
+  //   service_account_file "./firebase-service-account.json"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   fcm_options {
+  //     apns {
+  //       payload {
+  //         aps {
+  //           content-available 1
+  //           mutable-content 1
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+
+  // Example JPush
+  // com.example.android.cn {
+  //   type "jpush"
+  //   app_key "your-jpush-app-key"
+  //   master_secret "your-jpush-master-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   time_to_live 86400
+  //   apns_production true
+  //   builder_id 1
+  //   large_icon "https://cdn.example.com/push/icon.png"
+  //   intent "intent:#Intent;component=com.example.android/.MainActivity;end"
+  //   third_party_channel {
+  //     xiaomi {
+  //       distribution "jpush"
+  //     }
+  //     huawei {
+  //       distribution "first_ospush"
+  //     }
+  //     oppo {
+  //       distribution "jpush"
+  //     }
+  //     vivo {
+  //       distribution "jpush"
+  //     }
+  //     honor {
+  //       distribution "secondary_push"
+  //     }
+  //     hmos {
+  //       distribution "jpush"
+  //     }
+  //   }
+  //   // JPush third_party_channel currently does not expose a dedicated oneplus vendor key.
+  // }
+
+  // Example Huawei Push Kit / HarmonyOS
+  // com.example.huawei {
+  //   type "huawei"
+  //   app_id "1234567890123456789"
+  //   app_secret "your-huawei-app-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   channel_id "messages"
+  //   ttl_seconds 3600
+  //   click_action {
+  //     type 2
+  //     url "https://example.com/app"
+  //   }
+  //   android_config {
+  //     collapse_key -1
+  //   }
+  //   android_notification {
+  //     default_sound true
+  //   }
+  // }
+
+  // Example Xiaomi Mi Push
+  // com.example.xiaomi {
+  //   type "xiaomi"
+  //   app_secret "your-xiaomi-app-secret"
+  //   restricted_package_name "com.example.android"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   pass_through false
+  //   notify_type 2
+  //   time_to_live 3600
+  //   notify_id 1
+  //   channel_id "messages"
+  //   notify_effect 2
+  //   intent_uri "intent:#Intent;component=com.example.android/.MainActivity;end"
+  //   extra {
+  //     notification_style_type 1
+  //   }
+  // }
+
+  // Example OPPO Push / OPlus Push
+  // com.example.oppo {
+  //   type "oppo"
+  //   app_key "your-oppo-app-key"
+  //   master_secret "your-oppo-master-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   channel_id "messages"
+  //   click_action_type 1
+  //   action_parameters {
+  //     action_type 1
+  //   }
+  //   notification {
+  //     style 1
+  //   }
+  // }
+
+  // Example OnePlus Push (reuses the same OPlus/OPPO server API)
+  // com.example.oneplus {
+  //   type "oneplus"
+  //   app_key "your-oplus-app-key"
+  //   master_secret "your-oplus-master-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   channel_id "messages"
+  //   click_action_type 1
+  //   action_parameters {
+  //     action_type 1
+  //   }
+  // }
+
+  // Example vivo Push
+  // com.example.vivo {
+  //   type "vivo"
+  //   app_id 100000001
+  //   app_key "your-vivo-app-key"
+  //   app_secret "your-vivo-app-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   notify_type 4
+  //   skip_type 4
+  //   skip_content "intent:#Intent;component=com.example.android/.MainActivity;end"
+  //   time_to_live 3600
+  //   classification 1
+  //   category "IM"
+  //   notify_id 1
+  //   foreground_show true
+  //   extra {
+  //     callback.id "push-receipt"
+  //   }
+  //   timed_display {
+  //     overtimeDisplay true
+  //     showStartTime 1735707600000
+  //     showEndTime 1735711200000
+  //   }
+  // }
+
+  // Example HONOR Push
+  // com.example.honor {
+  //   type "honor"
+  //   app_id "1234567890123456789"
+  //   app_secret "your-honor-app-secret"
+  //   max_connections 20
+  //   inflight_request_limit 512
+  //   channel_id "messages"
+  //   ttl_seconds 3600
+  //   click_action {
+  //     type 2
+  //     url "https://example.com/app"
+  //   }
+  //   android_config {
+  //     collapse_key -1
+  //   }
+  //   android_notification {
+  //     default_sound true
+  //   }
+  // }
+
+  // Example WebPush
+  // com.example.web {
+  //   type "webpush"
+  //   vapid_private_key "./vapid-private.pem"
+  //   vapid_contact_email "push@example.com"
+  //   ttl 900
+  //   max_connections 20
+  //   allowed_endpoints "*.push.services.mozilla.com" "fcm.googleapis.com"
+  // }
+}

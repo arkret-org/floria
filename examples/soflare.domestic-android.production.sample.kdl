@@ -1,0 +1,216 @@
+// Soflare – production-oriented mainland Android provider template.
+//
+// Covers JPush, Huawei, HONOR, Xiaomi, OPPO, OnePlus, and vivo.
+// Usage notes:
+// 1. Replace each key below with the real contrix app_id reported by clients.
+// 2. For the same app_id, keep only one exact provider block enabled at a time.
+// 3. If one Android package needs mixed mainland OEM routing behind a single backend,
+//    prefer JPush aggregation first.
+// 4. HONOR defaults use official cloud hostnames and can be overridden with
+//    token_url / api_base_url if your account region requires different endpoints.
+
+log {
+  access {
+    x_forwarded_for true
+  }
+}
+
+http {
+  bind_addresses "0.0.0.0"
+  port 5000
+}
+
+metrics {
+  prometheus {
+    enabled true
+    address "127.0.0.1"
+    port 8000
+  }
+  opentracing {
+    enabled false
+    implementation "jaeger"
+    service_name "soflare"
+  }
+  sentry {
+    enabled false
+  }
+}
+
+// Optional outbound proxy for mainland / cross-border egress.
+// If omitted, HTTPS_PROXY will be used when present.
+// proxy "http://user:pass@proxy.example.com:8080"
+
+apps {
+  // Mainland Android aggregation via JPush.
+  com.example.android.jpush {
+    type "jpush"
+    app_key "your-jpush-app-key"
+    master_secret "your-jpush-master-secret"
+    max_connections 20
+    inflight_request_limit 512
+    platforms "android" "hmos"
+    time_to_live 86400
+    apns_production true
+    builder_id 1
+    large_icon "https://cdn.example.com/push/icon.png"
+    intent "intent:#Intent;component=com.example.android/.MainActivity;end"
+    send_badge_counts true
+    third_party_channel {
+      xiaomi {
+        distribution "jpush"
+      }
+      huawei {
+        distribution "first_ospush"
+      }
+      oppo {
+        distribution "jpush"
+      }
+      vivo {
+        distribution "jpush"
+      }
+      honor {
+        distribution "secondary_push"
+      }
+      hmos {
+        distribution "jpush"
+      }
+    }
+    android_notification {
+      channel_id "messages"
+      badge_add_num 1
+    }
+  }
+
+  // Huawei / HarmonyOS direct.
+  com.example.android.huawei {
+    type "huawei"
+    app_id "1234567890123456789"
+    app_secret "your-huawei-app-secret"
+    max_connections 20
+    inflight_request_limit 512
+    channel_id "messages"
+    ttl_seconds 3600
+    send_badge_counts true
+    click_action {
+      type 2
+      url "https://example.com/app"
+    }
+    android_config {
+      collapse_key -1
+    }
+    android_notification {
+      default_sound true
+    }
+  }
+
+  // HONOR direct.
+  com.example.android.honor {
+    type "honor"
+    app_id "1234567890123456789"
+    app_secret "your-honor-app-secret"
+    // Optional overrides when your HONOR account region requires custom endpoints.
+    // token_url "https://hnoauth-login.cloud.honor.com/oauth2/v3/token"
+    // api_base_url "https://push-api.cloud.honor.com/v1"
+    max_connections 20
+    inflight_request_limit 512
+    channel_id "messages"
+    ttl_seconds 3600
+    send_badge_counts true
+    click_action {
+      type 2
+      url "https://example.com/app"
+    }
+    android_config {
+      collapse_key -1
+    }
+    android_notification {
+      default_sound true
+    }
+  }
+
+  // Xiaomi direct.
+  com.example.android.xiaomi {
+    type "xiaomi"
+    app_secret "your-xiaomi-app-secret"
+    restricted_package_name "com.example.android"
+    max_connections 20
+    inflight_request_limit 512
+    pass_through false
+    notify_type 2
+    time_to_live 3600
+    notify_id 1
+    channel_id "messages"
+    notify_effect 2
+    intent_uri "intent:#Intent;component=com.example.android/.MainActivity;end"
+    send_badge_counts true
+    extra {
+      notification_style_type 1
+    }
+  }
+
+  // OPPO / OPlus direct.
+  com.example.android.oppo {
+    type "oppo"
+    app_key "your-oppo-app-key"
+    master_secret "your-oppo-master-secret"
+    max_connections 20
+    inflight_request_limit 512
+    channel_id "messages"
+    click_action_type 1
+    send_badge_counts true
+    action_parameters {
+      action_type 1
+    }
+    notification {
+      style 1
+    }
+  }
+
+  // OnePlus direct.
+  // This reuses the same OPlus / OPPO server API implementation.
+  com.example.android.oneplus {
+    type "oneplus"
+    app_key "your-oplus-app-key"
+    master_secret "your-oplus-master-secret"
+    max_connections 20
+    inflight_request_limit 512
+    channel_id "messages"
+    click_action_type 1
+    send_badge_counts true
+    action_parameters {
+      action_type 1
+    }
+    notification {
+      style 1
+    }
+  }
+
+  // vivo direct.
+  com.example.android.vivo {
+    type "vivo"
+    app_id 100000001
+    app_key "your-vivo-app-key"
+    app_secret "your-vivo-app-secret"
+    max_connections 20
+    inflight_request_limit 512
+    notify_type 4
+    time_to_live 3600
+    skip_type 4
+    skip_content "intent:#Intent;component=com.example.android/.MainActivity;end"
+    classification 1
+    category "IM"
+    push_mode 0
+    notify_id 1
+    foreground_show true
+    send_badge_counts true
+    extra {
+      callback.id "push-receipt"
+      callback.param "matrix"
+    }
+    timed_display {
+      overtimeDisplay true
+      showStartTime 1735707600000
+      showEndTime 1735711200000
+    }
+  }
+}
