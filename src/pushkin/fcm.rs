@@ -27,43 +27,43 @@ use super::{
 
 static GCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_gcm_queue_time",
+        "floria_gcm_queue_time",
         "Time taken waiting for a connection to GCM"
     )
-    .expect("register soflare_gcm_queue_time")
+    .expect("register floria_gcm_queue_time")
 });
 
 static GCM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_gcm_request_time",
+        "floria_gcm_request_time",
         "Time taken to send HTTP request to GCM"
     )
-    .expect("register soflare_gcm_request_time")
+    .expect("register floria_gcm_request_time")
 });
 
 static GCM_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_gcm_requests",
+        "floria_pending_gcm_requests",
         "Number of GCM requests waiting for a connection"
     )
-    .expect("register soflare_pending_gcm_requests")
+    .expect("register floria_pending_gcm_requests")
 });
 
 static GCM_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_gcm_requests",
+        "floria_active_gcm_requests",
         "Number of GCM requests in flight"
     )
-    .expect("register soflare_active_gcm_requests")
+    .expect("register floria_active_gcm_requests")
 });
 
 static GCM_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_gcm_status_codes",
+        "floria_gcm_status_codes",
         "Number of HTTP response status codes received from GCM",
         &["pushkin", "code"]
     )
-    .expect("register soflare_gcm_status_codes")
+    .expect("register floria_gcm_status_codes")
 });
 
 const FCM_MAX_TRIES: usize = 3;
@@ -151,7 +151,7 @@ impl FcmPushkin {
         let send_badge_counts = app.get_bool("send_badge_counts")?.unwrap_or(true);
         let base_request_body = app.get_object("fcm_options")?.unwrap_or_default();
 
-        let mut client_builder = Client::builder().user_agent("soflare");
+        let mut client_builder = Client::builder().user_agent("floria");
         if let Some(proxy) = config.outbound_proxy() {
             client_builder = client_builder
                 .proxy(Proxy::all(proxy).with_context(|| format!("invalid proxy URL `{proxy}`"))?);

@@ -1,4 +1,4 @@
-# soflare
+# floria
 
 使用 Rust 编写的推送网关服务。
 
@@ -48,10 +48,10 @@
 - 遗留的 `db` / `database` 配置段会被检测并发出警告
 
 示例文件：
-- `soflare.kdl.sample` — KDL 配置，所有推送通道已注释
-- `soflare.yaml.sample` — YAML 配置，所有推送通道已注释
-- `soflare.domestic-android.production.kdl.sample` — 国内 Android 生产环境模板（KDL）
-- `soflare.domestic-android.production.yaml.sample` — 国内 Android 生产环境模板（YAML）
+- `floria.kdl.sample` — KDL 配置，所有推送通道已注释
+- `floria.yaml.sample` — YAML 配置，所有推送通道已注释
+- `floria.domestic-android.production.kdl.sample` — 国内 Android 生产环境模板（KDL）
+- `floria.domestic-android.production.yaml.sample` — 国内 Android 生产环境模板（YAML）
 
 ## 推荐策略
 
@@ -68,7 +68,7 @@
 ## 运行
 
 ```powershell
-$env:SOFLARE_CONF="E:\Works\palpo-im\soflare\soflare.kdl.sample"
+$env:SOFLARE_CONF="E:\Works\palpo-im\floria\floria.kdl.sample"
 cargo run
 ```
 
@@ -77,13 +77,13 @@ cargo run
 构建镜像：
 
 ```powershell
-docker build -t soflare .
+docker build -t floria .
 ```
 
 使用挂载的配置文件运行：
 
 ```powershell
-docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.kdl.sample:/app/soflare.kdl soflare
+docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/floria.kdl.sample:/app/floria.kdl floria
 ```
 
 ## Docker Compose
@@ -91,7 +91,7 @@ docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.kdl.sample:/app/sofl
 `examples/` 目录下提供了示例 `compose.yml`。
 
 ```sh
-cp soflare.kdl.sample examples/soflare.kdl
+cp floria.kdl.sample examples/floria.kdl
 cd examples
 docker compose up -d
 ```

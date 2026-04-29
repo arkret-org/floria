@@ -1,4 +1,4 @@
-# soflare
+# floria
 
 Push gateway service in Rust.
 
@@ -48,10 +48,10 @@ Quick notes:
 - legacy `db` / `database` config sections are detected and warned about
 
 Sample files:
-- `soflare.kdl.sample` — KDL config with all providers commented out
-- `soflare.yaml.sample` — YAML config with all providers commented out
-- `soflare.domestic-android.production.kdl.sample` — production mainland Android template (KDL)
-- `soflare.domestic-android.production.yaml.sample` — production mainland Android template (YAML)
+- `floria.kdl.sample` — KDL config with all providers commented out
+- `floria.yaml.sample` — YAML config with all providers commented out
+- `floria.domestic-android.production.kdl.sample` — production mainland Android template (KDL)
+- `floria.domestic-android.production.yaml.sample` — production mainland Android template (YAML)
 
 ## Recommended strategy
 
@@ -68,7 +68,7 @@ Sample files:
 ## Run
 
 ```powershell
-$env:SOFLARE_CONF="E:\Works\palpo-im\soflare\soflare.kdl.sample"
+$env:SOFLARE_CONF="E:\Works\palpo-im\floria\floria.kdl.sample"
 cargo run
 ```
 
@@ -77,13 +77,13 @@ cargo run
 Build the image:
 
 ```powershell
-docker build -t soflare .
+docker build -t floria .
 ```
 
 Run it with a mounted config file:
 
 ```powershell
-docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.kdl.sample:/app/soflare.kdl soflare
+docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/floria.kdl.sample:/app/floria.kdl floria
 ```
 
 ## Docker Compose
@@ -91,7 +91,7 @@ docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.kdl.sample:/app/sofl
 An example `compose.yml` is provided in the `examples/` directory.
 
 ```sh
-cp soflare.kdl.sample examples/soflare.kdl
+cp floria.kdl.sample examples/floria.kdl
 cd examples
 docker compose up -d
 ```

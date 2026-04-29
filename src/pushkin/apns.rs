@@ -26,36 +26,36 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_apns_request_time",
+        "floria_apns_request_time",
         "Time taken to send HTTP request to APNS"
     )
-    .expect("register soflare_apns_request_time")
+    .expect("register floria_apns_request_time")
 });
 
 static APNS_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_apns_requests",
+        "floria_active_apns_requests",
         "Number of APNS requests in flight"
     )
-    .expect("register soflare_active_apns_requests")
+    .expect("register floria_active_apns_requests")
 });
 
 static APNS_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_apns_status_codes",
+        "floria_apns_status_codes",
         "Number of HTTP response status codes received from APNS",
         &["pushkin", "code"]
     )
-    .expect("register soflare_apns_status_codes")
+    .expect("register floria_apns_status_codes")
 });
 
 static CLIENT_CERT_EXPIRY: LazyLock<prometheus::GaugeVec> = LazyLock::new(|| {
     prometheus::register_gauge_vec!(
-        "soflare_client_cert_expiry",
+        "floria_client_cert_expiry",
         "The expiry date of the client certificate in seconds since the epoch",
         &["pushkin"]
     )
-    .expect("register soflare_client_cert_expiry")
+    .expect("register floria_client_cert_expiry")
 });
 
 const APNS_MAX_TRIES: usize = 3;

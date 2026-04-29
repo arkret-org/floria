@@ -28,43 +28,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static HONOR_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_honor_queue_time",
+        "floria_honor_queue_time",
         "Time taken waiting for an HONOR Push request slot"
     )
-    .expect("register soflare_honor_queue_time")
+    .expect("register floria_honor_queue_time")
 });
 
 static HONOR_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_honor_request_time",
+        "floria_honor_request_time",
         "Time taken to send HTTP request to HONOR Push"
     )
-    .expect("register soflare_honor_request_time")
+    .expect("register floria_honor_request_time")
 });
 
 static HONOR_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_honor_requests",
+        "floria_pending_honor_requests",
         "Number of HONOR Push requests waiting for a connection"
     )
-    .expect("register soflare_pending_honor_requests")
+    .expect("register floria_pending_honor_requests")
 });
 
 static HONOR_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_honor_requests",
+        "floria_active_honor_requests",
         "Number of HONOR Push requests in flight"
     )
-    .expect("register soflare_active_honor_requests")
+    .expect("register floria_active_honor_requests")
 });
 
 static HONOR_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_honor_status_codes",
+        "floria_honor_status_codes",
         "Number of HTTP response status codes received from HONOR Push",
         &["pushkin", "code"]
     )
-    .expect("register soflare_honor_status_codes")
+    .expect("register floria_honor_status_codes")
 });
 
 const HONOR_MAX_TRIES: usize = 3;
@@ -134,7 +134,7 @@ impl HonorPushkin {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "soflare")?,
+            client: build_reqwest_client(config, "floria")?,
             token_grant: ClientCredentialsGrant::new(app_id.clone(), app_secret, token_url),
             endpoint: format!("{api_base_url}/{app_id}/messages:send"),
             config: HonorConfig {

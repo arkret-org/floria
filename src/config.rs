@@ -37,7 +37,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<(Self, PathBuf)> {
-        let path = env::var("SOFLARE_CONF").unwrap_or_else(|_| "soflare.kdl".to_owned());
+        let path = env::var("SOFLARE_CONF").unwrap_or_else(|_| "floria.kdl".to_owned());
         let path = PathBuf::from(path);
         let body = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config file {}", path.display()))?;

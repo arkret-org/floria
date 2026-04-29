@@ -28,43 +28,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static HUAWEI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_huawei_queue_time",
+        "floria_huawei_queue_time",
         "Time taken waiting for a Huawei Push request slot"
     )
-    .expect("register soflare_huawei_queue_time")
+    .expect("register floria_huawei_queue_time")
 });
 
 static HUAWEI_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_huawei_request_time",
+        "floria_huawei_request_time",
         "Time taken to send HTTP request to Huawei Push"
     )
-    .expect("register soflare_huawei_request_time")
+    .expect("register floria_huawei_request_time")
 });
 
 static HUAWEI_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_huawei_requests",
+        "floria_pending_huawei_requests",
         "Number of Huawei Push requests waiting for a connection"
     )
-    .expect("register soflare_pending_huawei_requests")
+    .expect("register floria_pending_huawei_requests")
 });
 
 static HUAWEI_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_huawei_requests",
+        "floria_active_huawei_requests",
         "Number of Huawei Push requests in flight"
     )
-    .expect("register soflare_active_huawei_requests")
+    .expect("register floria_active_huawei_requests")
 });
 
 static HUAWEI_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_huawei_status_codes",
+        "floria_huawei_status_codes",
         "Number of HTTP response status codes received from Huawei Push",
         &["pushkin", "code"]
     )
-    .expect("register soflare_huawei_status_codes")
+    .expect("register floria_huawei_status_codes")
 });
 
 const HUAWEI_MAX_TRIES: usize = 3;
@@ -131,7 +131,7 @@ impl HuaweiPushkin {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "soflare")?,
+            client: build_reqwest_client(config, "floria")?,
             token_grant: ClientCredentialsGrant::new(app_id.clone(), app_secret, token_url),
             endpoint: format!("{api_base_url}/{app_id}/messages:send"),
             config: HuaweiConfig {

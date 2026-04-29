@@ -1,7 +1,7 @@
 # Configuration Reference
 
-soflare reads its configuration from a file specified by the `SOFLARE_CONF` environment variable.
-When unset, it defaults to `soflare.kdl` in the working directory.
+floria reads its configuration from a file specified by the `SOFLARE_CONF` environment variable.
+When unset, it defaults to `floria.kdl` in the working directory.
 
 ## Config format
 
@@ -16,7 +16,7 @@ Both formats support the same configuration structure.
 
 ## KDL conventions
 
-KDL is a node-oriented document language. soflare maps KDL to its internal
+KDL is a node-oriented document language. floria maps KDL to its internal
 config using these conventions:
 
 ```
@@ -63,7 +63,7 @@ log {
 |-------|------|---------|-------------|
 | `access.x_forwarded_for` | bool | `false` | Use the first IP from `X-Forwarded-For` for access logs |
 
-Logging is controlled by the `RUST_LOG` environment variable (e.g. `RUST_LOG=soflare=debug,info`).
+Logging is controlled by the `RUST_LOG` environment variable (e.g. `RUST_LOG=floria=debug,info`).
 
 ### `http`
 
@@ -94,7 +94,7 @@ metrics {
   opentracing {
     enabled false
     implementation "jaeger"
-    service_name "soflare"
+    service_name "floria"
   }
   sentry {
     enabled false
@@ -455,6 +455,6 @@ com.example.web {
 
 | Variable | Description |
 |----------|-------------|
-| `SOFLARE_CONF` | Config file path (default: `soflare.kdl`) |
-| `RUST_LOG` | Tracing filter (e.g. `soflare=debug,info`) |
+| `SOFLARE_CONF` | Config file path (default: `floria.kdl`) |
+| `RUST_LOG` | Tracing filter (e.g. `floria=debug,info`) |
 | `HTTPS_PROXY` | Outbound proxy fallback (overridden by config `proxy`) |

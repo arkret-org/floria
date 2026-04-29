@@ -20,11 +20,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/soflare /usr/local/bin/soflare
-COPY soflare.kdl.sample /app/soflare.kdl
+COPY --from=builder /app/target/release/floria /usr/local/bin/floria
+COPY floria.kdl.sample /app/floria.kdl
 
-ENV SOFLARE_CONF=/app/soflare.kdl
+ENV SOFLARE_CONF=/app/floria.kdl
 
 EXPOSE 5000 8000
 
-CMD ["soflare"]
+CMD ["floria"]

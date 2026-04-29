@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use salvo::prelude::*;
-use soflare::AppState;
-use soflare::config::Config;
-use soflare::dedup::NotifyDeduplicator;
-use soflare::metrics;
-use soflare::pushkin::PushkinRegistry;
-use soflare::service::build_router_with_access_log;
+use floria::AppState;
+use floria::config::Config;
+use floria::dedup::NotifyDeduplicator;
+use floria::metrics;
+use floria::pushkin::PushkinRegistry;
+use floria::service::build_router_with_access_log;
 use tokio::task::JoinSet;
 use tracing_subscriber::EnvFilter;
 

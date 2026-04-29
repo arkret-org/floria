@@ -3,15 +3,15 @@
 # How to configure
 # ================
 #
-# 1. Copy `soflare.kdl.sample` from the project root into this directory
-#    (or wherever you prefer) and rename it to `soflare.kdl`:
+# 1. Copy `floria.kdl.sample` from the project root into this directory
+#    (or wherever you prefer) and rename it to `floria.kdl`:
 #
-#      cp ../soflare.kdl.sample ./soflare.kdl
+#      cp ../floria.kdl.sample ./floria.kdl
 #
-#    YAML is also supported — use `soflare.yaml.sample` instead and set
+#    YAML is also supported — use `floria.yaml.sample` instead and set
 #    SOFLARE_CONF to a `.yaml` path.
 #
-# 2. Edit `soflare.kdl` to register your push provider apps.  Each child
+# 2. Edit `floria.kdl` to register your push provider apps.  Each child
 #    node under `apps` represents one push provider.  Supported types:
 #      - apns      (Apple Push Notification Service – token or cert auth)
 #      - gcm       (Firebase Cloud Messaging – legacy key or HTTP v1)
@@ -25,16 +25,16 @@
 #      - webpush   (Web Push / VAPID)
 #
 # 3. If your push providers need credential files (APNS .p8 key, Firebase
-#    service-account JSON, VAPID PEM, etc.), place them next to soflare.kdl
+#    service-account JSON, VAPID PEM, etc.), place them next to floria.kdl
 #    and mount the directory as shown in the volume below.
 #
 # 4. Adjust environment variables as needed:
 #      - SOFLARE_CONF : path to the config file inside the container
-#                     (default: /app/soflare.kdl)
+#                     (default: /app/floria.kdl)
 #                     The format is detected by file extension:
 #                       .kdl  → KDL (default)
 #                       .yaml / .yml → YAML
-#      - RUST_LOG   : tracing filter, e.g. "soflare=debug,info"
+#      - RUST_LOG   : tracing filter, e.g. "floria=debug,info"
 #
 # 5. Start the service:
 #
@@ -50,8 +50,8 @@
 #   8000 – Prometheus metrics (enable in config under metrics > prometheus)
 
 services:
-  soflare:
-    image: soflare:latest
+  floria:
+    image: floria:latest
     # To build from source instead of using a pre-built image, uncomment:
     # build:
     #   context: ..
@@ -62,12 +62,12 @@ services:
       # - "8000:8000" # Prometheus metrics (uncomment if enabled in config)
     volumes:
       # Mount your config file and any credential files.
-      # Adjust the host path (left side) to where your soflare.kdl lives.
-      - ./soflare.kdl:/app/soflare.kdl:ro
+      # Adjust the host path (left side) to where your floria.kdl lives.
+      - ./floria.kdl:/app/floria.kdl:ro
       # If credential files (APNS keys, Firebase JSON, VAPID PEM, etc.)
       # are in a separate directory, mount it too:
       # - ./credentials:/app/credentials:ro
     environment:
-      SOFLARE_CONF: /app/soflare.kdl
-      # RUST_LOG: "soflare=debug,info"
+      SOFLARE_CONF: /app/floria.kdl
+      # RUST_LOG: "floria=debug,info"
       # HTTPS_PROXY: "http://proxy.example.com:8080"  # outbound proxy for push requests

@@ -23,43 +23,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static XIAOMI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_xiaomi_queue_time",
+        "floria_xiaomi_queue_time",
         "Time taken waiting for a Xiaomi Push request slot"
     )
-    .expect("register soflare_xiaomi_queue_time")
+    .expect("register floria_xiaomi_queue_time")
 });
 
 static XIAOMI_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_xiaomi_request_time",
+        "floria_xiaomi_request_time",
         "Time taken to send HTTP request to Xiaomi Push"
     )
-    .expect("register soflare_xiaomi_request_time")
+    .expect("register floria_xiaomi_request_time")
 });
 
 static XIAOMI_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_xiaomi_requests",
+        "floria_pending_xiaomi_requests",
         "Number of Xiaomi Push requests waiting for a connection"
     )
-    .expect("register soflare_pending_xiaomi_requests")
+    .expect("register floria_pending_xiaomi_requests")
 });
 
 static XIAOMI_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_xiaomi_requests",
+        "floria_active_xiaomi_requests",
         "Number of Xiaomi Push requests in flight"
     )
-    .expect("register soflare_active_xiaomi_requests")
+    .expect("register floria_active_xiaomi_requests")
 });
 
 static XIAOMI_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_xiaomi_status_codes",
+        "floria_xiaomi_status_codes",
         "Number of HTTP response status codes received from Xiaomi Push",
         &["pushkin", "code"]
     )
-    .expect("register soflare_xiaomi_status_codes")
+    .expect("register floria_xiaomi_status_codes")
 });
 
 const XIAOMI_MAX_TRIES: usize = 3;
@@ -127,7 +127,7 @@ impl XiaomiPushkin {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "soflare")?,
+            client: build_reqwest_client(config, "floria")?,
             authorization: xiaomi_authorization(&app_secret)?,
             endpoint: format!("{api_base_url}/v3/message/regid"),
             config: XiaomiConfig {

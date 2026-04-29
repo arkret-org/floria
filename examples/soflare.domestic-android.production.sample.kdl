@@ -29,7 +29,7 @@ metrics {
   opentracing {
     enabled false
     implementation "jaeger"
-    service_name "soflare"
+    service_name "floria"
   }
   sentry {
     enabled false

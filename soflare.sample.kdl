@@ -1,6 +1,6 @@
 // Soflare configuration (KDL format)
 //
-// soflare currently uses tracing / RUST_LOG instead of custom YAML logging setup.
+// floria currently uses tracing / RUST_LOG instead of custom YAML logging setup.
 
 log {
   access {
@@ -23,7 +23,7 @@ metrics {
   opentracing {
     enabled false
     implementation "jaeger"
-    service_name "soflare"
+    service_name "floria"
   }
   sentry {
     enabled false

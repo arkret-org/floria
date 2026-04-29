@@ -1018,6 +1018,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "floria"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "blake2",
+ "globset",
+ "hex",
+ "isahc",
+ "jsonwebtoken",
+ "kdl",
+ "md-5",
+ "prometheus",
+ "reqwest",
+ "salvo",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "web-push",
+ "x509-parser",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3495,36 +3525,6 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "soflare"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "blake2",
- "globset",
- "hex",
- "isahc",
- "jsonwebtoken",
- "kdl",
- "md-5",
- "prometheus",
- "reqwest",
- "salvo",
- "serde",
- "serde-saphyr",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "web-push",
- "x509-parser",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 # 配置参考
 
-soflare 从 `SOFLARE_CONF` 环境变量指定的文件中读取配置。
-未设置时，默认读取工作目录下的 `soflare.kdl`。
+floria 从 `SOFLARE_CONF` 环境变量指定的文件中读取配置。
+未设置时，默认读取工作目录下的 `floria.kdl`。
 
 ## 配置格式
 
@@ -16,7 +16,7 @@ soflare 从 `SOFLARE_CONF` 环境变量指定的文件中读取配置。
 
 ## KDL 约定
 
-KDL 是一种面向节点的文档语言。soflare 使用以下约定将 KDL 映射到内部配置：
+KDL 是一种面向节点的文档语言。floria 使用以下约定将 KDL 映射到内部配置：
 
 ```
 // 标量值
@@ -62,7 +62,7 @@ log {
 |------|------|--------|------|
 | `access.x_forwarded_for` | bool | `false` | 访问日志中使用 `X-Forwarded-For` 的第一个 IP |
 
-日志级别通过 `RUST_LOG` 环境变量控制（如 `RUST_LOG=soflare=debug,info`）。
+日志级别通过 `RUST_LOG` 环境变量控制（如 `RUST_LOG=floria=debug,info`）。
 
 ### `http`
 
@@ -93,7 +93,7 @@ metrics {
   opentracing {
     enabled false
     implementation "jaeger"
-    service_name "soflare"
+    service_name "floria"
   }
   sentry {
     enabled false
@@ -452,6 +452,6 @@ com.example.web {
 
 | 变量 | 说明 |
 |------|------|
-| `SOFLARE_CONF` | 配置文件路径（默认：`soflare.kdl`） |
-| `RUST_LOG` | 日志过滤器（如 `soflare=debug,info`） |
+| `SOFLARE_CONF` | 配置文件路径（默认：`floria.kdl`） |
+| `RUST_LOG` | 日志过滤器（如 `floria=debug,info`） |
 | `HTTPS_PROXY` | 出站代理回退（被配置文件中的 `proxy` 覆盖） |

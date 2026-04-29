@@ -25,43 +25,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_vivo_queue_time",
+        "floria_vivo_queue_time",
         "Time taken waiting for a vivo Push request slot"
     )
-    .expect("register soflare_vivo_queue_time")
+    .expect("register floria_vivo_queue_time")
 });
 
 static VIVO_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_vivo_request_time",
+        "floria_vivo_request_time",
         "Time taken to send HTTP request to vivo Push"
     )
-    .expect("register soflare_vivo_request_time")
+    .expect("register floria_vivo_request_time")
 });
 
 static VIVO_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_vivo_requests",
+        "floria_pending_vivo_requests",
         "Number of vivo Push requests waiting for a connection"
     )
-    .expect("register soflare_pending_vivo_requests")
+    .expect("register floria_pending_vivo_requests")
 });
 
 static VIVO_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_vivo_requests",
+        "floria_active_vivo_requests",
         "Number of vivo Push requests in flight"
     )
-    .expect("register soflare_active_vivo_requests")
+    .expect("register floria_active_vivo_requests")
 });
 
 static VIVO_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_vivo_status_codes",
+        "floria_vivo_status_codes",
         "Number of HTTP response status codes received from vivo Push",
         &["pushkin", "code"]
     )
-    .expect("register soflare_vivo_status_codes")
+    .expect("register floria_vivo_status_codes")
 });
 
 const VIVO_MAX_TRIES: usize = 3;
@@ -169,7 +169,7 @@ impl VivoPushkin {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "soflare")?,
+            client: build_reqwest_client(config, "floria")?,
             auth: VivoAuth {
                 app_id,
                 app_id_string,

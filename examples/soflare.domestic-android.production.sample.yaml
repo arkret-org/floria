@@ -15,7 +15,7 @@ metrics:
   opentracing:
     enabled: false
     implementation: jaeger
-    service_name: soflare
+    service_name: floria
     jaeger: {}
   sentry:
     enabled: false

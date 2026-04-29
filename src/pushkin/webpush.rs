@@ -28,34 +28,34 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_webpush_queue_time",
+        "floria_webpush_queue_time",
         "Time taken waiting for a connection to WebPush endpoint"
     )
-    .expect("register soflare_webpush_queue_time")
+    .expect("register floria_webpush_queue_time")
 });
 
 static WEBPUSH_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_webpush_request_time",
+        "floria_webpush_request_time",
         "Time taken to send HTTP request to WebPush endpoint"
     )
-    .expect("register soflare_webpush_request_time")
+    .expect("register floria_webpush_request_time")
 });
 
 static WEBPUSH_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_webpush_requests",
+        "floria_pending_webpush_requests",
         "Number of WebPush requests waiting for a connection"
     )
-    .expect("register soflare_pending_webpush_requests")
+    .expect("register floria_pending_webpush_requests")
 });
 
 static WEBPUSH_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_webpush_requests",
+        "floria_active_webpush_requests",
         "Number of WebPush requests in flight"
     )
-    .expect("register soflare_active_webpush_requests")
+    .expect("register floria_active_webpush_requests")
 });
 
 const DEFAULT_WEBPUSH_TTL_SECS: u32 = 15 * 60;
@@ -121,7 +121,7 @@ impl WebpushPushkin {
 
         let mut client_builder = HttpClient::builder()
             .max_connections(max_connections)
-            .default_header("user-agent", "soflare");
+            .default_header("user-agent", "floria");
         if let Some(proxy) = config.outbound_proxy() {
             client_builder = client_builder.proxy(Some(
                 proxy

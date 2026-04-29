@@ -26,11 +26,11 @@ use crate::models::{Device, Notification, NotificationContext};
 
 static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_inflight_request_limit_drop",
+        "floria_inflight_request_limit_drop",
         "Number of notifications dropped because the number of inflight requests exceeded the configured inflight_request_limit",
         &["pushkin"]
     )
-    .expect("register soflare_inflight_request_limit_drop")
+    .expect("register floria_inflight_request_limit_drop")
 });
 
 pub use apns::ApnsPushkin;

@@ -23,43 +23,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static JPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_jpush_queue_time",
+        "floria_jpush_queue_time",
         "Time taken waiting for a JPush request slot"
     )
-    .expect("register soflare_jpush_queue_time")
+    .expect("register floria_jpush_queue_time")
 });
 
 static JPUSH_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_jpush_request_time",
+        "floria_jpush_request_time",
         "Time taken to send HTTP request to JPush"
     )
-    .expect("register soflare_jpush_request_time")
+    .expect("register floria_jpush_request_time")
 });
 
 static JPUSH_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_jpush_requests",
+        "floria_pending_jpush_requests",
         "Number of JPush requests waiting for a connection"
     )
-    .expect("register soflare_pending_jpush_requests")
+    .expect("register floria_pending_jpush_requests")
 });
 
 static JPUSH_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_jpush_requests",
+        "floria_active_jpush_requests",
         "Number of JPush requests in flight"
     )
-    .expect("register soflare_active_jpush_requests")
+    .expect("register floria_active_jpush_requests")
 });
 
 static JPUSH_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_jpush_status_codes",
+        "floria_jpush_status_codes",
         "Number of HTTP response status codes received from JPush",
         &["pushkin", "code"]
     )
-    .expect("register soflare_jpush_status_codes")
+    .expect("register floria_jpush_status_codes")
 });
 
 const JPUSH_URL: &str = "https://api.jpush.cn/v3/push";
@@ -126,7 +126,7 @@ impl JpushPushkin {
         let matcher = AppMatcher::new(name)?;
         let gate = ConcurrencyGate::new(inflight_limit(app)?);
         let connection_semaphore = Arc::new(Semaphore::new(max_connections(app)?.max(1)));
-        let client = build_reqwest_client(config, "soflare")?;
+        let client = build_reqwest_client(config, "floria")?;
         let third_party_channel = app
             .get_object("third_party_channel")?
             .map(validate_third_party_channel)

@@ -24,43 +24,43 @@ use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connection
 
 static OPPO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_oppo_queue_time",
+        "floria_oppo_queue_time",
         "Time taken waiting for an OPPO Push request slot"
     )
-    .expect("register soflare_oppo_queue_time")
+    .expect("register floria_oppo_queue_time")
 });
 
 static OPPO_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
-        "soflare_oppo_request_time",
+        "floria_oppo_request_time",
         "Time taken to send HTTP request to OPPO Push"
     )
-    .expect("register soflare_oppo_request_time")
+    .expect("register floria_oppo_request_time")
 });
 
 static OPPO_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_pending_oppo_requests",
+        "floria_pending_oppo_requests",
         "Number of OPPO Push requests waiting for a connection"
     )
-    .expect("register soflare_pending_oppo_requests")
+    .expect("register floria_pending_oppo_requests")
 });
 
 static OPPO_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
-        "soflare_active_oppo_requests",
+        "floria_active_oppo_requests",
         "Number of OPPO Push requests in flight"
     )
-    .expect("register soflare_active_oppo_requests")
+    .expect("register floria_active_oppo_requests")
 });
 
 static OPPO_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
-        "soflare_oppo_status_codes",
+        "floria_oppo_status_codes",
         "Number of HTTP response status codes received from OPPO Push",
         &["pushkin", "code"]
     )
-    .expect("register soflare_oppo_status_codes")
+    .expect("register floria_oppo_status_codes")
 });
 
 const OPPO_MAX_TRIES: usize = 3;
@@ -164,7 +164,7 @@ impl OppoPushkin {
             vendor,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "soflare")?,
+            client: build_reqwest_client(config, "floria")?,
             auth: OppoAuth {
                 app_key,
                 master_secret,
