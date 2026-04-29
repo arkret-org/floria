@@ -53,16 +53,16 @@ fn merge_notification_data(
         ("room_id", notification.scope_id()),
         ("space_name", notification.scope_name()),
         ("room_name", notification.scope_name()),
-        ("room_alias", notification.room_alias.as_ref()),
-        ("membership", notification.membership.as_ref()),
-        ("event_id", notification.event_id.as_ref()),
-        ("sender", notification.sender.as_ref()),
+        ("room_alias", notification.room_alias.as_deref()),
+        ("membership", notification.membership.as_deref()),
+        ("event_id", notification.event_id.as_deref()),
+        ("sender", notification.sender.as_deref()),
         (
             "sender_display_name",
-            notification.sender_display_name.as_ref(),
+            notification.sender_display_name.as_deref(),
         ),
-        ("type", notification.r#type.as_ref()),
-        ("push_hint", notification.push_hint.as_ref()),
+        ("type", notification.r#type.as_deref()),
+        ("push_hint", notification.push_hint.as_deref()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
             let (value, _) = truncate_str(value, CONTENT_BODY_MAX_BYTES);
@@ -131,7 +131,7 @@ fn sanitized_content(content: &Map<String, Value>) -> Map<String, Value> {
 fn derive_alert(notification: &Notification) -> Option<(String, String)> {
     let sender = notification
         .sender_label()
-        .cloned()
+        .map(str::to_owned)
         .unwrap_or_else(|| "New activity".to_owned());
     let room = notification.scope_name().map(ToOwned::to_owned);
 

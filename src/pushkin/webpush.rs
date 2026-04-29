@@ -161,19 +161,19 @@ impl WebpushPushkin {
             ("room_id", notification.scope_id()),
             ("space_name", notification.scope_name()),
             ("room_name", notification.scope_name()),
-            ("room_alias", notification.room_alias.as_ref()),
-            ("membership", notification.membership.as_ref()),
-            ("event_id", notification.event_id.as_ref()),
-            ("sender", notification.sender.as_ref()),
+            ("room_alias", notification.room_alias.as_deref()),
+            ("membership", notification.membership.as_deref()),
+            ("event_id", notification.event_id.as_deref()),
+            ("sender", notification.sender.as_deref()),
             (
                 "sender_display_name",
-                notification.sender_display_name.as_ref(),
+                notification.sender_display_name.as_deref(),
             ),
-            ("type", notification.r#type.as_ref()),
-            ("push_hint", notification.push_hint.as_ref()),
+            ("type", notification.r#type.as_deref()),
+            ("push_hint", notification.push_hint.as_deref()),
         ] {
             if let Some(value) = value.filter(|value| !value.is_empty()) {
-                payload.insert(key.to_owned(), Value::String(value.clone()));
+                payload.insert(key.to_owned(), Value::String(value.to_owned()));
             }
         }
 
