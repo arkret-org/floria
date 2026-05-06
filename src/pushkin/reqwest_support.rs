@@ -6,14 +6,17 @@ use reqwest::{Client, Proxy};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
+use crate::auth::redact_url_credentials;
 use crate::config::Config;
 use crate::error::DispatchError;
 
 pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<Client> {
     let mut builder = Client::builder().user_agent(user_agent);
     if let Some(proxy) = config.outbound_proxy() {
-        builder = builder
-            .proxy(Proxy::all(proxy).with_context(|| format!("invalid proxy URL `{proxy}`"))?);
+        builder =
+            builder.proxy(Proxy::all(proxy).with_context(|| {
+                format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
+            })?);
     }
     builder.build().context("failed to build HTTP client")
 }
@@ -71,7 +74,7 @@ impl ClientCredentialsGrant {
                 DispatchError::temporary(
                     format!(
                         "failed to fetch access token from {}: {error}",
-                        self.token_url
+                        redact_url_credentials(&self.token_url)
                     ),
                     None,
                 )
@@ -80,7 +83,7 @@ impl ClientCredentialsGrant {
             .map_err(|error| {
                 DispatchError::remote(format!(
                     "token endpoint rejected request to {}: {error}",
-                    self.token_url
+                    redact_url_credentials(&self.token_url)
                 ))
             })?
             .json()

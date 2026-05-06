@@ -3,18 +3,18 @@
 # How to configure
 # ================
 #
-# 1. Copy `floria.kdl.sample` from the project root into this directory
+# 1. Copy `soflare.sample.kdl` from the project root into this directory
 #    (or wherever you prefer) and rename it to `floria.kdl`:
 #
-#      cp ../floria.kdl.sample ./floria.kdl
+#      cp ../soflare.sample.kdl ./floria.kdl
 #
-#    YAML is also supported — use `floria.yaml.sample` instead and set
+#    YAML is also supported — use `soflare.sample.yaml` instead and set
 #    SOFLARE_CONF to a `.yaml` path.
 #
 # 2. Edit `floria.kdl` to register your push provider apps.  Each child
 #    node under `apps` represents one push provider.  Supported types:
 #      - apns      (Apple Push Notification Service – token or cert auth)
-#      - gcm       (Firebase Cloud Messaging – legacy key or HTTP v1)
+#      - fcm       (Firebase Cloud Messaging – HTTP v1)
 #      - jpush     (JPush)
 #      - huawei    (Huawei Push Kit / HarmonyOS)
 #      - xiaomi    (Xiaomi Mi Push)
@@ -28,7 +28,11 @@
 #    service-account JSON, VAPID PEM, etc.), place them next to floria.kdl
 #    and mount the directory as shown in the volume below.
 #
-# 4. Adjust environment variables as needed:
+# 4. For multi-instance deployments, set `http.notify_dedup.backend "redis"`
+#    and `http.notify_dedup.redis_url "redis://redis:6379/0"` in floria.kdl,
+#    then uncomment the Redis service below.
+#
+# 5. Adjust environment variables as needed:
 #      - SOFLARE_CONF : path to the config file inside the container
 #                     (default: /app/floria.kdl)
 #                     The format is detected by file extension:
@@ -36,13 +40,13 @@
 #                       .yaml / .yml → YAML
 #      - RUST_LOG   : tracing filter, e.g. "floria=debug,info"
 #
-# 5. Start the service:
+# 6. Start the service:
 #
 #      docker compose up -d
 #
-# 6. Verify it's running:
+# 7. Verify it's running:
 #
-#      curl http://localhost:5000/contrix/push/v1/notify
+#      curl http://localhost:5000/ready
 #
 # Ports
 # -----
@@ -71,3 +75,15 @@ services:
       SOFLARE_CONF: /app/floria.kdl
       # RUST_LOG: "floria=debug,info"
       # HTTPS_PROXY: "http://proxy.example.com:8080"  # outbound proxy for push requests
+    # depends_on:
+    #   - redis
+
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: ["redis-server", "--appendonly", "yes"]
+  #   volumes:
+  #     - redis-data:/data
+
+# volumes:
+#   redis-data:

@@ -71,6 +71,39 @@ http {
   bind_addresses "127.0.0.1"
   port 5000
   notify_dedup_ttl_seconds 0
+  notify_dedup {
+    backend "memory"
+    key_prefix "floria"
+    // redis_url "redis://127.0.0.1:6379/0"
+  }
+  notify_auth {
+    bearer_tokens "replace-me"
+    // bearer_token_hashes "sha256:<hex-digest>"
+    trusted_service_dids "did:web:sync.example.com"
+    plaintext_metadata_service_dids "did:web:sync.example.com"
+    gateway_service_did "did:web:push.example.com"
+    // require_message_signatures true
+    // service_principals {
+    //   "did:web:sync.example.com" {
+    //     allow_plaintext_metadata true
+    //     bearer_tokens "replace-me"
+    //     bearer_token_hashes "sha256:<hex-digest>"
+    //     signature_key_id "did:web:sync.example.com#push"
+    //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
+    //     service_endpoint "https://push.example.com/api/v1/push/notify"
+    //     require_mtls true
+    //     mtls_cert_fingerprints "aa:bb:cc"
+    //   }
+    // }
+  }
+  notify_rate_limits {
+    window_seconds 60
+    per_origin_service 600
+    per_app_id 5000
+    per_provider 5000
+    per_push_key_hash 120
+    per_endpoint 10000
+  }
 }
 ```
 
@@ -78,7 +111,68 @@ http {
 |------|------|--------|------|
 | `bind_addresses` | string[] | `["127.0.0.1"]` | HTTP 监听地址；每项既可以只写 host/IP，也可以直接写 `host:port` |
 | `port` | u16 | `5000` | HTTP 监听端口 |
-| `notify_dedup_ttl_seconds` | u64 | `0` | 成功 `/notify` 请求体的内存去重 TTL；`0` 表示关闭 |
+| `notify_dedup_ttl_seconds` | u64 | `0` | 成功 `/notify` 请求体的去重 TTL；`0` 表示完全关闭去重 |
+| `notify_dedup.backend` | string | `"memory"` | 去重后端：`"memory"` 或 `"redis"` |
+| `notify_dedup.redis_url` | string | — | 当 `notify_dedup.backend=redis` 时使用的 Redis 连接 URL |
+| `notify_dedup.key_prefix` | string | `"floria"` | Redis 去重键前缀 |
+| `notify_auth.bearer_tokens` | string/string[] | — | `/notify` 允许的 bearer service token |
+| `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
+| `notify_auth.trusted_service_dids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
+| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | 允许发送 `sender_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
+| `notify_auth.gateway_service_did` | string | — | 期望的 destination gateway DID |
+| `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
+| `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
+| `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | 由入口层注入、表示 mTLS 已校验通过的 header |
+| `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | 由入口层注入、携带客户端证书指纹的 header |
+| `notify_auth.service_principals` | object | — | 以 origin service DID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
+| `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
+| `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service DID 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_app_id` | u64 | — | 每个 target app ID 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_provider` | u64 | — | 每个 resolved provider 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_push_key_hash` | u64 | — | 每个 push token hash 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_endpoint` | u64 | — | 每个 HTTP endpoint path 在单窗口内允许的 `/notify` 次数 |
+
+`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。legacy `room_*`、`card_*`、`subject*`、Matrix `m.room.*` 和 `only_last_per_room` 输入会被直接拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
+
+生产环境 `/notify` 配置示例：
+
+```kdl
+http {
+  bind_addresses "0.0.0.0"
+  port 5000
+  notify_dedup_ttl_seconds 60
+  notify_dedup {
+    backend "redis"
+    redis_url "redis://redis.internal:6379/0"
+    key_prefix "floria-prod"
+  }
+  notify_auth {
+    gateway_service_did "did:web:push.example.com"
+    require_message_signatures true
+    service_principals {
+      "did:web:sync.example.com" {
+        allow_plaintext_metadata true
+        bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
+        signature_key_id "did:web:sync.example.com#push"
+        signature_public_key_hex "replace-with-ed25519-public-key-hex"
+        service_endpoint "https://push.example.com/api/v1/push/notify"
+        require_mtls true
+        mtls_cert_fingerprints "aa:bb:cc"
+      }
+    }
+  }
+  notify_rate_limits {
+    window_seconds 60
+    per_origin_service 600
+    per_app_id 5000
+    per_provider 5000
+    per_push_key_hash 120
+    per_endpoint 10000
+  }
+}
+```
+
+生产部署时，应让 `/api/v1/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
 
 ### `metrics`
 
@@ -160,28 +254,15 @@ com.example.ios {
 
 ---
 
-### `gcm` / `fcm` — Firebase 云消息推送
-
-**Legacy 模式：**
-
-```kdl
-com.example.android.legacy {
-  type "gcm"
-  api_version "legacy"
-  api_key "your-fcm-server-key"
-  max_connections 20
-}
-```
-
-**HTTP v1 模式：**
+### `fcm` — Firebase 云消息推送
 
 ```kdl
 com.example.android {
-  type "gcm"
-  api_version "v1"
+  type "fcm"
   project_id "your-google-project-id"
   service_account_file "./firebase-service-account.json"
   max_connections 20
+  inflight_request_limit 512
   fcm_options {
     apns {
       payload {
@@ -195,10 +276,10 @@ com.example.android {
 }
 ```
 
+FCM 现仅支持 HTTP v1 模式。
+
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `api_version` | string | `"legacy"` | `"legacy"` 或 `"v1"` |
-| `api_key` | string | — | FCM 服务器密钥（Legacy 模式必填） |
 | `project_id` | string | — | Google Cloud 项目 ID（v1 模式必填） |
 | `service_account_file` | string | — | Firebase 服务帐号 JSON 文件路径（v1 模式必填） |
 | `fcm_options` | object | — | 合并到基础消息中的任意 JSON |
@@ -442,11 +523,11 @@ com.example.web {
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `endpoint` | string | WebPush 订阅端点 URL |
+| `endpoint` | string | WebPush 订阅端点 URL（不得包含 query string） |
 | `auth` | string | 认证密钥（base64） |
 | `default_payload` | object | 合并到所有消息的默认载荷 |
 | `events_only` | bool | 仅在存在 `event_id` 时发送 |
-| `only_last_per_room` | bool | 按房间去重（Topic 去重） |
+| `only_last_per_flow` | bool | 按 active flow 去重（Topic 去重） |
 
 ## 环境变量
 

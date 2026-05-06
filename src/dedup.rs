@@ -2,9 +2,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use anyhow::{Context, Result};
 use blake2::Blake2s256;
 use blake2::digest::Digest;
+use redis::Commands;
 
+use crate::auth::redact_url_credentials;
 use crate::models::NotifyResponse;
 
 #[derive(Debug, Clone)]
@@ -20,18 +23,62 @@ struct CacheEntry {
 }
 
 #[derive(Debug)]
-pub struct NotifyDeduplicator {
-    ttl: Duration,
+struct MemoryNotifyDeduplicator {
     entries: Mutex<HashMap<String, CacheEntry>>,
     delivered_devices: Mutex<HashMap<String, Instant>>,
+}
+
+#[derive(Debug)]
+struct RedisNotifyDeduplicator {
+    client: redis::Client,
+    target_label: String,
+    key_prefix: String,
+}
+
+#[derive(Debug)]
+enum NotifyDedupBackend {
+    Memory(MemoryNotifyDeduplicator),
+    Redis(RedisNotifyDeduplicator),
+}
+
+#[derive(Debug)]
+pub struct NotifyDeduplicator {
+    ttl: Duration,
+    backend: NotifyDedupBackend,
 }
 
 impl NotifyDeduplicator {
     pub fn new(ttl: Duration) -> Self {
         Self {
             ttl,
-            entries: Mutex::new(HashMap::new()),
-            delivered_devices: Mutex::new(HashMap::new()),
+            backend: NotifyDedupBackend::Memory(MemoryNotifyDeduplicator {
+                entries: Mutex::new(HashMap::new()),
+                delivered_devices: Mutex::new(HashMap::new()),
+            }),
+        }
+    }
+
+    pub fn redis(ttl: Duration, redis_url: &str, key_prefix: impl Into<String>) -> Result<Self> {
+        let client = redis::Client::open(redis_url).with_context(|| {
+            format!(
+                "invalid notify_dedup redis_url `{}`",
+                redact_url_credentials(redis_url)
+            )
+        })?;
+        Ok(Self {
+            ttl,
+            backend: NotifyDedupBackend::Redis(RedisNotifyDeduplicator {
+                client,
+                target_label: redact_url_credentials(redis_url),
+                key_prefix: normalize_key_prefix(&key_prefix.into()),
+            }),
+        })
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        match self.backend {
+            NotifyDedupBackend::Memory(_) => "memory",
+            NotifyDedupBackend::Redis(_) => "redis",
         }
     }
 
@@ -39,7 +86,78 @@ impl NotifyDeduplicator {
         self.ttl
     }
 
+    pub fn ready(&self) -> Result<(), String> {
+        match &self.backend {
+            NotifyDedupBackend::Memory(_) => Ok(()),
+            NotifyDedupBackend::Redis(backend) => {
+                backend.ready().map_err(|error| error.to_string())
+            }
+        }
+    }
+
     pub fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
+            NotifyDedupBackend::Redis(backend) => backend.lookup(key, request_fingerprint),
+        }
+    }
+
+    pub fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => backend.conflicts(key, request_fingerprint),
+            NotifyDedupBackend::Redis(backend) => backend.conflicts(key, request_fingerprint),
+        }
+    }
+
+    pub fn insert_success(&self, key: &str, request_fingerprint: &str, response: NotifyResponse) {
+        if self.ttl.is_zero() {
+            return;
+        }
+
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => {
+                backend.insert_success(self.ttl, key, request_fingerprint, response)
+            }
+            NotifyDedupBackend::Redis(backend) => {
+                backend.insert_success(self.ttl, key, request_fingerprint, response)
+            }
+        }
+    }
+
+    pub fn contains_delivered_device(
+        &self,
+        notification_key: &str,
+        app_id: &str,
+        pushkey: &str,
+    ) -> bool {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => {
+                backend.contains_delivered_device(notification_key, app_id, pushkey)
+            }
+            NotifyDedupBackend::Redis(backend) => {
+                backend.contains_delivered_device(notification_key, app_id, pushkey)
+            }
+        }
+    }
+
+    pub fn mark_delivered_device(&self, notification_key: &str, app_id: &str, pushkey: &str) {
+        if self.ttl.is_zero() {
+            return;
+        }
+
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => {
+                backend.mark_delivered_device(self.ttl, notification_key, app_id, pushkey)
+            }
+            NotifyDedupBackend::Redis(backend) => {
+                backend.mark_delivered_device(self.ttl, notification_key, app_id, pushkey)
+            }
+        }
+    }
+}
+
+impl MemoryNotifyDeduplicator {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -50,7 +168,7 @@ impl NotifyDeduplicator {
         (entry.request_fingerprint == request_fingerprint).then(|| entry.response.clone())
     }
 
-    pub fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
+    fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -62,11 +180,13 @@ impl NotifyDeduplicator {
             .is_some_and(|entry| entry.request_fingerprint != request_fingerprint)
     }
 
-    pub fn insert_success(&self, key: &str, request_fingerprint: &str, response: NotifyResponse) {
-        if self.ttl.is_zero() {
-            return;
-        }
-
+    fn insert_success(
+        &self,
+        ttl: Duration,
+        key: &str,
+        request_fingerprint: &str,
+        response: NotifyResponse,
+    ) {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -76,14 +196,14 @@ impl NotifyDeduplicator {
         entries.insert(
             key.to_owned(),
             CacheEntry {
-                expires_at: now + self.ttl,
+                expires_at: now + ttl,
                 request_fingerprint: request_fingerprint.to_owned(),
                 response: CachedNotifyResponse { response },
             },
         );
     }
 
-    pub fn contains_delivered_device(
+    fn contains_delivered_device(
         &self,
         notification_key: &str,
         app_id: &str,
@@ -99,11 +219,13 @@ impl NotifyDeduplicator {
         entries.contains_key(&key)
     }
 
-    pub fn mark_delivered_device(&self, notification_key: &str, app_id: &str, pushkey: &str) {
-        if self.ttl.is_zero() {
-            return;
-        }
-
+    fn mark_delivered_device(
+        &self,
+        ttl: Duration,
+        notification_key: &str,
+        app_id: &str,
+        pushkey: &str,
+    ) {
         let key = delivered_device_key(notification_key, app_id, pushkey);
         let now = Instant::now();
         let mut entries = self
@@ -111,7 +233,176 @@ impl NotifyDeduplicator {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries.retain(|_, expires_at| *expires_at > now);
-        entries.insert(key, now + self.ttl);
+        entries.insert(key, now + ttl);
+    }
+}
+
+impl RedisNotifyDeduplicator {
+    fn ready(&self) -> Result<()> {
+        let mut connection = self.connection()?;
+        let pong: String = redis::cmd("PING")
+            .query(&mut connection)
+            .with_context(|| format!("failed to ping Redis backend {}", self.target_label))?;
+        if pong == "PONG" {
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "Redis backend {} returned unexpected PING response `{pong}`",
+                self.target_label
+            );
+        }
+    }
+
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
+        let mut connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to query Redis notify dedup cache");
+                return None;
+            }
+        };
+        let response_key = self.response_key(key);
+        let stored_fingerprint = match connection
+            .hget::<_, _, Option<String>>(&response_key, "request_fingerprint")
+        {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to load Redis notify dedup fingerprint");
+                return None;
+            }
+        }?;
+        if stored_fingerprint != request_fingerprint {
+            return None;
+        }
+        let response_json = match connection.hget::<_, _, Option<String>>(&response_key, "response")
+        {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to load Redis notify dedup response");
+                return None;
+            }
+        }?;
+        match serde_json::from_str::<NotifyResponse>(&response_json) {
+            Ok(response) => Some(CachedNotifyResponse { response }),
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to deserialize cached Redis notify response");
+                None
+            }
+        }
+    }
+
+    fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
+        let mut connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to query Redis notify dedup cache");
+                return false;
+            }
+        };
+        let response_key = self.response_key(key);
+        match connection.hget::<_, _, Option<String>>(&response_key, "request_fingerprint") {
+            Ok(Some(stored_fingerprint)) => stored_fingerprint != request_fingerprint,
+            Ok(None) => false,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to compare Redis notify dedup fingerprint");
+                false
+            }
+        }
+    }
+
+    fn insert_success(
+        &self,
+        ttl: Duration,
+        key: &str,
+        request_fingerprint: &str,
+        response: NotifyResponse,
+    ) {
+        let ttl_seconds = ttl_seconds(ttl);
+        let response_key = self.response_key(key);
+        let response_json = match serde_json::to_string(&response) {
+            Ok(response_json) => response_json,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to serialize notify response for Redis dedup cache");
+                return;
+            }
+        };
+        let mut connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis notify dedup cache");
+                return;
+            }
+        };
+        let result: redis::RedisResult<()> = redis::pipe()
+            .hset(&response_key, "request_fingerprint", request_fingerprint)
+            .ignore()
+            .hset(&response_key, "response", response_json)
+            .ignore()
+            .expire(&response_key, ttl_seconds)
+            .ignore()
+            .query(&mut connection);
+        if let Err(error) = result {
+            tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to store Redis notify dedup response");
+        }
+    }
+
+    fn contains_delivered_device(
+        &self,
+        notification_key: &str,
+        app_id: &str,
+        pushkey: &str,
+    ) -> bool {
+        let mut connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis notify dedup cache");
+                return false;
+            }
+        };
+        let delivered_key = self.delivered_key(notification_key, app_id, pushkey);
+        match connection.exists::<_, bool>(&delivered_key) {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, redis_key = %delivered_key, "failed to query Redis delivered-device cache");
+                false
+            }
+        }
+    }
+
+    fn mark_delivered_device(
+        &self,
+        ttl: Duration,
+        notification_key: &str,
+        app_id: &str,
+        pushkey: &str,
+    ) {
+        let mut connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis notify dedup cache");
+                return;
+            }
+        };
+        let delivered_key = self.delivered_key(notification_key, app_id, pushkey);
+        let ttl_seconds = ttl_seconds(ttl);
+        if let Err(error) = connection.set_ex::<_, _, ()>(&delivered_key, "1", ttl_seconds as u64) {
+            tracing::warn!(error = %error, backend = %self.target_label, redis_key = %delivered_key, "failed to store Redis delivered-device cache entry");
+        }
+    }
+
+    fn connection(&self) -> Result<redis::Connection> {
+        self.client
+            .get_connection()
+            .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    }
+
+    fn response_key(&self, key: &str) -> String {
+        format!("{}:notify:response:{key}", self.key_prefix)
+    }
+
+    fn delivered_key(&self, notification_key: &str, app_id: &str, pushkey: &str) -> String {
+        let key = delivered_device_key(notification_key, app_id, pushkey);
+        format!("{}:notify:delivered:{key}", self.key_prefix)
     }
 }
 
@@ -131,6 +422,19 @@ fn delivered_device_key(notification_key: &str, app_id: &str, pushkey: &str) -> 
     hex::encode(hasher.finalize())
 }
 
+fn ttl_seconds(ttl: Duration) -> i64 {
+    ttl.as_secs().max(1).min(i64::MAX as u64) as i64
+}
+
+fn normalize_key_prefix(key_prefix: &str) -> String {
+    let trimmed = key_prefix.trim();
+    if trimmed.is_empty() {
+        "floria".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,6 +448,7 @@ mod tests {
             accepted: 1,
             rejected: vec![RejectedDevice::new(Some("com.example.app"), "pushkey")],
             provider_retries: vec![],
+            delivery_receipts: vec![],
         };
         let key = request_hash(br#"{"notification":{}}"#);
 
@@ -167,6 +472,7 @@ mod tests {
                 accepted: 0,
                 rejected: vec![],
                 provider_retries: vec![],
+                delivery_receipts: vec![],
             },
         );
 
@@ -199,10 +505,20 @@ mod tests {
                 accepted: 1,
                 rejected: vec![],
                 provider_retries: vec![],
+                delivery_receipts: vec![],
             },
         );
 
         assert!(dedup.lookup(&key, &first_fingerprint).is_some());
         assert!(dedup.conflicts(&key, &second_fingerprint));
+    }
+
+    #[test]
+    fn redis_backend_requires_valid_url() {
+        let error = NotifyDeduplicator::redis(Duration::from_secs(5), "://bad-url", "floria")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("invalid notify_dedup redis_url"));
     }
 }

@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use floria::AppState;
+use floria::auth::redact_url_credentials;
 use floria::config::Config;
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
 use floria::pushkin::PushkinRegistry;
+use floria::rate_limit::NotifyRateLimiter;
 use floria::service::build_router_with_access_log;
 use salvo::prelude::*;
 use tokio::task::JoinSet;
@@ -27,15 +29,52 @@ async fn main() -> Result<()> {
 
     let mut state = if config.http.notify_dedup_ttl_seconds > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_dedup_ttl_seconds);
-        tracing::info!(
-            ttl_secs = ttl.as_secs(),
-            "enabling notify request deduplication cache"
-        );
-        AppState::with_notify_deduplicator(registry, Arc::new(NotifyDeduplicator::new(ttl)))
+        let backend_kind = config.http.notify_dedup.backend_kind();
+        let deduplicator = match backend_kind {
+            "memory" => Arc::new(NotifyDeduplicator::new(ttl)),
+            "redis" => {
+                let redis_url = config
+                    .http
+                    .notify_dedup
+                    .redis_url
+                    .as_deref()
+                    .expect("validated notify_dedup.redis_url");
+                tracing::info!(
+                    ttl_secs = ttl.as_secs(),
+                    backend = "redis",
+                    redis = %redact_url_credentials(redis_url),
+                    key_prefix = config.http.notify_dedup.key_prefix(),
+                    "enabling notify request deduplication cache"
+                );
+                Arc::new(NotifyDeduplicator::redis(
+                    ttl,
+                    redis_url,
+                    config.http.notify_dedup.key_prefix(),
+                )?)
+            }
+            backend => bail!("unsupported notify_dedup backend `{backend}`"),
+        };
+        if backend_kind == "memory" {
+            tracing::info!(
+                ttl_secs = ttl.as_secs(),
+                backend = "memory",
+                "enabling notify request deduplication cache"
+            );
+        }
+        AppState::with_notify_deduplicator(registry, deduplicator)
     } else {
         AppState::new(registry)
     };
     state.notify_auth = config.http.notify_auth.clone();
+    if config.http.notify_rate_limits.enabled() {
+        tracing::info!(
+            window_secs = config.http.notify_rate_limits.window_seconds.max(1),
+            "enabling in-memory /notify rate limits"
+        );
+        state.notify_rate_limiter = Some(Arc::new(NotifyRateLimiter::new(
+            config.http.notify_rate_limits.clone(),
+        )));
+    }
     let state = Arc::new(state);
     let router = Arc::new(build_router_with_access_log(state, &config.log.access));
 

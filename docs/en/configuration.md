@@ -72,6 +72,39 @@ http {
   bind_addresses "127.0.0.1"
   port 5000
   notify_dedup_ttl_seconds 0
+  notify_dedup {
+    backend "memory"
+    key_prefix "floria"
+    // redis_url "redis://127.0.0.1:6379/0"
+  }
+  notify_auth {
+    bearer_tokens "replace-me"
+    // bearer_token_hashes "sha256:<hex-digest>"
+    trusted_service_dids "did:web:sync.example.com"
+    plaintext_metadata_service_dids "did:web:sync.example.com"
+    gateway_service_did "did:web:push.example.com"
+    // require_message_signatures true
+    // service_principals {
+    //   "did:web:sync.example.com" {
+    //     allow_plaintext_metadata true
+    //     bearer_tokens "replace-me"
+    //     bearer_token_hashes "sha256:<hex-digest>"
+    //     signature_key_id "did:web:sync.example.com#push"
+    //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
+    //     service_endpoint "https://push.example.com/api/v1/push/notify"
+    //     require_mtls true
+    //     mtls_cert_fingerprints "aa:bb:cc"
+    //   }
+    // }
+  }
+  notify_rate_limits {
+    window_seconds 60
+    per_origin_service 600
+    per_app_id 5000
+    per_provider 5000
+    per_push_key_hash 120
+    per_endpoint 10000
+  }
 }
 ```
 
@@ -79,7 +112,68 @@ http {
 |-------|------|---------|-------------|
 | `bind_addresses` | string[] | `["127.0.0.1"]` | Addresses to bind the HTTP listener; each entry may be a host/IP or an explicit `host:port` |
 | `port` | u16 | `5000` | HTTP listener port |
-| `notify_dedup_ttl_seconds` | u64 | `0` | In-memory dedup TTL for successful `/notify` request bodies; `0` disables it |
+| `notify_dedup_ttl_seconds` | u64 | `0` | Dedup TTL for successful `/notify` request bodies; `0` disables dedup entirely |
+| `notify_dedup.backend` | string | `"memory"` | Dedup backend: `"memory"` or `"redis"` |
+| `notify_dedup.redis_url` | string | — | Redis connection URL when `notify_dedup.backend=redis` |
+| `notify_dedup.key_prefix` | string | `"floria"` | Prefix used for dedup keys in Redis |
+| `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for `/notify` |
+| `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
+| `notify_auth.trusted_service_dids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
+| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_display_name` and `space_name` |
+| `notify_auth.gateway_service_did` | string | — | Expected destination gateway DID |
+| `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
+| `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
+| `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | Ingress-provided header used to signal verified mTLS client auth |
+| `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | Ingress-provided header carrying the client certificate fingerprint |
+| `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service DID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
+| `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
+| `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service DID per window |
+| `notify_rate_limits.per_app_id` | u64 | — | Max `/notify` requests per target app ID per window |
+| `notify_rate_limits.per_provider` | u64 | — | Max `/notify` requests per resolved provider per window |
+| `notify_rate_limits.per_push_key_hash` | u64 | — | Max `/notify` requests per push token hash per window |
+| `notify_rate_limits.per_endpoint` | u64 | — | Max `/notify` requests per HTTP endpoint path per window |
+
+`push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Legacy `room_*`, `card_*`, `subject*`, Matrix `m.room.*`, and `only_last_per_room` inputs are rejected. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
+
+Production `/notify` profile example:
+
+```kdl
+http {
+  bind_addresses "0.0.0.0"
+  port 5000
+  notify_dedup_ttl_seconds 60
+  notify_dedup {
+    backend "redis"
+    redis_url "redis://redis.internal:6379/0"
+    key_prefix "floria-prod"
+  }
+  notify_auth {
+    gateway_service_did "did:web:push.example.com"
+    require_message_signatures true
+    service_principals {
+      "did:web:sync.example.com" {
+        allow_plaintext_metadata true
+        bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
+        signature_key_id "did:web:sync.example.com#push"
+        signature_public_key_hex "replace-with-ed25519-public-key-hex"
+        service_endpoint "https://push.example.com/api/v1/push/notify"
+        require_mtls true
+        mtls_cert_fingerprints "aa:bb:cc"
+      }
+    }
+  }
+  notify_rate_limits {
+    window_seconds 60
+    per_origin_service 600
+    per_app_id 5000
+    per_provider 5000
+    per_push_key_hash 120
+    per_endpoint 10000
+  }
+}
+```
+
+In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
 ### `metrics`
 
@@ -163,28 +257,15 @@ Provide **either** `keyfile` (token auth) or `certfile` (certificate auth), not 
 
 ---
 
-### `gcm` / `fcm` — Firebase Cloud Messaging
-
-**Legacy:**
-
-```kdl
-com.example.android.legacy {
-  type "gcm"
-  api_version "legacy"
-  api_key "your-fcm-server-key"
-  max_connections 20
-}
-```
-
-**HTTP v1:**
+### `fcm` — Firebase Cloud Messaging
 
 ```kdl
 com.example.android {
-  type "gcm"
-  api_version "v1"
+  type "fcm"
   project_id "your-google-project-id"
   service_account_file "./firebase-service-account.json"
   max_connections 20
+  inflight_request_limit 512
   fcm_options {
     apns {
       payload {
@@ -198,10 +279,10 @@ com.example.android {
 }
 ```
 
+FCM is configured in HTTP v1 mode only.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `api_version` | string | `"legacy"` | `"legacy"` or `"v1"` |
-| `api_key` | string | — | FCM server key (legacy, required) |
 | `project_id` | string | — | Google Cloud project ID (v1, required) |
 | `service_account_file` | string | — | Path to Firebase service account JSON (v1, required) |
 | `fcm_options` | object | — | Arbitrary JSON merged into base message |
@@ -445,11 +526,11 @@ com.example.web {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `endpoint` | string | WebPush subscription endpoint URL |
+| `endpoint` | string | WebPush subscription endpoint URL (must not contain a query string) |
 | `auth` | string | Authentication secret (base64) |
 | `default_payload` | object | Default payload merged into all messages |
 | `events_only` | bool | Only send if `event_id` is present |
-| `only_last_per_room` | bool | Topic deduplication per room |
+| `only_last_per_flow` | bool | Topic deduplication per active flow |
 
 ## Environment variables
 

@@ -1,0 +1,156 @@
+use std::sync::Arc;
+
+use salvo::http::StatusCode;
+use salvo::prelude::*;
+use serde::Serialize;
+
+use crate::AppState;
+use crate::config::NotifyAuthConfig;
+
+use super::metrics::{ErrorBody, ErrorEnvelope};
+use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
+
+#[derive(Debug, Serialize)]
+struct GatewayDescribeResponse {
+    service_did: Option<String>,
+    operation_id: &'static str,
+    supported_profiles: Vec<&'static str>,
+    supported_providers: Vec<String>,
+    plaintext_visibility_class: &'static str,
+    limits: GatewayDescribeLimits,
+    auth_modes: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+struct GatewayDescribeLimits {
+    max_request_size_bytes: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dedup_backend: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dedup_ttl_seconds: Option<u64>,
+    rate_limit_window_seconds: Option<u64>,
+    rate_limit_scopes: Vec<&'static str>,
+}
+
+#[handler]
+pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
+    let Ok(state) = depot.obtain::<Arc<AppState>>() else {
+        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        res.render(Json(ErrorEnvelope {
+            ok: false,
+            request_id: None,
+            error: ErrorBody {
+                code: "internal_error",
+                message: "application state missing",
+                retry_after_ms: None,
+            },
+        }));
+        return;
+    };
+
+    let dedup_backend = state
+        .notify_deduplicator
+        .as_ref()
+        .map(|deduplicator| deduplicator.backend_name());
+    let dedup_ttl_seconds = state
+        .notify_deduplicator
+        .as_ref()
+        .map(|deduplicator| deduplicator.ttl().as_secs());
+    let rate_limit_window_seconds = state
+        .notify_rate_limiter
+        .as_ref()
+        .map(|limiter| limiter.config().window_seconds.max(1));
+    let rate_limit_scopes = state
+        .notify_rate_limiter
+        .as_ref()
+        .map(|limiter| describe_rate_limit_scopes(limiter.config()))
+        .unwrap_or_default();
+    let body = GatewayDescribeResponse {
+        service_did: state.notify_auth.gateway_service_did.clone(),
+        operation_id: NOTIFY_OPERATION_ID,
+        supported_profiles: vec!["cx.profile.push_gateway.v1"],
+        supported_providers: state.registry.provider_names(),
+        plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth),
+        limits: GatewayDescribeLimits {
+            max_request_size_bytes: MAX_REQUEST_SIZE,
+            dedup_backend,
+            dedup_ttl_seconds,
+            rate_limit_window_seconds,
+            rate_limit_scopes,
+        },
+        auth_modes: describe_auth_modes(&state.notify_auth),
+    };
+    res.status_code(StatusCode::OK);
+    res.render(Json(body));
+}
+
+pub(super) fn describe_plaintext_visibility(auth: &NotifyAuthConfig) -> &'static str {
+    if !auth.plaintext_metadata_service_dids.is_empty()
+        || auth
+            .service_principals
+            .values()
+            .any(|principal| principal.allow_plaintext_metadata)
+    {
+        "service-gated"
+    } else {
+        "blind-wakeup-only"
+    }
+}
+
+pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> {
+    if !auth.enabled() {
+        return vec!["anonymous"];
+    }
+
+    let mut modes = Vec::new();
+    if !auth.bearer_tokens.is_empty()
+        || !auth.bearer_token_hashes.is_empty()
+        || auth.service_principals.values().any(|principal| {
+            !principal.bearer_tokens.is_empty() || !principal.bearer_token_hashes.is_empty()
+        })
+    {
+        modes.push("bearer");
+    }
+    if auth.require_message_signatures
+        || auth.service_principals.values().any(|principal| {
+            principal.signature_key_id.is_some() && principal.signature_public_key_hex.is_some()
+        })
+    {
+        modes.push("http-message-signature");
+    }
+    if auth
+        .service_principals
+        .values()
+        .any(|principal| principal.require_mtls)
+    {
+        modes.push("mtls");
+    }
+    if !auth.trusted_service_dids.is_empty() || auth.gateway_service_did.is_some() {
+        modes.push("service-did");
+    }
+    modes.sort_unstable();
+    modes.dedup();
+    modes
+}
+
+pub(super) fn describe_rate_limit_scopes(
+    config: &crate::config::NotifyRateLimitConfig,
+) -> Vec<&'static str> {
+    let mut scopes = Vec::new();
+    if config.per_origin_service.is_some_and(|limit| limit > 0) {
+        scopes.push("origin_service");
+    }
+    if config.per_app_id.is_some_and(|limit| limit > 0) {
+        scopes.push("app_id");
+    }
+    if config.per_provider.is_some_and(|limit| limit > 0) {
+        scopes.push("provider");
+    }
+    if config.per_push_key_hash.is_some_and(|limit| limit > 0) {
+        scopes.push("push_key_hash");
+    }
+    if config.per_endpoint.is_some_and(|limit| limit > 0) {
+        scopes.push("endpoint");
+    }
+    scopes
+}

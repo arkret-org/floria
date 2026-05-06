@@ -57,6 +57,7 @@ impl Config {
                 .ok()
                 .filter(|value| !value.trim().is_empty());
         }
+        config.validate()?;
         Ok((config, path))
     }
 
@@ -75,6 +76,11 @@ impl Config {
             .as_deref()
             .filter(|value| !value.trim().is_empty())
     }
+
+    pub fn validate(&self) -> Result<()> {
+        self.http.validate()?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -84,7 +90,9 @@ pub struct HttpConfig {
     #[serde(deserialize_with = "string_or_vec")]
     pub bind_addresses: Vec<String>,
     pub notify_dedup_ttl_seconds: u64,
+    pub notify_dedup: NotifyDedupConfig,
     pub notify_auth: NotifyAuthConfig,
+    pub notify_rate_limits: NotifyRateLimitConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -128,7 +136,9 @@ impl Default for HttpConfig {
             port: 5000,
             bind_addresses: vec!["127.0.0.1".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            notify_rate_limits: NotifyRateLimitConfig::default(),
             extra: Map::new(),
         }
     }
@@ -150,18 +160,109 @@ impl HttpConfig {
             "http",
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
+        self.notify_dedup.emit_startup_warnings();
         self.notify_auth.emit_startup_warnings();
+        self.notify_rate_limits.emit_startup_warnings();
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let _ = self.listen_addrs()?;
+        self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
+        self.notify_auth.validate()?;
+        Ok(())
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NotifyDedupConfig {
+    pub backend: String,
+    pub redis_url: Option<String>,
+    pub key_prefix: String,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for NotifyDedupConfig {
+    fn default() -> Self {
+        Self {
+            backend: "memory".to_owned(),
+            redis_url: None,
+            key_prefix: "floria".to_owned(),
+            extra: Map::new(),
+        }
+    }
+}
+
+impl NotifyDedupConfig {
+    pub fn backend_kind(&self) -> &str {
+        let backend = self.backend.trim();
+        if backend.is_empty() {
+            "memory"
+        } else {
+            backend
+        }
+    }
+
+    pub fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.notify_dedup",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn key_prefix(&self) -> &str {
+        let value = self.key_prefix.trim();
+        if value.is_empty() { "floria" } else { value }
+    }
+
+    pub fn validate(&self, ttl_seconds: u64) -> Result<()> {
+        match self.backend_kind() {
+            "memory" => {}
+            "redis" => {
+                if ttl_seconds == 0 {
+                    bail!(
+                        "http.notify_dedup.backend=redis requires http.notify_dedup_ttl_seconds > 0"
+                    );
+                }
+                if self
+                    .redis_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_none_or(|value| value.is_empty())
+                {
+                    bail!("http.notify_dedup.redis_url is required when backend=redis");
+                }
+            }
+            backend => {
+                bail!("http.notify_dedup.backend must be one of: memory, redis; got `{backend}`");
+            }
+        }
+        if self.key_prefix().is_empty() {
+            bail!("http.notify_dedup.key_prefix must not be empty");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyAuthConfig {
     #[serde(default, deserialize_with = "string_or_vec")]
     pub bearer_tokens: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_token_hashes: Vec<String>,
+    #[serde(default, deserialize_with = "string_or_vec")]
     pub trusted_service_dids: Vec<String>,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub plaintext_metadata_service_dids: Vec<String>,
     pub gateway_service_did: Option<String>,
+    pub require_message_signatures: bool,
+    pub signature_max_skew_seconds: u64,
+    pub mtls_verified_header: String,
+    pub mtls_fingerprint_header: String,
+    #[serde(default)]
+    pub service_principals: HashMap<String, NotifyServicePrincipalConfig>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -169,8 +270,11 @@ pub struct NotifyAuthConfig {
 impl NotifyAuthConfig {
     pub fn enabled(&self) -> bool {
         !self.bearer_tokens.is_empty()
+            || !self.bearer_token_hashes.is_empty()
             || !self.trusted_service_dids.is_empty()
+            || !self.service_principals.is_empty()
             || self.gateway_service_did.is_some()
+            || self.require_message_signatures
     }
 
     fn emit_startup_warnings(&self) {
@@ -178,7 +282,217 @@ impl NotifyAuthConfig {
             "http.notify_auth",
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
+        for (did, principal) in &self.service_principals {
+            principal.emit_startup_warnings(did);
+        }
     }
+
+    pub fn signature_max_skew_seconds(&self) -> u64 {
+        self.signature_max_skew_seconds.max(1)
+    }
+
+    pub fn mtls_verified_header(&self) -> &str {
+        let value = self.mtls_verified_header.trim();
+        if value.is_empty() {
+            "x-client-certificate-verified"
+        } else {
+            value
+        }
+    }
+
+    pub fn mtls_fingerprint_header(&self) -> &str {
+        let value = self.mtls_fingerprint_header.trim();
+        if value.is_empty() {
+            "x-client-certificate-sha256"
+        } else {
+            value
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.require_message_signatures && self.service_principals.is_empty() {
+            bail!(
+                "http.notify_auth.require_message_signatures requires at least one service_principal"
+            );
+        }
+        validate_bearer_token_hashes(
+            "http.notify_auth.bearer_token_hashes",
+            &self.bearer_token_hashes,
+        )?;
+        for (did, principal) in &self.service_principals {
+            principal.validate(did)?;
+        }
+        Ok(())
+    }
+}
+
+impl Default for NotifyAuthConfig {
+    fn default() -> Self {
+        Self {
+            bearer_tokens: Vec::new(),
+            bearer_token_hashes: Vec::new(),
+            trusted_service_dids: Vec::new(),
+            plaintext_metadata_service_dids: Vec::new(),
+            gateway_service_did: None,
+            require_message_signatures: false,
+            signature_max_skew_seconds: 300,
+            mtls_verified_header: "x-client-certificate-verified".to_owned(),
+            mtls_fingerprint_header: "x-client-certificate-sha256".to_owned(),
+            service_principals: HashMap::new(),
+            extra: Map::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NotifyServicePrincipalConfig {
+    pub service_type: Option<String>,
+    pub allow_plaintext_metadata: bool,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_tokens: Vec<String>,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_token_hashes: Vec<String>,
+    pub signature_key_id: Option<String>,
+    pub signature_public_key_hex: Option<String>,
+    pub require_mtls: bool,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub mtls_cert_fingerprints: Vec<String>,
+    pub service_endpoint: Option<String>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for NotifyServicePrincipalConfig {
+    fn default() -> Self {
+        Self {
+            service_type: None,
+            allow_plaintext_metadata: false,
+            bearer_tokens: Vec::new(),
+            bearer_token_hashes: Vec::new(),
+            signature_key_id: None,
+            signature_public_key_hex: None,
+            require_mtls: false,
+            mtls_cert_fingerprints: Vec::new(),
+            service_endpoint: None,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl NotifyServicePrincipalConfig {
+    fn emit_startup_warnings(&self, did: &str) {
+        warn_unknown_fields(
+            &format!("http.notify_auth.service_principals.{did}"),
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    fn validate(&self, did: &str) -> Result<()> {
+        match (
+            self.signature_key_id.as_deref(),
+            self.signature_public_key_hex.as_deref(),
+        ) {
+            (Some(_), Some(public_key_hex)) => {
+                let bytes = hex::decode(public_key_hex).with_context(|| {
+                    format!(
+                        "http.notify_auth.service_principals.{did}.signature_public_key_hex must be hex"
+                    )
+                })?;
+                if bytes.len() != 32 {
+                    bail!(
+                        "http.notify_auth.service_principals.{did}.signature_public_key_hex must encode 32 bytes"
+                    );
+                }
+            }
+            (None, None) => {}
+            _ => {
+                bail!(
+                    "http.notify_auth.service_principals.{did} must set both signature_key_id and signature_public_key_hex or neither"
+                );
+            }
+        }
+        if self.require_mtls
+            && self
+                .mtls_cert_fingerprints
+                .iter()
+                .any(|value| value.trim().is_empty())
+        {
+            bail!(
+                "http.notify_auth.service_principals.{did}.mtls_cert_fingerprints must not contain empty values"
+            );
+        }
+        validate_bearer_token_hashes(
+            &format!("http.notify_auth.service_principals.{did}.bearer_token_hashes"),
+            &self.bearer_token_hashes,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NotifyRateLimitConfig {
+    pub window_seconds: u64,
+    pub per_origin_service: Option<u64>,
+    pub per_app_id: Option<u64>,
+    pub per_provider: Option<u64>,
+    pub per_push_key_hash: Option<u64>,
+    pub per_endpoint: Option<u64>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for NotifyRateLimitConfig {
+    fn default() -> Self {
+        Self {
+            window_seconds: 60,
+            per_origin_service: None,
+            per_app_id: None,
+            per_provider: None,
+            per_push_key_hash: None,
+            per_endpoint: None,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl NotifyRateLimitConfig {
+    pub fn enabled(&self) -> bool {
+        [
+            self.per_origin_service,
+            self.per_app_id,
+            self.per_provider,
+            self.per_push_key_hash,
+            self.per_endpoint,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|limit| limit > 0)
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.notify_rate_limits",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+}
+
+fn validate_bearer_token_hashes(scope: &str, hashes: &[String]) -> Result<()> {
+    for value in hashes {
+        let trimmed = value.trim();
+        let normalized = trimmed.strip_prefix("sha256:").unwrap_or(trimmed);
+        if normalized.is_empty() {
+            bail!("{scope} must not contain empty values");
+        }
+        let bytes = hex::decode(normalized)
+            .with_context(|| format!("{scope} values must be SHA-256 hex digests"))?;
+        if bytes.len() != 32 {
+            bail!("{scope} values must encode 32-byte SHA-256 digests");
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -577,6 +891,8 @@ apps: {}
         assert_eq!(config.http.port, 5000);
         assert_eq!(config.http.bind_addresses, vec!["127.0.0.1"]);
         assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
+        assert_eq!(config.http.notify_dedup.backend_kind(), "memory");
+        assert!(!config.http.notify_rate_limits.enabled());
         assert!(!config.metrics.prometheus.enabled);
         assert_eq!(config.metrics.prometheus.address, "127.0.0.1");
         assert_eq!(config.metrics.prometheus.port, 8000);
@@ -601,7 +917,9 @@ apps: {}
             port: 5000,
             bind_addresses: vec!["127.0.0.1:7000".to_owned(), "example.com:7100".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            notify_rate_limits: NotifyRateLimitConfig::default(),
             extra: Map::new(),
         };
 
@@ -617,7 +935,9 @@ apps: {}
             port: 5000,
             bind_addresses: vec!["[::1]".to_owned()],
             notify_dedup_ttl_seconds: 0,
+            notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            notify_rate_limits: NotifyRateLimitConfig::default(),
             extra: Map::new(),
         };
 
@@ -630,6 +950,11 @@ apps: {}
 http {
     port 8080
     bind_addresses "0.0.0.0"
+    notify_rate_limits {
+        window_seconds 30
+        per_origin_service 10
+        per_app_id 20
+    }
 }
 apps {
     com.example.test {
@@ -643,6 +968,9 @@ apps {
         assert_eq!(config.http.port, 8080);
         assert_eq!(config.http.bind_addresses, vec!["0.0.0.0"]);
         assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
+        assert_eq!(config.http.notify_rate_limits.window_seconds, 30);
+        assert_eq!(config.http.notify_rate_limits.per_origin_service, Some(10));
+        assert_eq!(config.http.notify_rate_limits.per_app_id, Some(20));
         assert_eq!(config.apps.len(), 1);
         let app = config.apps.get("com.example.test").unwrap();
         assert_eq!(app.kind, "apns");
@@ -718,6 +1046,67 @@ apps {
         assert_eq!(config.http.port, 5000);
         assert_eq!(config.http.bind_addresses, vec!["127.0.0.1"]);
         assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
+        assert!(!config.http.notify_rate_limits.enabled());
         assert!(!config.metrics.prometheus.enabled);
+    }
+
+    #[test]
+    fn validate_rejects_unknown_notify_dedup_backend() {
+        let mut config = Config::default();
+        config.http.notify_dedup.backend = "sqlite".to_owned();
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("http.notify_dedup.backend must be one of"));
+    }
+
+    #[test]
+    fn validate_requires_redis_url_for_redis_notify_dedup_backend() {
+        let mut config = Config::default();
+        config.http.notify_dedup_ttl_seconds = 60;
+        config.http.notify_dedup.backend = "redis".to_owned();
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("http.notify_dedup.redis_url is required"));
+    }
+
+    #[test]
+    fn validate_requires_service_principals_for_required_signatures() {
+        let mut config = Config::default();
+        config.http.notify_auth.require_message_signatures = true;
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.contains("require_message_signatures requires at least one service_principal")
+        );
+    }
+
+    #[test]
+    fn parses_plaintext_metadata_service_dids_and_endpoint_rate_limit() {
+        let config: Config = serde_saphyr::from_str(
+            r#"
+http:
+  notify_auth:
+    plaintext_metadata_service_dids: did:web:sync.example.com
+  notify_rate_limits:
+    per_endpoint: 10
+apps: {}
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.http.notify_auth.plaintext_metadata_service_dids,
+            vec!["did:web:sync.example.com"]
+        );
+        assert_eq!(config.http.notify_rate_limits.per_endpoint, Some(10));
+    }
+
+    #[test]
+    fn validate_rejects_malformed_bearer_token_hash() {
+        let mut config = Config::default();
+        config.http.notify_auth.bearer_token_hashes = vec!["not-hex".to_owned()];
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("bearer_token_hashes"));
     }
 }

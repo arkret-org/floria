@@ -49,11 +49,11 @@ fn merge_notification_data(
     send_badge_counts: bool,
 ) {
     for (key, value) in [
-        ("space_id", notification.scope_id()),
-        ("room_id", notification.scope_id()),
-        ("space_name", notification.scope_name()),
-        ("room_name", notification.scope_name()),
-        ("room_alias", notification.room_alias.as_deref()),
+        ("flow_id", notification.flow_id()),
+        ("space_id", notification.space_id()),
+        ("message_id", notification.message_id()),
+        ("flow_name", notification.flow_name()),
+        ("space_name", notification.space_name()),
         ("membership", notification.membership.as_deref()),
         ("event_id", notification.event_id.as_deref()),
         ("sender", notification.sender.as_deref()),
@@ -143,11 +143,10 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
 
     let title = room.clone().unwrap_or_else(|| sender.clone());
     let summary = match notification.r#type.as_deref() {
-        Some("m.room.message")
-        | Some("m.room.encrypted")
-        | Some("cx.message.create")
-        | Some("cx.message.revise") => message_summary(notification, &sender),
-        Some("m.call.invite") | Some("cx.call.signal") => {
+        Some("cx.message.create") | Some("cx.message.revise") => {
+            message_summary(notification, &sender)
+        }
+        Some("cx.call.signal") => {
             if let Some(push_hint) = notification.push_hint_text() {
                 push_hint.to_owned()
             } else {
@@ -166,7 +165,7 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
                 }
             }
         }
-        Some("m.room.member") | Some("cx.space.member")
+        Some("cx.space.member")
             if notification.user_is_target == Some(true)
                 && notification.membership.as_deref() == Some("invite") =>
         {
@@ -273,8 +272,7 @@ mod tests {
 
     fn message_notification() -> Notification {
         Notification {
-            room_name: Some("Mission Control".to_owned()),
-            room_alias: None,
+            flow_name: Some("Mission Control".to_owned()),
             space_name: None,
             prio: None,
             membership: None,
@@ -289,11 +287,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("$event".to_owned()),
-            room_id: Some("!room:example.com".to_owned()),
-            space_id: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("m.room.message".to_owned()),
+            r#type: Some("cx.message.create".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -314,8 +313,10 @@ mod tests {
         assert_eq!(payload.body, "Major Tom: Ground control to Major Tom");
         assert_eq!(payload.priority, AndroidPriority::High);
         assert_eq!(
-            payload.data.get("room_id"),
-            Some(&Value::String("!room:example.com".to_owned()))
+            payload.data.get("flow_id"),
+            Some(&Value::String(
+                "cx:flow:01JS0FLOW000000000000000".to_owned()
+            ))
         );
         assert_eq!(payload.data.get("unread"), Some(&Value::Number(2.into())));
         assert_eq!(
@@ -350,18 +351,18 @@ mod tests {
     fn invitation_uses_human_readable_summary() {
         let payload = build_android_notification_payload(
             &Notification {
-                room_name: Some("Nebula".to_owned()),
-                room_alias: None,
+                flow_name: Some("Nebula".to_owned()),
                 space_name: None,
                 prio: None,
                 membership: Some("invite".to_owned()),
                 sender_display_name: Some("Major Tom".to_owned()),
                 content: None,
-                event_id: Some("$event".to_owned()),
-                room_id: Some("!room:example.com".to_owned()),
+                event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+                message_id: None,
+                flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
                 space_id: None,
                 user_is_target: Some(true),
-                r#type: Some("m.room.member".to_owned()),
+                r#type: Some("cx.space.member".to_owned()),
                 sender: Some("@major:example.com".to_owned()),
                 push_hint: None,
                 devices: vec![device()],

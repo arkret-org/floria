@@ -1,0 +1,21 @@
+{
+  "operation_id": "cx.push.notify",
+  "notification": {
+    "event_id": "cx:event:01js0000000000000000000000",
+    "message_id": "cx:message:01js0000000000000000000000",
+    "flow_id": "cx:flow:01js0000000000000000000000",
+    "space_id": "cx:space:01js0000000000000000000000",
+    "type": "cx.message.create",
+    "push_hint": "new_activity",
+    "counts": {
+      "unread": 1
+    },
+    "devices": [
+      {
+        "app_id": "com.example.android.demo",
+        "pushkey": "replace-with-device-token",
+        "pushkey_ts": 1715000000
+      }
+    ]
+  }
+}

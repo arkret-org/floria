@@ -18,6 +18,7 @@ use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
+use serde::Serialize;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::{AppConfig, Config};
@@ -55,6 +56,7 @@ pub struct DispatchTarget {
 #[async_trait]
 pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
+    fn kind(&self) -> &'static str;
     fn handles_appid(&self, appid: &str) -> bool;
     fn dispatch_targets(
         &self,
@@ -72,6 +74,161 @@ pub trait Pushkin: Send + Sync {
         device: &Device,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
+}
+
+/// Static capability snapshot for a provider kind, surfaced through
+/// `bridge/describe` so principal servers (soland, chime SDK) can plan
+/// payload shape, retry, and credential rotation without per-provider
+/// knowledge.
+///
+/// These values describe the *kind* (apns, fcm, ...) rather than a
+/// specific configured app — fields that depend on per-app config
+/// (e.g. concrete TTL caps after admin override) are deliberately
+/// omitted from the scaffold.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderCapabilities {
+    /// Stable provider kind, e.g. `"apns"`, `"fcm"`, `"oppo"`.
+    pub kind: &'static str,
+    /// Multi-recipient send shape: `"none"`, `"multicast"`, or `"topic"`.
+    pub batch: &'static str,
+    /// Maximum TTL in seconds the upstream provider accepts, or `None`
+    /// when the provider does not document a hard cap.
+    pub ttl_seconds_max: Option<u64>,
+    /// Whether the provider supports a collapse / replace key.
+    pub supports_collapse: bool,
+    /// Whether the provider has first-class badge / unread count support.
+    pub supports_badge: bool,
+    /// Default outbound payload shape — informs blind-wakeup vs.
+    /// service-visible plaintext defaults.
+    pub default_payload_shape: &'static str,
+    /// Credential material this provider expects.
+    pub credential_kinds: &'static [&'static str],
+    /// Free-form scaffolding notes the contract owner still needs to
+    /// freeze (rotation cadence, regional endpoints, etc.).
+    pub notes: &'static [&'static str],
+}
+
+pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
+    let kind = match kind {
+        "apns" => ProviderCapabilities {
+            kind: "apns",
+            batch: "none",
+            ttl_seconds_max: Some(28 * 24 * 60 * 60),
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "encrypted_or_blind_wakeup",
+            credential_kinds: &["jwt_p8", "cert_p12"],
+            notes: &[
+                "TODO(provider-capabilities): document JWT rotation cadence and cert fallback policy",
+            ],
+        },
+        "fcm" => ProviderCapabilities {
+            kind: "fcm",
+            batch: "multicast",
+            ttl_seconds_max: Some(28 * 24 * 60 * 60),
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "data_only_blind_wakeup",
+            credential_kinds: &["service_account_v1"],
+            notes: &[
+                "TODO(provider-capabilities): publish HTTP v1 batch policy once enabled (B2)",
+            ],
+        },
+        "webpush" => ProviderCapabilities {
+            kind: "webpush",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: false,
+            default_payload_shape: "encrypted_aes128gcm",
+            credential_kinds: &["vapid_keypair"],
+            notes: &[
+                "TODO(provider-capabilities): document VAPID key rotation lifetime (B3)",
+            ],
+        },
+        "honor" => ProviderCapabilities {
+            kind: "honor",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["client_id_secret"],
+            notes: &["TODO(provider-capabilities): pin Honor credential rotation runbook"],
+        },
+        "huawei" => ProviderCapabilities {
+            kind: "huawei",
+            batch: "multicast",
+            ttl_seconds_max: Some(15 * 24 * 60 * 60),
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["client_id_secret"],
+            notes: &["TODO(provider-capabilities): pin Huawei credential rotation runbook"],
+        },
+        "jpush" => ProviderCapabilities {
+            kind: "jpush",
+            batch: "multicast",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["app_key_master_secret"],
+            notes: &[
+                "TODO(provider-capabilities): expose third_party_channel matrix once B4 lands",
+            ],
+        },
+        "oppo" => ProviderCapabilities {
+            kind: "oppo",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["app_key_master_secret"],
+            notes: &["TODO(provider-capabilities): pin OPPO credential rotation runbook"],
+        },
+        "oneplus" => ProviderCapabilities {
+            kind: "oneplus",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["app_key_master_secret"],
+            notes: &["TODO(provider-capabilities): pin OnePlus credential rotation runbook"],
+        },
+        "vivo" => ProviderCapabilities {
+            kind: "vivo",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["app_id_app_key"],
+            notes: &["TODO(provider-capabilities): pin vivo credential rotation runbook"],
+        },
+        "xiaomi" => ProviderCapabilities {
+            kind: "xiaomi",
+            batch: "multicast",
+            ttl_seconds_max: None,
+            supports_collapse: true,
+            supports_badge: true,
+            default_payload_shape: "rich_android",
+            credential_kinds: &["app_secret"],
+            notes: &["TODO(provider-capabilities): pin Xiaomi credential rotation runbook"],
+        },
+        _ => return None,
+    };
+    Some(kind)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderCapabilityDescriptor {
+    /// Configured app name as known to the registry.
+    pub name: String,
+    #[serde(flatten)]
+    pub capabilities: ProviderCapabilities,
 }
 
 #[derive(Clone)]
@@ -107,6 +264,29 @@ impl PushkinRegistry {
         self.pushkins.is_empty()
     }
 
+    pub fn provider_names(&self) -> Vec<String> {
+        let mut names = self.pushkins.keys().cloned().collect::<Vec<_>>();
+        names.sort_unstable();
+        names
+    }
+
+    pub fn provider_capabilities(&self) -> Vec<ProviderCapabilityDescriptor> {
+        let mut out = self
+            .pushkins
+            .iter()
+            .filter_map(|(name, pushkin)| {
+                provider_kind_capabilities(pushkin.kind()).map(|capabilities| {
+                    ProviderCapabilityDescriptor {
+                        name: name.clone(),
+                        capabilities,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out
+    }
+
     pub fn find_pushkins(&self, appid: &str) -> Vec<Arc<dyn Pushkin>> {
         if let Some(pushkin) = self.pushkins.get(appid) {
             return vec![pushkin.clone()];
@@ -128,7 +308,7 @@ async fn create_pushkin(
 ) -> Result<Arc<dyn Pushkin>> {
     match app.require_kind()? {
         "apns" => Ok(Arc::new(ApnsPushkin::new(name, app, config, base_dir)?)),
-        "gcm" | "fcm" => Ok(Arc::new(
+        "fcm" => Ok(Arc::new(
             FcmPushkin::new(name, app, config, base_dir).await?,
         )),
         "honor" => Ok(Arc::new(HonorPushkin::new(name, app, config)?)),

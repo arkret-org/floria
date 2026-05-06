@@ -13,15 +13,18 @@
 
 ## 支持的功能
 
-- `POST /contrix/push/v1/notify`
+- `POST /api/v1/push/notify` 作为 Contrix canonical notify endpoint
+- `GET /api/v1/push/describe` 网关 profile discovery
 - `GET /health`
+- `GET /ready`
 - 独立 `/metrics` 监听器上的 Prometheus 指标
 - app id 精确匹配与 glob 通配符匹配
 - 每个 pushkin 的并发请求数限制
-- 可选的成功 `/notify` 请求内存去重缓存
+- 可选的成功 `/notify` 请求内存或 Redis 去重缓存
+- 可选的 `/notify` 内存限流，返回 `429` 与 `Retry-After`
+- `/notify` 支持 HTTP Message Signature、Bearer 回退和可选 mTLS 部署鉴权
 - APNS 证书认证与 Token 认证
-- FCM Legacy 与 FCM HTTP v1
-- FCM Legacy `registration_ids` 批量发送
+- FCM HTTP v1
 - 极光推送 REST v3，支持 `third_party_channel` 透传
 - 华为推送 / HarmonyOS 服务端推送
 - 荣耀推送服务端推送
@@ -39,19 +42,34 @@
 - `.kdl` — [KDL](https://kdl.dev)（未设置 `SOFLARE_CONF` 时的默认格式）
 - `.yaml` / `.yml` — YAML
 
-完整配置参考请参阅 [`configuration.md`](configuration.md)。
+完整配置参考请参阅 [docs/zh/configuration.md](./docs/zh/configuration.md)。
+凭据轮换流程请参阅 [docs/zh/credential-rotation.md](./docs/zh/credential-rotation.md)。
 
 要点：
 - 配置文件中的 `proxy` 优先于 `HTTPS_PROXY` 环境变量
 - `metrics.prometheus` 启动独立的监听器，默认地址为 `127.0.0.1:8000`
 - 未知的配置段 / 字段会在启动时输出警告
-- 遗留的 `db` / `database` 配置段会被检测并发出警告
+- `memory` 去重后端只适用于单实例；多实例部署请使用 Redis 去重
+- `push_hint` 必须是 body-free 的唤醒提示，不能携带正文
+- push gateway 只负责派生唤醒，不是事件或未读状态的 canonical truth
+
+## Contrix notify 语义
+
+- `/api/v1/push/notify` 支持 authenticated service caller，并接受 `Idempotency-Key` header 或 body 内 `idempotency_key`
+- `cx.push.notify` 接受 `origin_service_did`、destination gateway DID、priority/TTL/collapse hint 和目标设备引用
+- 错误响应使用 JSON envelope，网关 contract 错误码包括 `capability_denied`、`unsupported_feature`、`schema_violation`、`payload_too_large`、`rate_limited` 和 `temporarily_unavailable`
+- E2EE 场景下会校验 blind/minimized payload：正文、密文字节、SDP、ICE、TURN credential 都会被拒绝
+- 未经 plaintext metadata 授权的调用方不能携带 `sender_display_name`、`flow_name`、`space_name`
+- legacy `room_*`、`card_*`、`subject*`、Matrix `m.room.*` 和 `only_last_per_room` 输入会被直接拒绝
+- `rejected` 中返回的是 push token hash，不是原始平台 token
+- 响应里的 delivery receipt refs 只包含 provider/status/token hash metadata，不包含明文 payload
+- bearer fallback 只接受 header；query string 中的认证材料会被拒绝
+- WebPush endpoint 必须命中 allowlist，且不得包含 query string
+- readiness 探针使用 `GET /ready`，Docker 健康检查同样走这个端点
 
 示例文件：
-- `floria.kdl.sample` — KDL 配置，所有推送通道已注释
-- `floria.yaml.sample` — YAML 配置，所有推送通道已注释
-- `floria.domestic-android.production.kdl.sample` — 国内 Android 生产环境模板（KDL）
-- `floria.domestic-android.production.yaml.sample` — 国内 Android 生产环境模板（YAML）
+- `soflare.sample.kdl` — KDL 配置，所有推送通道已注释
+- `soflare.sample.yaml` — YAML 配置，所有推送通道已注释
 
 ## 推荐策略
 
@@ -68,7 +86,7 @@
 ## 运行
 
 ```powershell
-$env:SOFLARE_CONF="E:\Works\palpo-im\floria\floria.kdl.sample"
+$env:SOFLARE_CONF="E:\Works\contrix-dev\floria\soflare.sample.kdl"
 cargo run
 ```
 
@@ -83,20 +101,25 @@ docker build -t floria .
 使用挂载的配置文件运行：
 
 ```powershell
-docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/floria.kdl.sample:/app/floria.kdl floria
+docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.sample.kdl:/app/floria.kdl floria
 ```
 
 ## Docker Compose
 
 `examples/` 目录下提供了示例 `compose.yml`。
 
+如果要看最小配置和一条 canonical notify 请求示例，见
+[examples/README.md](./examples/README.md)、
+[examples/minimal.kdl](./examples/minimal.kdl) 和
+[examples/minimal.notify.request.json](./examples/minimal.notify.request.json)。
+
 ```sh
-cp floria.kdl.sample examples/floria.kdl
+cp soflare.sample.kdl examples/floria.kdl
 cd examples
 docker compose up -d
 ```
 
-详见 [`examples/compose.yml`](../../examples/compose.yml)。
+详见 [examples/compose.yml](./examples/compose.yml)。
 
 ## 许可证
 

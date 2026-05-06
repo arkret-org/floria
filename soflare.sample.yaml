@@ -9,6 +9,45 @@ http:
   bind_addresses:
     - 127.0.0.1
   port: 5000
+  notify_dedup_ttl_seconds: 0
+  notify_dedup:
+    backend: memory
+    key_prefix: floria
+    # redis_url: redis://127.0.0.1:6379/0
+  notify_auth:
+    # Basic bearer profile:
+    # bearer_tokens:
+    #   - replace-me
+    # bearer_token_hashes:
+    #   - sha256:<hex-digest>
+    # trusted_service_dids:
+    #   - did:web:sync.example.com
+    # plaintext_metadata_service_dids:
+    #   - did:web:sync.example.com
+    # gateway_service_did: did:web:push.example.com
+    #
+    # Stronger production profile:
+    # require_message_signatures: true
+    # service_principals:
+    #   did:web:sync.example.com:
+    #     allow_plaintext_metadata: true
+    #     bearer_tokens:
+    #       - replace-me
+    #     bearer_token_hashes:
+    #       - sha256:<hex-digest>
+    #     signature_key_id: did:web:sync.example.com#push
+    #     signature_public_key_hex: replace-with-ed25519-public-key-hex
+    #     service_endpoint: https://push.example.com/api/v1/push/notify
+    #     require_mtls: true
+    #     mtls_cert_fingerprints:
+    #       - aa:bb:cc
+  notify_rate_limits:
+    window_seconds: 60
+    # per_origin_service: 600
+    # per_app_id: 5000
+    # per_provider: 5000
+    # per_push_key_hash: 120
+    # per_endpoint: 10000
 
 metrics:
   prometheus:
@@ -45,18 +84,9 @@ apps:
   #   certfile: ./apns-client.pem
   #   topic: com.example.ios
 
-  # Example FCM legacy
-  # com.example.android.legacy:
-  #   type: gcm
-  #   api_version: legacy
-  #   api_key: your-fcm-server-key
-  #   max_connections: 20
-  #   inflight_request_limit: 512
-
   # Example FCM HTTP v1
   # com.example.android:
-  #   type: gcm
-  #   api_version: v1
+  #   type: fcm
   #   project_id: your-google-project-id
   #   service_account_file: ./firebase-service-account.json
   #   max_connections: 20

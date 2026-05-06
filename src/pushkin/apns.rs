@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
@@ -268,19 +269,7 @@ impl ApnsPushkin {
             .and_then(|body| body.reason)
             .unwrap_or_else(|| body.clone());
 
-        match (status, reason.as_str()) {
-            (400, "BadDeviceToken")
-            | (400, "DeviceTokenNotForTopic")
-            | (400, "TopicDisallowed")
-            | (410, "Unregistered") => Ok(vec![device.pushkey.clone()]),
-            (500..=599, _) => Err(DispatchError::temporary(
-                format!("APNS temporary failure: {status} {reason}"),
-                None,
-            )),
-            _ => Err(DispatchError::remote(format!(
-                "APNS rejected request: {status} {reason}"
-            ))),
-        }
+        classify_apns_response(status, &reason, &device.pushkey)
     }
 
     fn device_token(&self, device: &Device) -> Result<String, DispatchError> {
@@ -324,9 +313,17 @@ impl ApnsPushkin {
         default_payload: Map<String, Value>,
     ) -> Value {
         let mut payload = default_payload;
-        if let Some(space_id) = notification.scope_id() {
+        if let Some(flow_id) = notification.flow_id() {
+            payload.insert("flow_id".to_owned(), Value::String(flow_id.to_owned()));
+        }
+        if let Some(space_id) = notification.space_id() {
             payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
-            payload.insert("room_id".to_owned(), Value::String(space_id.to_owned()));
+        }
+        if let Some(message_id) = notification.message_id() {
+            payload.insert(
+                "message_id".to_owned(),
+                Value::String(message_id.to_owned()),
+            );
         }
         if let Some(event_id) = &notification.event_id {
             payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
@@ -366,10 +363,7 @@ impl ApnsPushkin {
         let mut loc_args: Vec<String> = Vec::new();
 
         match notification.r#type.as_deref() {
-            Some("m.room.message")
-            | Some("m.room.encrypted")
-            | Some("cx.message.create")
-            | Some("cx.message.revise") => {
+            Some("cx.message.create") | Some("cx.message.revise") => {
                 let room_display = notification
                     .scope_name()
                     .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
@@ -431,7 +425,7 @@ impl ApnsPushkin {
                     }
                 }
             }
-            Some("m.call.invite") | Some("cx.call.signal") => {
+            Some("cx.call.signal") => {
                 if let Some(push_hint) = notification.push_hint_text() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
                     loc_args = vec![
@@ -456,7 +450,7 @@ impl ApnsPushkin {
                     loc_args = vec![from_display.clone()];
                 }
             }
-            Some("m.room.member") | Some("cx.space.member")
+            Some("cx.space.member")
                 if notification.user_is_target == Some(true)
                     && notification.membership.as_deref() == Some("invite") =>
             {
@@ -545,9 +539,17 @@ impl ApnsPushkin {
         }
 
         if loc_key.is_some() {
-            if let Some(space_id) = notification.scope_id() {
+            if let Some(flow_id) = notification.flow_id() {
+                default_payload.insert("flow_id".to_owned(), Value::String(flow_id.to_owned()));
+            }
+            if let Some(space_id) = notification.space_id() {
                 default_payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
-                default_payload.insert("room_id".to_owned(), Value::String(space_id.to_owned()));
+            }
+            if let Some(message_id) = notification.message_id() {
+                default_payload.insert(
+                    "message_id".to_owned(),
+                    Value::String(message_id.to_owned()),
+                );
             }
             if let Some(event_id) = &notification.event_id {
                 default_payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
@@ -572,6 +574,10 @@ impl ApnsPushkin {
 impl Pushkin for ApnsPushkin {
     fn name(&self) -> &str {
         self.matcher.name()
+    }
+
+    fn kind(&self) -> &'static str {
+        "apns"
     }
 
     fn handles_appid(&self, appid: &str) -> bool {
@@ -671,13 +677,35 @@ struct ApnsErrorBody {
     reason: Option<String>,
 }
 
+fn classify_apns_response(
+    status: u16,
+    reason: &str,
+    pushkey: &str,
+) -> Result<Vec<String>, DispatchError> {
+    match (status, reason) {
+        (400, "BadDeviceToken")
+        | (400, "DeviceTokenNotForTopic")
+        | (400, "TopicDisallowed")
+        | (410, "Unregistered") => Ok(vec![pushkey.to_owned()]),
+        (500..=599, _) => Err(DispatchError::temporary(
+            format!("APNS temporary failure: {status} {reason}"),
+            None,
+        )),
+        _ => Err(DispatchError::remote(format!(
+            "APNS rejected request: {status} {reason}"
+        ))),
+    }
+}
+
 fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Result<Client> {
     let mut builder = Client::builder()
         .tls_backend_native()
         .http2_adaptive_window(true);
     if let Some(proxy) = proxy {
-        builder = builder
-            .proxy(Proxy::all(proxy).with_context(|| format!("invalid proxy URL `{proxy}`"))?);
+        builder =
+            builder.proxy(Proxy::all(proxy).with_context(|| {
+                format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
+            })?);
     }
     if let Some(identity_path) = identity_path {
         let pem = std::fs::read(identity_path)
@@ -842,8 +870,7 @@ mod tests {
     fn builds_message_payload() {
         let pushkin = pushkin();
         let notification = Notification {
-            room_name: Some("Mission Control".to_owned()),
-            room_alias: None,
+            flow_name: Some("Mission Control".to_owned()),
             space_name: None,
             prio: None,
             membership: None,
@@ -857,11 +884,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("$event".to_owned()),
-            room_id: Some("!room:example.com".to_owned()),
-            space_id: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
-            r#type: Some("m.room.message".to_owned()),
+            r#type: Some("cx.message.create".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -880,9 +908,10 @@ mod tests {
         assert_eq!(
             payload,
             json!({
-                "space_id": "!room:example.com",
-                "room_id": "!room:example.com",
-                "event_id": "$event",
+                "flow_id": "cx:flow:01JS0FLOW000000000000000",
+                "space_id": "cx:space:01JS0SP000000000000000000",
+                "message_id": "cx:message:01JS0MSG0000000000000000",
+                "event_id": "cx:event:01JS0EV000000000000000000",
                 "aps": {
                     "alert": {
                         "loc-key": "MSG_FROM_USER_IN_ROOM_WITH_CONTENT",
@@ -920,16 +949,16 @@ mod tests {
             .clone(),
         );
         let notification = Notification {
-            room_name: None,
-            room_alias: None,
+            flow_name: None,
             space_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
             content: None,
-            event_id: Some("$event".to_owned()),
-            room_id: Some("!room:example.com".to_owned()),
-            space_id: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             r#type: None,
             sender: None,
@@ -950,9 +979,10 @@ mod tests {
         assert_eq!(
             payload,
             json!({
-                "space_id": "!room:example.com",
-                "room_id": "!room:example.com",
-                "event_id": "$event",
+                "flow_id": "cx:flow:01JS0FLOW000000000000000",
+                "space_id": "cx:space:01JS0SP000000000000000000",
+                "message_id": "cx:message:01JS0MSG0000000000000000",
+                "event_id": "cx:event:01JS0EV000000000000000000",
                 "unread_count": 2,
                 "aps": {
                     "mutable-content": 1,
@@ -962,6 +992,24 @@ mod tests {
                     }
                 }
             })
+        );
+    }
+
+    #[test]
+    fn invalid_apns_token_is_rejected() {
+        let result = classify_apns_response(410, "Unregistered", "spqr").unwrap();
+
+        assert_eq!(result, vec!["spqr".to_owned()]);
+    }
+
+    #[test]
+    fn apns_server_errors_are_temporary() {
+        let error = classify_apns_response(503, "ServiceUnavailable", "spqr").unwrap_err();
+
+        assert!(error.is_temporary());
+        assert_eq!(
+            error.to_string(),
+            "APNS temporary failure: 503 ServiceUnavailable"
         );
     }
 }

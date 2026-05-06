@@ -1,0 +1,14 @@
+http {
+  bind_addresses "127.0.0.1"
+  port 5000
+  notify_dedup_ttl_seconds 0
+}
+
+apps {
+  com.example.android.demo {
+    type "fcm"
+    project_id "replace-with-your-google-project-id"
+    service_account_file "./firebase-service-account.json"
+    max_connections 20
+  }
+}

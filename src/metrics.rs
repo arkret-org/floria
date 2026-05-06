@@ -60,6 +60,15 @@ static NOTIFY_RETRY_WITH_SKIPS_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(
     .expect("register floria_notify_retry_with_skips_total")
 });
 
+static NOTIFY_DELIVERY_OUTCOME_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_delivery_outcome_total",
+        "Number of accepted, rejected, retryable, and failed delivery outcomes emitted by /notify",
+        &["outcome"]
+    )
+    .expect("register floria_notify_delivery_outcome_total")
+});
+
 static NOTIFS_RECEIVED_DEVICE_PUSH_COUNTER: LazyLock<IntCounter> = LazyLock::new(|| {
     register_int_counter!(
         "floria_notifications_devices_received",
@@ -111,6 +120,7 @@ pub fn init() {
     LazyLock::force(&NOTIFY_DEVICE_SKIP_BY_PUSHKIN_COUNTER);
     LazyLock::force(&NOTIFY_PARTIAL_SUCCESS_COUNTER);
     LazyLock::force(&NOTIFY_RETRY_WITH_SKIPS_COUNTER);
+    LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_COUNTER);
     LazyLock::force(&NOTIFS_RECEIVED_DEVICE_PUSH_COUNTER);
     LazyLock::force(&NOTIFS_BY_PUSHKIN);
     LazyLock::force(&PUSHGATEWAY_HTTP_RESPONSES_COUNTER);
@@ -148,6 +158,29 @@ pub fn notify_retry_with_skips(status: StatusCode) {
     NOTIFY_RETRY_WITH_SKIPS_COUNTER
         .with_label_values(&[code.as_str()])
         .inc();
+}
+
+pub fn notify_delivery_outcomes(accepted: usize, rejected: usize, retryable: usize, failed: usize) {
+    if accepted > 0 {
+        NOTIFY_DELIVERY_OUTCOME_COUNTER
+            .with_label_values(&["accepted"])
+            .inc_by(accepted as u64);
+    }
+    if rejected > 0 {
+        NOTIFY_DELIVERY_OUTCOME_COUNTER
+            .with_label_values(&["rejected"])
+            .inc_by(rejected as u64);
+    }
+    if retryable > 0 {
+        NOTIFY_DELIVERY_OUTCOME_COUNTER
+            .with_label_values(&["retryable"])
+            .inc_by(retryable as u64);
+    }
+    if failed > 0 {
+        NOTIFY_DELIVERY_OUTCOME_COUNTER
+            .with_label_values(&["failed"])
+            .inc_by(failed as u64);
+    }
 }
 
 pub fn device_push_received() {
@@ -229,6 +262,7 @@ mod tests {
         notify_device_skip_by_pushkin("com.example.app", 1);
         notify_partial_success(StatusCode::OK);
         notify_retry_with_skips(StatusCode::SERVICE_UNAVAILABLE);
+        notify_delivery_outcomes(1, 2, 3, 4);
 
         let service = Service::new(build_router());
         let mut response = TestClient::get("http://127.0.0.1/metrics")
@@ -243,5 +277,6 @@ mod tests {
         assert!(body.contains("floria_notify_device_skip_by_pushkin"));
         assert!(body.contains("floria_notify_partial_success_total"));
         assert!(body.contains("floria_notify_retry_with_skips_total"));
+        assert!(body.contains("floria_notify_delivery_outcome_total"));
     }
 }

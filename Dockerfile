@@ -12,6 +12,7 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
+        curl \
         libcurl4 \
         libnghttp2-14 \
         libssl3 \
@@ -21,10 +22,13 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/floria /usr/local/bin/floria
-COPY floria.kdl.sample /app/floria.kdl
+COPY soflare.sample.kdl /app/floria.kdl
 
 ENV SOFLARE_CONF=/app/floria.kdl
 
 EXPOSE 5000 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl --fail --silent http://127.0.0.1:5000/ready || exit 1
 
 CMD ["floria"]

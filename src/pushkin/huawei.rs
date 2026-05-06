@@ -321,6 +321,10 @@ impl Pushkin for HuaweiPushkin {
         self.matcher.name()
     }
 
+    fn kind(&self) -> &'static str {
+        "huawei"
+    }
+
     fn handles_appid(&self, appid: &str) -> bool {
         self.matcher.handles_appid(appid)
     }
@@ -430,8 +434,7 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
-            room_name: Some("Mission Control".to_owned()),
-            room_alias: None,
+            flow_name: Some("Mission Control".to_owned()),
             space_name: None,
             prio: Some("low".to_owned()),
             membership: None,
@@ -445,11 +448,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("$event".to_owned()),
-            room_id: Some("!room:example.com".to_owned()),
-            space_id: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("m.room.message".to_owned()),
+            r#type: Some("cx.message.create".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -526,7 +530,7 @@ mod tests {
         assert_eq!(
             body.pointer("/message/data")
                 .and_then(Value::as_str)
-                .map(|data| data.contains("\"room_id\":\"!room:example.com\"")),
+                .map(|data| data.contains("\"flow_id\":\"cx:flow:01JS0FLOW000000000000000\"")),
             Some(true)
         );
     }

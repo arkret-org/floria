@@ -20,6 +20,7 @@ use web_push::{
     VapidSignatureBuilder, WebPushClient, WebPushError, WebPushMessageBuilder,
 };
 
+use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
@@ -123,11 +124,10 @@ impl WebpushPushkin {
             .max_connections(max_connections)
             .default_header("user-agent", "floria");
         if let Some(proxy) = config.outbound_proxy() {
-            client_builder = client_builder.proxy(Some(
-                proxy
-                    .parse::<isahc::http::Uri>()
-                    .with_context(|| format!("invalid proxy URL `{proxy}`"))?,
-            ));
+            client_builder =
+                client_builder.proxy(Some(proxy.parse::<isahc::http::Uri>().with_context(
+                    || format!("invalid proxy URL `{}`", redact_url_credentials(proxy)),
+                )?));
         }
         let client = IsahcWebPushClient::from(
             client_builder
@@ -157,11 +157,11 @@ impl WebpushPushkin {
         let mut payload = device.default_payload_lossy();
 
         for (key, value) in [
-            ("space_id", notification.scope_id()),
-            ("room_id", notification.scope_id()),
-            ("space_name", notification.scope_name()),
-            ("room_name", notification.scope_name()),
-            ("room_alias", notification.room_alias.as_deref()),
+            ("flow_id", notification.flow_id()),
+            ("space_id", notification.space_id()),
+            ("message_id", notification.message_id()),
+            ("flow_name", notification.flow_name()),
+            ("space_name", notification.space_name()),
             ("membership", notification.membership.as_deref()),
             ("event_id", notification.event_id.as_deref()),
             ("sender", notification.sender.as_deref()),
@@ -237,6 +237,11 @@ impl WebpushPushkin {
     fn endpoint_domain(endpoint: &str) -> Result<String, DispatchError> {
         let url = Url::parse(endpoint)
             .map_err(|error| DispatchError::remote(format!("invalid webpush endpoint: {error}")))?;
+        if url.query().is_some() {
+            return Err(DispatchError::remote(
+                "invalid webpush endpoint: query string is not allowed",
+            ));
+        }
         let Some(host) = url.host_str() else {
             return Err(DispatchError::remote(
                 "invalid webpush endpoint: missing host",
@@ -246,11 +251,7 @@ impl WebpushPushkin {
     }
 
     fn allows_endpoint(&self, endpoint_domain: &str) -> bool {
-        self.allowed_endpoints.as_ref().is_none_or(|patterns| {
-            patterns
-                .iter()
-                .any(|pattern| pattern.is_match(endpoint_domain))
-        })
+        endpoint_allowed(self.allowed_endpoints.as_deref(), endpoint_domain)
     }
 
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
@@ -300,7 +301,7 @@ impl WebpushPushkin {
         if let Some(space_id) = notification
             .scope_id()
             .as_deref()
-            .filter(|_| device.data_bool("only_last_per_room") == Some(true))
+            .filter(|_| device.data_bool("only_last_per_flow") == Some(true))
         {
             builder.set_topic(Self::scope_topic(space_id));
         }
@@ -349,32 +350,7 @@ impl WebpushPushkin {
         WEBPUSH_ACTIVE_REQUESTS.dec();
         WEBPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
 
-        match result {
-            Ok(()) => Ok(vec![]),
-            Err(WebPushError::EndpointNotFound(_) | WebPushError::EndpointNotValid(_)) => {
-                Ok(vec![device.pushkey.clone()])
-            }
-            Err(WebPushError::ServerError { retry_after, info }) => Err(DispatchError::temporary(
-                format!("webpush server error: {info}"),
-                retry_after,
-            )),
-            Err(WebPushError::Unauthorized(info)) => Err(DispatchError::remote(format!(
-                "webpush unauthorized: {info}"
-            ))),
-            Err(WebPushError::BadRequest(info)) => Err(DispatchError::remote(format!(
-                "webpush bad request: {info}"
-            ))),
-            Err(WebPushError::Other(info)) => Err(DispatchError::remote(format!(
-                "webpush endpoint error: {info}"
-            ))),
-            Err(WebPushError::Unspecified) => Err(DispatchError::temporary(
-                "webpush request failed".to_owned(),
-                None,
-            )),
-            Err(error) => Err(DispatchError::remote(format!(
-                "webpush request failed: {error}"
-            ))),
-        }
+        classify_webpush_result(result, &device.pushkey)
     }
 }
 
@@ -382,6 +358,10 @@ impl WebpushPushkin {
 impl Pushkin for WebpushPushkin {
     fn name(&self) -> &str {
         self.matcher.name()
+    }
+
+    fn kind(&self) -> &'static str {
+        "webpush"
     }
 
     fn handles_appid(&self, appid: &str) -> bool {
@@ -456,11 +436,59 @@ fn truncate_chars(input: &str, max_chars: usize) -> String {
     output
 }
 
+fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: &str) -> bool {
+    allowed_endpoints.is_none_or(|patterns| {
+        patterns
+            .iter()
+            .any(|pattern| pattern.is_match(endpoint_domain))
+    })
+}
+
+fn classify_webpush_result(
+    result: Result<(), WebPushError>,
+    pushkey: &str,
+) -> Result<Vec<String>, DispatchError> {
+    match result {
+        Ok(()) => Ok(vec![]),
+        Err(WebPushError::EndpointNotFound(_) | WebPushError::EndpointNotValid(_)) => {
+            Ok(vec![pushkey.to_owned()])
+        }
+        Err(WebPushError::ServerError { retry_after, info }) => Err(DispatchError::temporary(
+            format!("webpush server error: {info}"),
+            retry_after,
+        )),
+        Err(WebPushError::Unauthorized(info)) => Err(DispatchError::remote(format!(
+            "webpush unauthorized: {info}"
+        ))),
+        Err(WebPushError::BadRequest(info)) => Err(DispatchError::remote(format!(
+            "webpush bad request: {info}"
+        ))),
+        Err(WebPushError::Other(info)) => Err(DispatchError::remote(format!(
+            "webpush endpoint error: {info}"
+        ))),
+        Err(WebPushError::Unspecified) => Err(DispatchError::temporary(
+            "webpush request failed".to_owned(),
+            None,
+        )),
+        Err(error) => Err(DispatchError::remote(format!(
+            "webpush request failed: {error}"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpListener};
+    use std::path::PathBuf;
+    use std::thread;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
     use serde_json::json;
 
     use super::*;
+    use crate::config::{AppConfig, Config};
     use crate::models::{Counts, Tweaks};
 
     fn device() -> Device {
@@ -484,10 +512,63 @@ mod tests {
         }
     }
 
+    fn network_device(endpoint: &str) -> Device {
+        Device {
+            app_id: "com.example.web".to_owned(),
+            pushkey: "BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned(),
+            pushkey_ts: 42,
+            data: Some(
+                json!({
+                    "endpoint": endpoint,
+                    "auth": "sBXU5_tIYz-5w7G2B25BEw",
+                    "default_payload": {
+                        "client": "web"
+                    }
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+            tweaks: Tweaks::default(),
+        }
+    }
+
+    fn vapid_test_key_path() -> PathBuf {
+        let cargo_home = std::env::var_os("CARGO_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("USERPROFILE").expect("USERPROFILE")).join(".cargo")
+            });
+        cargo_home
+            .join("registry")
+            .join("src")
+            .join("index.crates.io-1949cf8c6b5b557f")
+            .join("web-push-0.11.0")
+            .join("resources")
+            .join("vapid_test_key.pem")
+    }
+
+    fn pushkin_with_allowed_endpoints(
+        allowed_endpoints: Option<Vec<GlobMatcher>>,
+    ) -> WebpushPushkin {
+        WebpushPushkin {
+            matcher: AppMatcher::new("com.example.web".to_owned()).unwrap(),
+            gate: ConcurrencyGate::new(1),
+            connection_semaphore: Arc::new(Semaphore::new(1)),
+            client: IsahcWebPushClient::new().unwrap(),
+            vapid_builder: VapidSignatureBuilder::from_pem_no_sub(
+                File::open(vapid_test_key_path()).unwrap(),
+            )
+            .unwrap(),
+            vapid_contact_email: "push@example.com".to_owned(),
+            allowed_endpoints,
+            ttl: DEFAULT_WEBPUSH_TTL_SECS,
+        }
+    }
+
     fn notification(body: &str) -> Notification {
         Notification {
-            room_name: Some("Mission Control".to_owned()),
-            room_alias: None,
+            flow_name: Some("Mission Control".to_owned()),
             space_name: None,
             prio: Some("low".to_owned()),
             membership: None,
@@ -503,11 +584,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("$event".to_owned()),
-            room_id: Some("!room:example.com".to_owned()),
-            space_id: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("m.room.message".to_owned()),
+            r#type: Some("cx.message.create".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -531,12 +613,16 @@ mod tests {
             Some(&Value::String("web".to_owned()))
         );
         assert_eq!(
-            payload.get("room_id"),
-            Some(&Value::String("!room:example.com".to_owned()))
+            payload.get("flow_id"),
+            Some(&Value::String(
+                "cx:flow:01JS0FLOW000000000000000".to_owned()
+            ))
         );
         assert_eq!(
             payload.get("event_id"),
-            Some(&Value::String("$event".to_owned()))
+            Some(&Value::String(
+                "cx:event:01JS0EV000000000000000000".to_owned()
+            ))
         );
         assert_eq!(payload.get("unread"), Some(&Value::Number(2.into())));
         assert_eq!(payload.get("missed_calls"), Some(&Value::Number(1.into())));
@@ -559,7 +645,7 @@ mod tests {
 
     #[test]
     fn topic_is_base64url_and_short_enough() {
-        let topic = WebpushPushkin::scope_topic("!room:example.com");
+        let topic = WebpushPushkin::scope_topic("cx:flow:01JS0FLOW000000000000000");
         assert!(topic.len() <= 32);
         assert!(
             topic
@@ -586,7 +672,103 @@ mod tests {
         assert!(payload.get("client").is_none());
         assert_eq!(
             payload.get("event_id"),
-            Some(&Value::String("$event".to_owned()))
+            Some(&Value::String(
+                "cx:event:01JS0EV000000000000000000".to_owned()
+            ))
         );
+    }
+
+    #[test]
+    fn webpush_endpoint_rejects_query_string() {
+        let error = WebpushPushkin::endpoint_domain("https://push.example.test/send?token=secret")
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid webpush endpoint: query string is not allowed"
+        );
+    }
+
+    #[test]
+    fn webpush_endpoint_allowlist_matches_domain() {
+        let patterns = vec![Glob::new("*.push.example.test").unwrap().compile_matcher()];
+
+        assert!(endpoint_allowed(
+            Some(&patterns),
+            "updates.push.example.test"
+        ));
+        assert!(!endpoint_allowed(Some(&patterns), "fcm.googleapis.com"));
+    }
+
+    #[test]
+    fn invalid_vapid_private_key_is_rejected_at_startup() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("floria-webpush-{unique}"));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let key_path = temp_dir.join("bad.pem");
+        fs::write(&key_path, "not a private key").unwrap();
+
+        let app = AppConfig {
+            kind: "webpush".to_owned(),
+            extra: json!({
+                "vapid_private_key": key_path.file_name().unwrap().to_string_lossy(),
+                "vapid_contact_email": "push@example.com"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        };
+
+        let error = match WebpushPushkin::new(
+            "com.example.web".to_owned(),
+            &app,
+            &Config::default(),
+            &temp_dir,
+        ) {
+            Ok(_) => panic!("expected invalid VAPID private key to be rejected"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("invalid VAPID private key"));
+
+        let _ = fs::remove_file(key_path);
+        let _ = fs::remove_dir(temp_dir);
+    }
+
+    #[tokio::test]
+    async fn webpush_gone_endpoint_rejects_pushkey() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept webpush request");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut buffer = [0u8; 4096];
+            let _ = stream.read(&mut buffer);
+            let body = r#"{"code":410,"errno":1,"error":"gone","message":"subscription expired"}"#;
+            let response = format!(
+                "HTTP/1.1 410 Gone\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            let _ = stream.shutdown(Shutdown::Write);
+        });
+
+        let pushkin = pushkin_with_allowed_endpoints(None);
+        let device = network_device(&format!("http://{addr}/push"));
+        let notification = notification("hello");
+        let subscription = pushkin.subscription_from_device(&device).unwrap();
+
+        let rejected = pushkin
+            .send_message(&subscription, &notification, &device)
+            .await
+            .unwrap();
+
+        assert_eq!(rejected, vec![device.pushkey.clone()]);
+        server.join().unwrap();
     }
 }
