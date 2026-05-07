@@ -59,11 +59,30 @@ static CLIENT_CERT_EXPIRY: LazyLock<prometheus::GaugeVec> = LazyLock::new(|| {
     .expect("register floria_client_cert_expiry")
 });
 
+static APNS_JWT_ROTATIONS: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_apns_jwt_rotations_total",
+        "Number of fresh APNS JWTs minted by the gateway, by pushkin and reason",
+        &["pushkin", "reason"]
+    )
+    .expect("register floria_apns_jwt_rotations_total")
+});
+
+static APNS_TOKEN_AUTH_FAILURES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_apns_token_auth_failures_total",
+        "APNS rejections that point at the provider token, by pushkin and reason",
+        &["pushkin", "reason"]
+    )
+    .expect("register floria_apns_token_auth_failures_total")
+});
+
 const APNS_MAX_TRIES: usize = 3;
 const APNS_RETRY_DELAY_BASE_SECS: u64 = 10;
 const APNS_MAX_FIELD_LENGTH: usize = 1024;
 const APNS_MAX_JSON_BODY_SIZE: usize = 4096;
 const APNS_TOKEN_TTL_SECS: u64 = 50 * 60;
+const APNS_TOKEN_REFRESH_SAFETY_SECS: u64 = 30;
 const APNS_URL_PRODUCTION: &str = "https://api.push.apple.com/3/device";
 const APNS_URL_SANDBOX: &str = "https://api.sandbox.push.apple.com/3/device";
 const APNS_PUSH_TYPES: &[&str] = &[
@@ -97,9 +116,11 @@ enum ApnsAuth {
 }
 
 struct ApnsTokenSigner {
+    pushkin_name: String,
     team_id: String,
     key_id: String,
     key: EncodingKey,
+    token_ttl: Duration,
     cache: Mutex<Option<CachedToken>>,
 }
 
@@ -123,6 +144,7 @@ impl ApnsPushkin {
                 "convert_device_token_to_hex",
                 "send_badge_counts",
                 "inflight_request_limit",
+                "token_ttl_seconds",
             ],
         );
         let pushkin_name = name.clone();
@@ -161,6 +183,13 @@ impl ApnsPushkin {
             report_certificate_expiration(&pushkin_name, certfile);
         }
 
+        let token_ttl_seconds = app
+            .get_u64("token_ttl_seconds")?
+            .unwrap_or(APNS_TOKEN_TTL_SECS);
+        if token_ttl_seconds == 0 || token_ttl_seconds > 60 * 60 {
+            bail!("APNS token_ttl_seconds must be between 1 and 3600");
+        }
+
         let auth = if let Some(keyfile) = keyfile {
             let team_id = app
                 .get_string("team_id")?
@@ -177,9 +206,11 @@ impl ApnsPushkin {
             ApnsAuth::Token {
                 topic,
                 signer: ApnsTokenSigner {
+                    pushkin_name: pushkin_name.clone(),
                     team_id,
                     key_id,
                     key,
+                    token_ttl: Duration::from_secs(token_ttl_seconds),
                     cache: Mutex::new(None),
                 },
             }
@@ -616,6 +647,19 @@ impl Pushkin for ApnsPushkin {
             match self.send_once(device, &payload, priority).await {
                 Ok(result) => return Ok(result),
                 Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < APNS_MAX_TRIES => {
+                    if let Some(reason) = is_provider_token_failure(&error) {
+                        APNS_TOKEN_AUTH_FAILURES
+                            .with_label_values(&[self.name(), reason])
+                            .inc();
+                        if let ApnsAuth::Token { signer, .. } = &self.auth {
+                            signer.invalidate().await;
+                            // Pre-mint a fresh token for the retry so
+                            // the next send_once doesn't race other
+                            // dispatchers that also tripped the same
+                            // expiry.
+                            let _ = signer.jwt_with_reason("forced_rotation").await;
+                        }
+                    }
                     let retry_after = error.retry_after().unwrap_or_else(|| {
                         Duration::from_secs(APNS_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
                     });
@@ -631,11 +675,24 @@ impl Pushkin for ApnsPushkin {
 
 impl ApnsTokenSigner {
     async fn jwt(&self) -> Result<String, DispatchError> {
+        self.jwt_with_reason("scheduled").await
+    }
+
+    /// Force the next call to `jwt()` to mint a fresh token. Use this
+    /// when APNS has rejected the current token (`InvalidProviderToken`,
+    /// `ExpiredProviderToken`) so we can rotate immediately rather
+    /// than wait for the TTL.
+    async fn invalidate(&self) {
+        let mut cache = self.cache.lock().await;
+        *cache = None;
+    }
+
+    async fn jwt_with_reason(&self, reason: &'static str) -> Result<String, DispatchError> {
         let now = epoch_now();
         {
             let cache = self.cache.lock().await;
             if let Some(cache) = cache.as_ref()
-                && cache.expires_at > now + 5
+                && cache.expires_at > now + APNS_TOKEN_REFRESH_SAFETY_SECS
             {
                 return Ok(cache.value.clone());
             }
@@ -665,8 +722,17 @@ impl ApnsTokenSigner {
         let mut cache = self.cache.lock().await;
         *cache = Some(CachedToken {
             value: token.clone(),
-            expires_at: now + APNS_TOKEN_TTL_SECS,
+            expires_at: now + self.token_ttl.as_secs(),
         });
+        APNS_JWT_ROTATIONS
+            .with_label_values(&[self.pushkin_name.as_str(), reason])
+            .inc();
+        tracing::debug!(
+            pushkin = %self.pushkin_name,
+            reason,
+            ttl_secs = self.token_ttl.as_secs(),
+            "minted fresh APNS provider token"
+        );
         Ok(token)
     }
 }
@@ -687,6 +753,12 @@ fn classify_apns_response(
         | (400, "DeviceTokenNotForTopic")
         | (400, "TopicDisallowed")
         | (410, "Unregistered") => Ok(vec![pushkey.to_owned()]),
+        (403, "InvalidProviderToken")
+        | (403, "MissingProviderToken")
+        | (403, "ExpiredProviderToken") => Err(DispatchError::temporary(
+            format!("APNS provider token rejected: {status} {reason}"),
+            None,
+        )),
         (500..=599, _) => Err(DispatchError::temporary(
             format!("APNS temporary failure: {status} {reason}"),
             None,
@@ -694,6 +766,23 @@ fn classify_apns_response(
         _ => Err(DispatchError::remote(format!(
             "APNS rejected request: {status} {reason}"
         ))),
+    }
+}
+
+fn is_provider_token_failure(error: &DispatchError) -> Option<&'static str> {
+    match error {
+        DispatchError::Temporary { message, .. } => {
+            if message.contains("InvalidProviderToken") {
+                Some("invalid_provider_token")
+            } else if message.contains("ExpiredProviderToken") {
+                Some("expired_provider_token")
+            } else if message.contains("MissingProviderToken") {
+                Some("missing_provider_token")
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
 

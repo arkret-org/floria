@@ -22,6 +22,7 @@
           "type": {
             "enum": [
               "apns",
+              "custom",
               "fcm",
               "honor",
               "huawei",
@@ -101,9 +102,42 @@
               "default": "x-client-certificate-sha256",
               "type": "string"
             },
+            "mtls_subject_alt_names_header": {
+              "default": "x-client-certificate-san",
+              "type": "string"
+            },
+            "mtls_subject_dn_header": {
+              "default": "x-client-certificate-subject",
+              "type": "string"
+            },
             "mtls_verified_header": {
               "default": "x-client-certificate-verified",
               "type": "string"
+            },
+            "nonce_store": {
+              "additionalProperties": false,
+              "description": "HTTP Message Signature replay-protection nonce store. Memory backend is single-instance; redis backend shares state across replicas.",
+              "properties": {
+                "backend": {
+                  "default": "memory",
+                  "enum": [
+                    "memory",
+                    "redis"
+                  ],
+                  "type": "string"
+                },
+                "key_prefix": {
+                  "default": "floria",
+                  "type": "string"
+                },
+                "redis_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
             },
             "plaintext_metadata_service_dids": {
               "oneOf": [
@@ -122,6 +156,12 @@
               "default": false,
               "description": "When true, refuses to start in profiles that allow anonymous or bearer-only auth without HTTP Message Signature/mTLS.",
               "type": "boolean"
+            },
+            "replay_window_seconds": {
+              "default": 0,
+              "description": "How long to remember a verified Signature fingerprint for replay rejection. 0 disables replay protection.",
+              "minimum": 0,
+              "type": "integer"
             },
             "require_message_signatures": {
               "default": false,
@@ -172,6 +212,25 @@
                         },
                         "type": "array"
                       }
+                    ]
+                  },
+                  "mtls_subject_alt_names": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "mtls_subject_dn": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "require_mtls": {
@@ -261,6 +320,18 @@
         "notify_rate_limits": {
           "additionalProperties": false,
           "properties": {
+            "backend": {
+              "default": "memory",
+              "enum": [
+                "memory",
+                "redis"
+              ],
+              "type": "string"
+            },
+            "key_prefix": {
+              "default": "floria",
+              "type": "string"
+            },
             "per_app_id": {
               "minimum": 0,
               "type": [
@@ -296,10 +367,75 @@
                 "null"
               ]
             },
+            "redis_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "window_seconds": {
               "default": 60,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "notify_retry_queue": {
+          "additionalProperties": false,
+          "description": "Retry / dead-letter queue for transient pushkin failures.",
+          "properties": {
+            "backend": {
+              "default": "memory",
+              "enum": [
+                "memory",
+                "redis"
+              ],
+              "type": "string"
+            },
+            "batch_size": {
+              "default": 32,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dead_letter_capacity": {
+              "default": 1024,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "default_backoff_seconds": {
+              "default": 30,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "key_prefix": {
+              "default": "floria",
+              "type": "string"
+            },
+            "max_attempts": {
+              "default": 5,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max_backoff_seconds": {
+              "default": 900,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "poll_interval_ms": {
+              "default": 1000,
+              "minimum": 100,
+              "type": "integer"
+            },
+            "redis_url": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "type": "object"

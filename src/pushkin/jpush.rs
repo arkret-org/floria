@@ -62,6 +62,15 @@ static JPUSH_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|
     .expect("register floria_jpush_status_codes")
 });
 
+static JPUSH_DISPATCH_BY_CHANNEL: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_jpush_dispatch_by_channel_total",
+        "Per-third-party-channel JPush dispatch outcome (channels are joined alphabetically; `default` when no third_party_channel is configured)",
+        &["pushkin", "channel_label", "outcome"]
+    )
+    .expect("register floria_jpush_dispatch_by_channel_total")
+});
+
 const JPUSH_URL: &str = "https://api.jpush.cn/v3/push";
 const JPUSH_MAX_TRIES: usize = 3;
 const JPUSH_RETRY_DELAY_BASE_SECS: u64 = 10;
@@ -73,6 +82,12 @@ pub struct JpushPushkin {
     client: Client,
     authorization: HeaderValue,
     config: JpushConfig,
+    /// Stable label that tracks the configured third_party_channel
+    /// vendors (alphabetically joined; `default` when no channel is
+    /// configured). Used both for retry log fields and for the
+    /// `floria_jpush_dispatch_by_channel_total` metric so operators
+    /// can see how each channel mix is performing.
+    channel_label: String,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +147,19 @@ impl JpushPushkin {
             .map(validate_third_party_channel)
             .transpose()?;
 
+        let channel_label = third_party_channel
+            .as_ref()
+            .map(|channel| {
+                let mut vendors = channel.keys().cloned().collect::<Vec<_>>();
+                vendors.sort_unstable();
+                if vendors.is_empty() {
+                    "default".to_owned()
+                } else {
+                    vendors.join("+")
+                }
+            })
+            .unwrap_or_else(|| "default".to_owned());
+
         Ok(Self {
             matcher,
             gate,
@@ -152,7 +180,12 @@ impl JpushPushkin {
                 third_party_channel,
                 send_badge_counts: app.get_bool("send_badge_counts")?.unwrap_or(true),
             },
+            channel_label,
         })
+    }
+
+    pub fn channel_label(&self) -> &str {
+        &self.channel_label
     }
 
     fn build_request_body(
@@ -408,12 +441,45 @@ impl Pushkin for JpushPushkin {
         };
 
         for attempt in 0..JPUSH_MAX_TRIES {
-            match self.send_once(notification, device, payload.clone()).await {
+            let result = self.send_once(notification, device, payload.clone()).await;
+            let outcome = match &result {
+                Ok(rejected) if rejected.is_empty() => "accepted",
+                Ok(_) => "partial",
+                Err(error) if error.is_temporary() => "retryable",
+                Err(error) if error.is_remote() => "remote_error",
+                Err(_) => "internal_error",
+            };
+            JPUSH_DISPATCH_BY_CHANNEL
+                .with_label_values(&[self.name(), self.channel_label(), outcome])
+                .inc();
+            match result {
                 Ok(result) => return Ok(result),
                 Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < JPUSH_MAX_TRIES => {
+                    // Channels with stricter rate limits (huawei,
+                    // xiaomi) historically need longer waits; bump
+                    // the base when they are configured. operators
+                    // can disable this by setting third_party_channel
+                    // to the looser vendors only.
+                    let stricter = self
+                        .config
+                        .third_party_channel
+                        .as_ref()
+                        .is_some_and(|channel| {
+                            channel.contains_key("huawei") || channel.contains_key("xiaomi")
+                        });
+                    let multiplier = if stricter { 2 } else { 1 };
                     let retry_after = error.retry_after().unwrap_or_else(|| {
-                        Duration::from_secs(JPUSH_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
+                        Duration::from_secs(
+                            JPUSH_RETRY_DELAY_BASE_SECS * multiplier * (1_u64 << attempt),
+                        )
                     });
+                    tracing::warn!(
+                        pushkin = %self.name(),
+                        channel = %self.channel_label(),
+                        attempt = attempt + 1,
+                        retry_after_secs = retry_after.as_secs(),
+                        "JPush temporary failure; backing off before retry"
+                    );
                     sleep(retry_after).await;
                 }
                 Err(error) => return Err(error),
@@ -611,6 +677,7 @@ mod tests {
                 ),
                 send_badge_counts: true,
             },
+            channel_label: "vivo+xiaomi".to_owned(),
         }
     }
 

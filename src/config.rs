@@ -93,6 +93,7 @@ pub struct HttpConfig {
     pub notify_dedup: NotifyDedupConfig,
     pub notify_auth: NotifyAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
+    pub notify_retry_queue: NotifyRetryQueueConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -139,6 +140,7 @@ impl Default for HttpConfig {
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
+            notify_retry_queue: NotifyRetryQueueConfig::default(),
             extra: Map::new(),
         }
     }
@@ -163,12 +165,15 @@ impl HttpConfig {
         self.notify_dedup.emit_startup_warnings();
         self.notify_auth.emit_startup_warnings();
         self.notify_rate_limits.emit_startup_warnings();
+        self.notify_retry_queue.emit_startup_warnings();
     }
 
     pub fn validate(&self) -> Result<()> {
         let _ = self.listen_addrs()?;
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
+        self.notify_rate_limits.validate()?;
+        self.notify_retry_queue.validate()?;
         Ok(())
     }
 }
@@ -261,6 +266,8 @@ pub struct NotifyAuthConfig {
     pub signature_max_skew_seconds: u64,
     pub mtls_verified_header: String,
     pub mtls_fingerprint_header: String,
+    pub mtls_subject_dn_header: String,
+    pub mtls_subject_alt_names_header: String,
     /// When true, refuse to accept bearer-only or anonymous notify
     /// requests; every authenticated caller must satisfy HTTP Message
     /// Signature or mTLS, and the gateway DID must be configured.
@@ -269,6 +276,8 @@ pub struct NotifyAuthConfig {
     pub production_mode: bool,
     #[serde(default)]
     pub service_principals: HashMap<String, NotifyServicePrincipalConfig>,
+    pub nonce_store: NotifyNonceStoreConfig,
+    pub replay_window_seconds: u64,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -291,6 +300,7 @@ impl NotifyAuthConfig {
         for (did, principal) in &self.service_principals {
             principal.emit_startup_warnings(did);
         }
+        self.nonce_store.emit_startup_warnings();
     }
 
     pub fn signature_max_skew_seconds(&self) -> u64 {
@@ -315,6 +325,24 @@ impl NotifyAuthConfig {
         }
     }
 
+    pub fn mtls_subject_dn_header(&self) -> &str {
+        let value = self.mtls_subject_dn_header.trim();
+        if value.is_empty() {
+            "x-client-certificate-subject"
+        } else {
+            value
+        }
+    }
+
+    pub fn mtls_subject_alt_names_header(&self) -> &str {
+        let value = self.mtls_subject_alt_names_header.trim();
+        if value.is_empty() {
+            "x-client-certificate-san"
+        } else {
+            value
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.require_message_signatures && self.service_principals.is_empty() {
             bail!(
@@ -328,10 +356,15 @@ impl NotifyAuthConfig {
         for (did, principal) in &self.service_principals {
             principal.validate(did)?;
         }
+        self.nonce_store.validate(self.replay_window_seconds)?;
         if self.production_mode {
             self.validate_production_mode()?;
         }
         Ok(())
+    }
+
+    pub fn replay_window_seconds(&self) -> u64 {
+        self.replay_window_seconds
     }
 
     fn validate_production_mode(&self) -> Result<()> {
@@ -410,10 +443,87 @@ impl Default for NotifyAuthConfig {
             signature_max_skew_seconds: 300,
             mtls_verified_header: "x-client-certificate-verified".to_owned(),
             mtls_fingerprint_header: "x-client-certificate-sha256".to_owned(),
+            mtls_subject_dn_header: "x-client-certificate-subject".to_owned(),
+            mtls_subject_alt_names_header: "x-client-certificate-san".to_owned(),
             production_mode: false,
             service_principals: HashMap::new(),
+            nonce_store: NotifyNonceStoreConfig::default(),
+            replay_window_seconds: 0,
             extra: Map::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NotifyNonceStoreConfig {
+    pub backend: String,
+    pub redis_url: Option<String>,
+    pub key_prefix: String,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for NotifyNonceStoreConfig {
+    fn default() -> Self {
+        Self {
+            backend: "memory".to_owned(),
+            redis_url: None,
+            key_prefix: "floria".to_owned(),
+            extra: Map::new(),
+        }
+    }
+}
+
+impl NotifyNonceStoreConfig {
+    pub fn backend_kind(&self) -> &str {
+        let backend = self.backend.trim();
+        if backend.is_empty() {
+            "memory"
+        } else {
+            backend
+        }
+    }
+
+    pub fn key_prefix(&self) -> &str {
+        let value = self.key_prefix.trim();
+        if value.is_empty() { "floria" } else { value }
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.notify_auth.nonce_store",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self, replay_window_seconds: u64) -> Result<()> {
+        match self.backend_kind() {
+            "memory" => {}
+            "redis" => {
+                if replay_window_seconds == 0 {
+                    bail!(
+                        "http.notify_auth.nonce_store.backend=redis requires http.notify_auth.replay_window_seconds > 0"
+                    );
+                }
+                if self
+                    .redis_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_none_or(|value| value.is_empty())
+                {
+                    bail!(
+                        "http.notify_auth.nonce_store.redis_url is required when backend=redis"
+                    );
+                }
+            }
+            backend => {
+                bail!(
+                    "http.notify_auth.nonce_store.backend must be one of: memory, redis; got `{backend}`"
+                );
+            }
+        }
+        Ok(())
     }
 }
 
@@ -431,6 +541,19 @@ pub struct NotifyServicePrincipalConfig {
     pub require_mtls: bool,
     #[serde(default, deserialize_with = "string_or_vec")]
     pub mtls_cert_fingerprints: Vec<String>,
+    /// Expected client-certificate Subject DN (exact, case-insensitive
+    /// after whitespace normalisation). Set this when the reverse
+    /// proxy can pass through the verified subject DN — it binds the
+    /// cert to a specific issuer/subject so a fingerprint reuse on a
+    /// different cert under the same trust root is still rejected.
+    pub mtls_subject_dn: Option<String>,
+    /// Subject Alternative Names that the verified client certificate
+    /// is required to advertise. Each entry must appear in the SAN
+    /// list passed by the reverse proxy. This is the typical hook
+    /// for binding a service DID (`uri:did:web:sync.example.com`) to
+    /// a particular cert.
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub mtls_subject_alt_names: Vec<String>,
     pub service_endpoint: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
@@ -447,6 +570,8 @@ impl Default for NotifyServicePrincipalConfig {
             signature_public_key_hex: None,
             require_mtls: false,
             mtls_cert_fingerprints: Vec::new(),
+            mtls_subject_dn: None,
+            mtls_subject_alt_names: Vec::new(),
             service_endpoint: None,
             extra: Map::new(),
         }
@@ -512,6 +637,9 @@ pub struct NotifyRateLimitConfig {
     pub per_provider: Option<u64>,
     pub per_push_key_hash: Option<u64>,
     pub per_endpoint: Option<u64>,
+    pub backend: String,
+    pub redis_url: Option<String>,
+    pub key_prefix: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -525,6 +653,9 @@ impl Default for NotifyRateLimitConfig {
             per_provider: None,
             per_push_key_hash: None,
             per_endpoint: None,
+            backend: "memory".to_owned(),
+            redis_url: None,
+            key_prefix: "floria".to_owned(),
             extra: Map::new(),
         }
     }
@@ -544,9 +675,143 @@ impl NotifyRateLimitConfig {
         .any(|limit| limit > 0)
     }
 
+    pub fn backend_kind(&self) -> &str {
+        let backend = self.backend.trim();
+        if backend.is_empty() {
+            "memory"
+        } else {
+            backend
+        }
+    }
+
+    pub fn key_prefix(&self) -> &str {
+        let value = self.key_prefix.trim();
+        if value.is_empty() { "floria" } else { value }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match self.backend_kind() {
+            "memory" => {}
+            "redis" => {
+                if self
+                    .redis_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_none_or(|value| value.is_empty())
+                {
+                    bail!(
+                        "http.notify_rate_limits.redis_url is required when backend=redis"
+                    );
+                }
+            }
+            backend => {
+                bail!(
+                    "http.notify_rate_limits.backend must be one of: memory, redis; got `{backend}`"
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn emit_startup_warnings(&self) {
         warn_unknown_fields(
             "http.notify_rate_limits",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NotifyRetryQueueConfig {
+    pub enabled: bool,
+    pub backend: String,
+    pub redis_url: Option<String>,
+    pub key_prefix: String,
+    pub max_attempts: u32,
+    pub default_backoff_seconds: u64,
+    pub max_backoff_seconds: u64,
+    pub dead_letter_capacity: u32,
+    pub poll_interval_ms: u64,
+    pub batch_size: u32,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for NotifyRetryQueueConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: "memory".to_owned(),
+            redis_url: None,
+            key_prefix: "floria".to_owned(),
+            max_attempts: 5,
+            default_backoff_seconds: 30,
+            max_backoff_seconds: 15 * 60,
+            dead_letter_capacity: 1024,
+            poll_interval_ms: 1_000,
+            batch_size: 32,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl NotifyRetryQueueConfig {
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn backend_kind(&self) -> &str {
+        let backend = self.backend.trim();
+        if backend.is_empty() {
+            "memory"
+        } else {
+            backend
+        }
+    }
+
+    pub fn key_prefix(&self) -> &str {
+        let value = self.key_prefix.trim();
+        if value.is_empty() { "floria" } else { value }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.max_attempts == 0 {
+            bail!("http.notify_retry_queue.max_attempts must be >= 1");
+        }
+        if self.default_backoff_seconds == 0 {
+            bail!("http.notify_retry_queue.default_backoff_seconds must be >= 1");
+        }
+        if self.max_backoff_seconds < self.default_backoff_seconds {
+            bail!(
+                "http.notify_retry_queue.max_backoff_seconds must be >= default_backoff_seconds"
+            );
+        }
+        match self.backend_kind() {
+            "memory" => Ok(()),
+            "redis" => {
+                if self
+                    .redis_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_none_or(|value| value.is_empty())
+                {
+                    bail!("http.notify_retry_queue.redis_url is required when backend=redis");
+                }
+                Ok(())
+            }
+            backend => bail!(
+                "http.notify_retry_queue.backend must be one of: memory, redis; got `{backend}`"
+            ),
+        }
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.notify_retry_queue",
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
     }
@@ -918,7 +1183,27 @@ fn http_schema() -> Value {
                     "per_app_id": {"type": ["integer", "null"], "minimum": 0},
                     "per_provider": {"type": ["integer", "null"], "minimum": 0},
                     "per_push_key_hash": {"type": ["integer", "null"], "minimum": 0},
-                    "per_endpoint": {"type": ["integer", "null"], "minimum": 0}
+                    "per_endpoint": {"type": ["integer", "null"], "minimum": 0},
+                    "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
+                    "redis_url": {"type": ["string", "null"]},
+                    "key_prefix": {"type": "string", "default": "floria"}
+                }
+            },
+            "notify_retry_queue": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Retry / dead-letter queue for transient pushkin failures.",
+                "properties": {
+                    "enabled": {"type": "boolean", "default": false},
+                    "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
+                    "redis_url": {"type": ["string", "null"]},
+                    "key_prefix": {"type": "string", "default": "floria"},
+                    "max_attempts": {"type": "integer", "minimum": 1, "default": 5},
+                    "default_backoff_seconds": {"type": "integer", "minimum": 1, "default": 30},
+                    "max_backoff_seconds": {"type": "integer", "minimum": 1, "default": 900},
+                    "dead_letter_capacity": {"type": "integer", "minimum": 1, "default": 1024},
+                    "poll_interval_ms": {"type": "integer", "minimum": 100, "default": 1000},
+                    "batch_size": {"type": "integer", "minimum": 1, "default": 32}
                 }
             }
         }
@@ -945,6 +1230,8 @@ fn notify_auth_schema() -> Value {
             "signature_max_skew_seconds": {"type": "integer", "minimum": 1, "default": 300},
             "mtls_verified_header": {"type": "string", "default": "x-client-certificate-verified"},
             "mtls_fingerprint_header": {"type": "string", "default": "x-client-certificate-sha256"},
+            "mtls_subject_dn_header": {"type": "string", "default": "x-client-certificate-subject"},
+            "mtls_subject_alt_names_header": {"type": "string", "default": "x-client-certificate-san"},
             "production_mode": {
                 "type": "boolean",
                 "default": false,
@@ -953,6 +1240,22 @@ fn notify_auth_schema() -> Value {
             "service_principals": {
                 "type": "object",
                 "additionalProperties": service_principal_schema()
+            },
+            "nonce_store": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "HTTP Message Signature replay-protection nonce store. Memory backend is single-instance; redis backend shares state across replicas.",
+                "properties": {
+                    "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
+                    "redis_url": {"type": ["string", "null"]},
+                    "key_prefix": {"type": "string", "default": "floria"}
+                }
+            },
+            "replay_window_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "How long to remember a verified Signature fingerprint for replay rejection. 0 disables replay protection."
             }
         }
     })
@@ -971,6 +1274,8 @@ fn service_principal_schema() -> Value {
             "signature_public_key_hex": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"},
             "require_mtls": {"type": "boolean", "default": false},
             "mtls_cert_fingerprints": string_or_string_list_schema(),
+            "mtls_subject_dn": {"type": ["string", "null"]},
+            "mtls_subject_alt_names": string_or_string_list_schema(),
             "service_endpoint": {"type": ["string", "null"]}
         }
     })
@@ -1019,6 +1324,7 @@ fn app_config_schema() -> Value {
                 "type": "string",
                 "enum": [
                     "apns",
+                    "custom",
                     "fcm",
                     "honor",
                     "huawei",
@@ -1191,6 +1497,7 @@ apps: {}
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
+            notify_retry_queue: NotifyRetryQueueConfig::default(),
             extra: Map::new(),
         };
 
@@ -1209,6 +1516,7 @@ apps: {}
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
+            notify_retry_queue: NotifyRetryQueueConfig::default(),
             extra: Map::new(),
         };
 

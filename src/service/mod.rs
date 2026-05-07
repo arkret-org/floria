@@ -4,9 +4,6 @@ use std::time::Instant;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
-#[cfg(test)]
-use serde_json::Value;
-
 use crate::AppState;
 #[cfg(test)]
 use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};

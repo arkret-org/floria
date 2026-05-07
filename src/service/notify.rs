@@ -718,7 +718,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
     let caller =
-        match authenticate_notify_request(req, body.as_ref(), &state.notify_auth, &request_id) {
+        match authenticate_notify_request(
+            req,
+            body.as_ref(),
+            &state.notify_auth,
+            state.notify_nonce_store.as_deref(),
+            &request_id,
+        ) {
             Ok(caller) => {
                 span.record(
                     "caller",
@@ -1159,6 +1165,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                 retry_after,
                                 &context.request_id,
                             ));
+                            enqueue_retry(
+                                &state,
+                                &context.request_id,
+                                pushkin.name(),
+                                &target.app_id,
+                                &target.pushkey,
+                                retry_after,
+                                &error,
+                            );
                         }
                         first_temporary_error
                             .get_or_insert_with(|| (error.to_string(), retry_after));
@@ -1536,4 +1551,29 @@ fn canonical_json_value(value: &Value) -> Value {
 
 fn canonical_sort_key(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
+}
+
+fn enqueue_retry(
+    state: &Arc<AppState>,
+    request_id: &str,
+    pushkin: &str,
+    app_id: &str,
+    pushkey: &str,
+    retry_after: Option<Duration>,
+    error: &crate::error::DispatchError,
+) {
+    let Some(queue) = state.notify_retry_queue.as_ref() else {
+        return;
+    };
+    let backoff = retry_after.unwrap_or(queue.config().default_backoff);
+    let envelope = crate::retry_queue::RetryEnvelope::new(
+        request_id,
+        pushkin,
+        app_id,
+        pushkey,
+        backoff,
+        error.to_string(),
+    );
+    queue.enqueue(envelope);
+    app_metrics::notify_retry_enqueued(pushkin);
 }

@@ -1,3 +1,30 @@
+//! `/notify` deduplication and per-device delivery suppression.
+//!
+//! ## Multi-instance semantics
+//!
+//! When `backend = "redis"`, multiple gateway instances share state via
+//! a single Redis endpoint. Keys are emitted with Redis cluster hash
+//! tags (`{...}`) around the dynamic component so that every key for a
+//! given idempotency-key (or canonical request fingerprint) routes to
+//! the same shard. This keeps the lookup → mark-delivered → cache
+//! sequence consistent under cluster routing without forcing a single
+//! `MULTI/EXEC` slot.
+//!
+//! Concurrent requests with the same idempotency key race the lookup:
+//!  - The first-arriving instance misses and dispatches.
+//!  - Other instances arriving inside the dispatch window also miss.
+//!  - The last completed dispatch wins the cache slot; the others may
+//!    therefore double-dispatch in this rare window.
+//!
+//! Per-device delivery suppression (`mark_delivered_device`) applies
+//! best-effort across the cluster: if a delivery races, both instances
+//! may dispatch to the provider, but the second instance's dedupe key
+//! prevents the third try in the same TTL.
+//!
+//! Failure mode: if Redis is unreachable, lookups return `None` and
+//! conflicts return `false` (fail-open) so /notify keeps serving — the
+//! invariants degrade to "in-process only" until Redis recovers.
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -396,13 +423,20 @@ impl RedisNotifyDeduplicator {
             .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
     }
 
+    /// Wrap the dynamic component of the key in Redis cluster hash
+    /// tags (`{...}`) so every key derived from the same dedup key
+    /// hashes to the same slot. In single-node Redis the braces are
+    /// just literal characters and have no effect.
     fn response_key(&self, key: &str) -> String {
-        format!("{}:notify:response:{key}", self.key_prefix)
+        format!("{}:notify:response:{{{key}}}", self.key_prefix)
     }
 
     fn delivered_key(&self, notification_key: &str, app_id: &str, pushkey: &str) -> String {
         let key = delivered_device_key(notification_key, app_id, pushkey);
-        format!("{}:notify:delivered:{key}", self.key_prefix)
+        format!(
+            "{}:notify:delivered:{{{notification_key}}}:{key}",
+            self.key_prefix
+        )
     }
 }
 

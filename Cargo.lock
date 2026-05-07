@@ -1083,6 +1083,7 @@ dependencies = [
  "base64 0.22.1",
  "blake2",
  "ed25519-dalek",
+ "futures",
  "globset",
  "hex",
  "isahc",

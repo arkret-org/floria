@@ -59,6 +59,15 @@ static WEBPUSH_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
     .expect("register floria_active_webpush_requests")
 });
 
+static WEBPUSH_VAPID_ACTIVE_KEY: LazyLock<prometheus::IntGaugeVec> = LazyLock::new(|| {
+    prometheus::register_int_gauge_vec!(
+        "floria_webpush_vapid_active_key",
+        "Active VAPID key per pushkin. The label `key_fingerprint` is a SHA-256 truncated hash of the on-disk private key; gauge value is the unix timestamp when the gateway loaded it.",
+        &["pushkin", "key_fingerprint", "key_id"]
+    )
+    .expect("register floria_webpush_vapid_active_key")
+});
+
 const DEFAULT_WEBPUSH_TTL_SECS: u32 = 15 * 60;
 const MAX_BODY_LENGTH: usize = 1000;
 const MAX_CIPHERTEXT_LENGTH: usize = 2000;
@@ -70,6 +79,8 @@ pub struct WebpushPushkin {
     client: IsahcWebPushClient,
     vapid_builder: PartialVapidSignatureBuilder,
     vapid_contact_email: String,
+    vapid_key_id: String,
+    vapid_key_fingerprint: String,
     allowed_endpoints: Option<Vec<GlobMatcher>>,
     ttl: u32,
 }
@@ -82,6 +93,7 @@ impl WebpushPushkin {
                 "max_connections",
                 "vapid_private_key",
                 "vapid_contact_email",
+                "vapid_key_id",
                 "allowed_endpoints",
                 "ttl",
                 "inflight_request_limit",
@@ -141,6 +153,32 @@ impl WebpushPushkin {
         )
         .context("invalid VAPID private key")?;
 
+        let key_bytes = std::fs::read(&vapid_private_key).with_context(|| {
+            format!(
+                "failed to read VAPID private key {}",
+                vapid_private_key.display()
+            )
+        })?;
+        let mut hasher = blake2::Blake2s256::new();
+        hasher.update(&key_bytes);
+        let vapid_key_fingerprint = hex::encode(hasher.finalize());
+        let vapid_key_fingerprint = vapid_key_fingerprint[..16].to_owned();
+        let vapid_key_id = app
+            .get_string("vapid_key_id")?
+            .unwrap_or_else(|| vapid_key_fingerprint.clone());
+
+        let loaded_at_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        WEBPUSH_VAPID_ACTIVE_KEY
+            .with_label_values(&[
+                matcher.name(),
+                vapid_key_fingerprint.as_str(),
+                vapid_key_id.as_str(),
+            ])
+            .set(loaded_at_unix);
+
         Ok(Self {
             matcher,
             gate,
@@ -148,9 +186,22 @@ impl WebpushPushkin {
             client,
             vapid_builder,
             vapid_contact_email,
+            vapid_key_id,
+            vapid_key_fingerprint,
             allowed_endpoints,
             ttl,
         })
+    }
+
+    /// Stable label for the active VAPID key — surfaced via
+    /// `bridge/describe` and the `floria_webpush_vapid_active_key`
+    /// gauge so operators can track rotation cadence.
+    pub fn vapid_key_id(&self) -> &str {
+        &self.vapid_key_id
+    }
+
+    pub fn vapid_key_fingerprint(&self) -> &str {
+        &self.vapid_key_fingerprint
     }
 
     fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
@@ -561,6 +612,8 @@ mod tests {
             )
             .unwrap(),
             vapid_contact_email: "push@example.com".to_owned(),
+            vapid_key_id: "test".to_owned(),
+            vapid_key_fingerprint: "test".to_owned(),
             allowed_endpoints,
             ttl: DEFAULT_WEBPUSH_TTL_SECS,
         }

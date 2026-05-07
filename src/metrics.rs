@@ -105,6 +105,33 @@ static NOTIFY_DEDUP_LOOKUP_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
     .expect("register floria_notify_dedup_lookup_total")
 });
 
+static NOTIFY_RETRY_ENQUEUED_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_retry_enqueued_total",
+        "Number of /notify dispatch failures enqueued onto the retry queue, by pushkin",
+        &["pushkin"]
+    )
+    .expect("register floria_notify_retry_enqueued_total")
+});
+
+static NOTIFY_RETRY_REPLAYED_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_retry_replayed_total",
+        "Outcome of retry-queue worker dispatches, by pushkin and outcome (delivered, retry, dead_letter)",
+        &["pushkin", "outcome"]
+    )
+    .expect("register floria_notify_retry_replayed_total")
+});
+
+static NOTIFY_DEAD_LETTER_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_dead_letter_total",
+        "Number of dispatch attempts moved to the dead-letter queue, by pushkin and reason",
+        &["pushkin", "reason"]
+    )
+    .expect("register floria_notify_dead_letter_total")
+});
+
 static PUSHKIN_DISPATCH_HISTOGRAM: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         "floria_pushkin_dispatch_seconds",
@@ -170,6 +197,9 @@ pub fn init() {
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER);
     LazyLock::force(&NOTIFY_RATE_LIMIT_REJECT_COUNTER);
     LazyLock::force(&NOTIFY_DEDUP_LOOKUP_COUNTER);
+    LazyLock::force(&NOTIFY_RETRY_ENQUEUED_COUNTER);
+    LazyLock::force(&NOTIFY_RETRY_REPLAYED_COUNTER);
+    LazyLock::force(&NOTIFY_DEAD_LETTER_COUNTER);
     LazyLock::force(&PUSHKIN_DISPATCH_HISTOGRAM);
     LazyLock::force(&NOTIFS_RECEIVED_DEVICE_PUSH_COUNTER);
     LazyLock::force(&NOTIFS_BY_PUSHKIN);
@@ -260,6 +290,24 @@ pub fn notify_rate_limit_reject(scope: &str) {
 pub fn notify_dedup_lookup(outcome: &str) {
     NOTIFY_DEDUP_LOOKUP_COUNTER
         .with_label_values(&[outcome])
+        .inc();
+}
+
+pub fn notify_retry_enqueued(pushkin: &str) {
+    NOTIFY_RETRY_ENQUEUED_COUNTER
+        .with_label_values(&[pushkin])
+        .inc();
+}
+
+pub fn notify_retry_replayed(pushkin: &str, outcome: &str) {
+    NOTIFY_RETRY_REPLAYED_COUNTER
+        .with_label_values(&[pushkin, outcome])
+        .inc();
+}
+
+pub fn notify_dead_letter(pushkin: &str, reason: &str) {
+    NOTIFY_DEAD_LETTER_COUNTER
+        .with_label_values(&[pushkin, reason])
         .inc();
 }
 

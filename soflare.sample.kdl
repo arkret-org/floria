@@ -38,7 +38,23 @@ http {
     //     service_endpoint "https://push.example.com/api/v1/push/notify"
     //     require_mtls #true
     //     mtls_cert_fingerprints "aa:bb:cc"
+    //     // Bind this principal to a specific client cert subject
+    //     // (DN match) and SAN (URI/DNS) so a fingerprint reuse on
+    //     // a different cert under the same trust root still rejects.
+    //     // mtls_subject_dn "CN=sync.example.com,O=Contrix,C=US"
+    //     // mtls_subject_alt_names "uri:did:web:sync.example.com"
     //   }
+    // }
+    //
+    // Replay protection — fingerprint of every signed request is
+    // recorded for `replay_window_seconds` so a replay arriving
+    // inside `expires - created` is rejected.
+    // replay_window_seconds 600
+    // nonce_store {
+    //   backend "memory"
+    //   key_prefix "floria"
+    //   // backend "redis"
+    //   // redis_url "redis://127.0.0.1:6379/2"
     // }
   }
   notify_rate_limits {
@@ -48,6 +64,22 @@ http {
     // per_provider 5000
     // per_push_key_hash 120
     // per_endpoint 10000
+    // backend "memory"
+    // // backend "redis"
+    // // redis_url "redis://127.0.0.1:6379/3"
+    // // key_prefix "floria"
+  }
+  notify_retry_queue {
+    enabled #false
+    backend "memory"
+    // // backend "redis"
+    // // redis_url "redis://127.0.0.1:6379/4"
+    max_attempts 5
+    default_backoff_seconds 30
+    max_backoff_seconds 900
+    dead_letter_capacity 1024
+    poll_interval_ms 1000
+    batch_size 32
   }
 }
 
@@ -268,8 +300,26 @@ apps {
   //   type "webpush"
   //   vapid_private_key "./vapid-private.pem"
   //   vapid_contact_email "push@example.com"
+  //   // Stable label for this VAPID key — used in metric labels and
+  //   // bridge/describe so operators can track rotation cadence.
+  //   vapid_key_id "2026-q2"
   //   ttl 900
   //   max_connections 20
   //   allowed_endpoints "*.push.services.mozilla.com" "fcm.googleapis.com"
+  // }
+
+  // Example Custom URL pushkin (HMAC / Bearer / mTLS to an operator endpoint)
+  // com.example.custom {
+  //   type "custom"
+  //   url "https://hooks.example.com/notify/{pushkey}"
+  //   // auth "bearer"
+  //   // bearer_token "replace-me"
+  //   // auth "hmac"
+  //   // hmac_key_id "floria-2026-q2"
+  //   // hmac_secret "replace-with-32-byte-secret"
+  //   // hmac_header "x-floria-signature"
+  //   // client_certfile "./outbound-client.pem"
+  //   max_connections 20
+  //   inflight_request_limit 512
   // }
 }

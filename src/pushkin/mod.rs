@@ -1,5 +1,6 @@
 mod android;
 mod apns;
+mod custom;
 mod fcm;
 mod honor;
 mod huawei;
@@ -35,6 +36,7 @@ static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(
 });
 
 pub use apns::ApnsPushkin;
+pub use custom::CustomPushkin;
 pub use fcm::FcmPushkin;
 pub use honor::HonorPushkin;
 pub use huawei::HuaweiPushkin;
@@ -51,6 +53,40 @@ pub const DEFAULT_MAX_CONNECTIONS: usize = 20;
 pub struct DispatchTarget {
     pub app_id: String,
     pub pushkey: String,
+}
+
+/// Unified result of a single pushkin dispatch attempt.
+///
+/// Surfaces both happy-path (`accepted`) and partial-failure
+/// (`rejected`) outcomes alongside the retry hint that drives the
+/// retry queue + dead-letter ring (see [`crate::retry_queue`]). The
+/// `dedup_binding` field carries any provider-emitted message id so
+/// downstream observers can match the gateway delivery receipt to the
+/// upstream provider record.
+#[derive(Debug, Clone, Default)]
+pub struct DispatchOutcome {
+    pub accepted: Vec<DispatchTarget>,
+    pub rejected: Vec<String>,
+    pub retry_after: Option<std::time::Duration>,
+    pub dedup_binding: Vec<(String, String)>,
+}
+
+impl DispatchOutcome {
+    pub fn from_legacy(targets: &[DispatchTarget], rejected: Vec<String>) -> Self {
+        let rejected_set: std::collections::HashSet<&str> =
+            rejected.iter().map(String::as_str).collect();
+        let accepted = targets
+            .iter()
+            .filter(|target| !rejected_set.contains(target.pushkey.as_str()))
+            .cloned()
+            .collect();
+        Self {
+            accepted,
+            rejected,
+            retry_after: None,
+            dedup_binding: Vec::new(),
+        }
+    }
 }
 
 #[async_trait]
@@ -74,6 +110,24 @@ pub trait Pushkin: Send + Sync {
         device: &Device,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
+
+    /// Unified dispatch entry point. The default implementation wraps
+    /// [`Self::dispatch_notification`] so existing pushkins keep
+    /// working unchanged. Implementations that can return per-target
+    /// provider message IDs should override this method to surface a
+    /// richer [`DispatchOutcome`].
+    async fn dispatch_outcome(
+        &self,
+        notification: &Notification,
+        device: &Device,
+        context: &NotificationContext,
+    ) -> Result<DispatchOutcome, DispatchError> {
+        let targets = self.dispatch_targets(notification, device);
+        let rejected = self
+            .dispatch_notification(notification, device, context)
+            .await?;
+        Ok(DispatchOutcome::from_legacy(&targets, rejected))
+    }
 }
 
 /// Frozen capability snapshot for a provider kind, surfaced through
@@ -231,6 +285,17 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             credential_rotation: "rotate_app_secret_yearly",
             blind_wakeup_required: false,
         },
+        "custom" => ProviderCapabilities {
+            kind: "custom",
+            batch: "none",
+            ttl_seconds_max: None,
+            supports_collapse: false,
+            supports_badge: false,
+            default_payload_shape: "operator_defined",
+            credential_kinds: &["bearer_token", "hmac_secret", "client_certificate"],
+            credential_rotation: "operator_defined",
+            blind_wakeup_required: true,
+        },
         _ => return None,
     };
     Some(kind)
@@ -321,6 +386,7 @@ async fn create_pushkin(
 ) -> Result<Arc<dyn Pushkin>> {
     match app.require_kind()? {
         "apns" => Ok(Arc::new(ApnsPushkin::new(name, app, config, base_dir)?)),
+        "custom" => Ok(Arc::new(CustomPushkin::new(name, app, config, base_dir)?)),
         "fcm" => Ok(Arc::new(
             FcmPushkin::new(name, app, config, base_dir).await?,
         )),

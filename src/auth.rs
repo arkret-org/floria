@@ -9,6 +9,7 @@ use salvo::prelude::Request;
 use sha2::{Digest, Sha256};
 
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
+use crate::nonce_store::{NonceCheck, NonceStore};
 
 pub const ORIGIN_SERVICE_DID_HEADER: &str = "x-contrix-origin-service-did";
 pub const DESTINATION_SERVICE_DID_HEADER: &str = "x-contrix-destination-service-did";
@@ -43,6 +44,7 @@ pub fn authenticate_notify_request(
     req: &Request,
     body: &[u8],
     auth: &NotifyAuthConfig,
+    nonce_store: Option<&NonceStore>,
     request_id: &str,
 ) -> Result<AuthenticatedNotifyCaller, AuthFailure> {
     reject_query_string_auth(req)?;
@@ -94,6 +96,7 @@ pub fn authenticate_notify_request(
         let mut authenticated = false;
         if has_signature_headers(req) {
             verify_message_signature(req, body, auth, principal, &origin_did, request_id)?;
+            verify_nonce_freshness(req, nonce_store, &origin_did, request_id)?;
             authenticated = true;
         } else if auth.require_message_signatures {
             tracing::warn!(
@@ -430,7 +433,72 @@ fn verify_mtls_profile(
             message: "mTLS certificate fingerprint is not allowlisted".to_owned(),
         });
     }
+    if let Some(expected_dn) = principal.mtls_subject_dn.as_deref() {
+        let observed_dn = req
+            .header::<String>(auth.mtls_subject_dn_header())
+            .map(|value| normalize_dn(&value));
+        let expected = normalize_dn(expected_dn);
+        if observed_dn.as_deref() != Some(expected.as_str()) {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %origin_did,
+                observed_subject_dn = %observed_dn.as_deref().unwrap_or("<missing>"),
+                expected_subject_dn = %expected,
+                "rejecting /notify request with unexpected mTLS Subject DN"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "mTLS Subject DN does not match service principal binding".to_owned(),
+            });
+        }
+    }
+    if !principal.mtls_subject_alt_names.is_empty() {
+        let observed_sans = req
+            .header::<String>(auth.mtls_subject_alt_names_header())
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| value.to_ascii_lowercase())
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+        for required in &principal.mtls_subject_alt_names {
+            let required = required.trim().to_ascii_lowercase();
+            if required.is_empty() {
+                continue;
+            }
+            if !observed_sans.contains(&required) {
+                tracing::warn!(
+                    request_id,
+                    origin_service_did = %origin_did,
+                    expected_san = %required,
+                    "rejecting /notify request whose mTLS certificate is missing a required SAN"
+                );
+                return Err(AuthFailure {
+                    status: StatusCode::UNAUTHORIZED,
+                    code: "unauthenticated",
+                    message: "mTLS certificate is missing a required Subject Alternative Name"
+                        .to_owned(),
+                });
+            }
+        }
+    }
     Ok(())
+}
+
+/// Normalise a Distinguished Name for comparison: collapse runs of
+/// whitespace, lowercase, trim. We do not attempt full RFC 4514
+/// canonicalisation — operators are expected to copy-paste the DN
+/// emitted by the reverse proxy.
+fn normalize_dn(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 fn verify_message_signature(
@@ -777,6 +845,58 @@ fn parse_signature_header(value: &str, label: &str) -> Result<Vec<u8>, AuthFailu
 fn has_signature_headers(req: &Request) -> bool {
     req.header::<String>(SIGNATURE_INPUT_HEADER).is_some()
         || req.header::<String>(SIGNATURE_HEADER).is_some()
+}
+
+/// Bind the verified Signature header bytes (and the request's
+/// content-digest) to a single-use nonce. A replay arriving inside
+/// the `expires - created` window is rejected even though every
+/// other signature check would still pass. When no nonce store is
+/// configured this is a no-op so signature semantics are unchanged.
+fn verify_nonce_freshness(
+    req: &Request,
+    nonce_store: Option<&NonceStore>,
+    origin_did: &str,
+    request_id: &str,
+) -> Result<(), AuthFailure> {
+    let Some(nonce_store) = nonce_store else {
+        return Ok(());
+    };
+    let signature_header = req
+        .header::<String>(SIGNATURE_HEADER)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let signature_input = req
+        .header::<String>(SIGNATURE_INPUT_HEADER)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let Some(signature_header) = signature_header else {
+        return Ok(());
+    };
+    let Some(signature_input) = signature_input else {
+        return Ok(());
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(signature_header.as_bytes());
+    hasher.update([0]);
+    hasher.update(signature_input.as_bytes());
+    let fingerprint = hex::encode(hasher.finalize());
+
+    match nonce_store.observe(&fingerprint) {
+        NonceCheck::Fresh => Ok(()),
+        NonceCheck::Replayed => {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %origin_did,
+                "rejecting /notify request as a Signature replay within the expiry window"
+            );
+            Err(AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "invalid_signature",
+                message: "HTTP Message Signature has already been observed (replay)".to_owned(),
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
