@@ -1,0 +1,65 @@
+# Soflare – Caddy reverse-proxy reference for mTLS-fronted /notify.
+#
+# Caddy validates the client certificate against `trust_pool.pem`
+# (the bundle of CAs that tenants are allowed to chain to). The
+# parsed certificate fields are forwarded as the four headers that
+# floria's `notify_auth` mTLS profile binds against:
+#
+#   X-Client-Certificate-Verified
+#   X-Client-Certificate-SHA256
+#   X-Client-Certificate-Subject
+#   X-Client-Certificate-SAN
+#
+# Trust root rotation: regenerate trust_pool.pem from the canonical
+# tenant CA list on each rotation, then `caddy reload`. floria's
+# fingerprint allowlist (`mtls_cert_fingerprints`) plus DN/SAN
+# binding are the second-line check — even with a relaxed pool, a
+# compromised tenant CA cannot mint a fresh cert that silently
+# chains.
+
+push.example.com {
+    tls /etc/floria/tls/server.crt /etc/floria/tls/server.key {
+        client_auth {
+            mode             require_and_verify
+            trust_pool       file /etc/floria/tls/tenant-ca-bundle.pem
+            verifier         strict
+        }
+    }
+
+    # /health and /ready are unauthenticated by design.
+    @probes {
+        path /health /ready
+    }
+    handle @probes {
+        reverse_proxy floria:5000 {
+            header_up -X-Client-Certificate-Verified
+            header_up -X-Client-Certificate-SHA256
+            header_up -X-Client-Certificate-Subject
+            header_up -X-Client-Certificate-SAN
+        }
+    }
+
+    handle /api/v1/push/notify* {
+        reverse_proxy floria:5000 {
+            # Strip any client-supplied copies first so an upstream
+            # caller cannot forge their own mTLS context.
+            header_up -X-Client-Certificate-Verified
+            header_up -X-Client-Certificate-SHA256
+            header_up -X-Client-Certificate-Subject
+            header_up -X-Client-Certificate-SAN
+
+            # SUCCESS when the cert validated against trust_pool.
+            header_up X-Client-Certificate-Verified "{tls_client_certificate_verified}"
+            header_up X-Client-Certificate-SHA256   "{tls_client_fingerprint}"
+            header_up X-Client-Certificate-Subject  "{tls_client_subject}"
+            # Caddy exposes SANs as space-joined list under
+            # {tls_client_san}; floria expects comma-joined. The
+            # `replace_all` directive keeps both shapes interchangeable.
+            header_up X-Client-Certificate-SAN      "{tls_client_san}"
+        }
+    }
+
+    handle {
+        respond "not found" 404
+    }
+}

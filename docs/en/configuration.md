@@ -125,6 +125,8 @@ http {
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
 | `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | Ingress-provided header used to signal verified mTLS client auth |
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | Ingress-provided header carrying the client certificate fingerprint |
+| `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | Ingress-provided header carrying the client certificate Subject DN |
+| `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | Ingress-provided header carrying the comma-joined SAN list |
 | `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service DID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
 | `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service DID per window |
@@ -174,6 +176,8 @@ http {
 ```
 
 In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
+
+For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
 
 ### `metrics`
 

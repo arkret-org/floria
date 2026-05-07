@@ -1,0 +1,111 @@
+# Soflare – nginx reverse-proxy reference for mTLS-fronted /notify.
+#
+# This sample terminates TLS, validates the client certificate against
+# a pinned trust root chain, and forwards the four headers that
+# floria's `notify_auth` mTLS profile binds against:
+#
+#   X-Client-Certificate-Verified  (ON / SUCCESS / FAILED:<reason>)
+#   X-Client-Certificate-SHA256    (lowercase hex sha-256 fingerprint)
+#   X-Client-Certificate-Subject   (RFC 2253 / RFC 4514 distinguished name)
+#   X-Client-Certificate-SAN       (comma-separated DNS:/URI:/email: SANs)
+#
+# Header names match floria's defaults; if you customise them in
+# `http.notify_auth.mtls_*_header`, rename the proxy_set_header lines
+# to match.
+#
+# Trust roots:
+# - `ssl_client_certificate` is the bundle of intermediate + root CAs
+#   that floria's tenants are allowed to chain to. Pin this file (and
+#   its rotation) the same way you pin provider credentials — see
+#   docs/en/credential-rotation.md.
+# - `ssl_verify_depth` should be tight enough to reject deep, attacker
+#   controlled chains; 2 is enough for "issued by tenant CA which was
+#   issued by your private root".
+# - Use a fingerprint allowlist on the gateway side
+#   (`mtls_cert_fingerprints`) plus DN/SAN binding so a compromised
+#   tenant CA cannot mint a fresh cert that silently chains.
+#
+# `ssl_verify_client optional_no_ca` lets unauthenticated `/health`
+# probes skip the cert check; `optional` would force a chain check
+# even on health probes. floria's mTLS profile only matters on
+# `/api/v1/push/notify`, so we hand the verification result through
+# explicitly with `$ssl_client_verify` and let the gateway enforce.
+
+http {
+    # Map the verification result into the boolean shape floria expects.
+    # Anything that isn't "SUCCESS" should fail closed, including the
+    # explicit "NONE" returned for callers that never presented a cert.
+    map $ssl_client_verify $client_cert_verified {
+        default       "FAILED";
+        "SUCCESS"     "SUCCESS";
+    }
+
+    # nginx exposes the cert fingerprint as a colon-separated SHA-1.
+    # Floria binds against SHA-256 in lowercase hex; nginx >= 1.11.6
+    # provides $ssl_client_fingerprint with sha-256 when configured
+    # via `ssl_client_certificate` and a recent OpenSSL build. If your
+    # nginx only exposes SHA-1, compute SHA-256 in your edge layer
+    # (e.g. Lua / njs) instead — DO NOT fall back to SHA-1.
+    #
+    # Example njs implementation: https://github.com/nginx/njs-examples
+    map $ssl_client_fingerprint $client_cert_sha256 {
+        default       $ssl_client_fingerprint;
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name push.example.com;
+
+        # Server-side TLS material.
+        ssl_certificate     /etc/floria/tls/server.crt;
+        ssl_certificate_key /etc/floria/tls/server.key;
+        ssl_protocols       TLSv1.3;
+        ssl_ciphers         TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;
+
+        # ====== mTLS trust root chain ======
+        # Bundle of intermediate + root CAs that tenants may chain to.
+        ssl_client_certificate /etc/floria/tls/tenant-ca-bundle.pem;
+        ssl_verify_client      optional_no_ca;
+        ssl_verify_depth       2;
+
+        # Forward the parsed certificate fields to floria.
+        proxy_set_header Host                            $host;
+        proxy_set_header X-Forwarded-For                 $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto               $scheme;
+        proxy_set_header X-Client-Certificate-Verified   $client_cert_verified;
+        proxy_set_header X-Client-Certificate-SHA256     $client_cert_sha256;
+        proxy_set_header X-Client-Certificate-Subject    $ssl_client_s_dn;
+        # nginx exposes SANs only via the full PEM ($ssl_client_escaped_cert);
+        # extract them in your edge layer and feed the comma-joined list
+        # here. Leaving this empty will cause floria to reject any
+        # principal that requires `mtls_subject_alt_names`.
+        proxy_set_header X-Client-Certificate-SAN        "";
+
+        # Strip any client-supplied copies so an upstream caller can't
+        # forge their own mTLS context.
+        proxy_set_header X-Client-Certificate-Verified   $client_cert_verified;
+        proxy_set_header X-Client-Certificate-SHA256     $client_cert_sha256;
+        proxy_set_header X-Client-Certificate-Subject    $ssl_client_s_dn;
+
+        location /api/v1/push/notify {
+            proxy_pass http://floria-upstream;
+        }
+
+        # /health and /ready are unauthenticated by design; do not
+        # require client certs and do not propagate the mTLS headers.
+        location ~ ^/(health|ready)$ {
+            proxy_set_header X-Client-Certificate-Verified "";
+            proxy_set_header X-Client-Certificate-SHA256   "";
+            proxy_set_header X-Client-Certificate-Subject  "";
+            proxy_set_header X-Client-Certificate-SAN      "";
+            proxy_pass http://floria-upstream;
+        }
+    }
+
+    upstream floria-upstream {
+        server floria:5000;
+        keepalive 32;
+    }
+}

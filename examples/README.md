@@ -9,6 +9,7 @@ Files:
 - `minimal.kdl`: minimal KDL config with one FCM HTTP v1 pushkin entry
 - `minimal.notify.request.json`: canonical `/api/v1/push/notify` request body
 - `compose.yml`: Docker Compose example for a fuller local deployment
+- `reverse-proxy/`: nginx and Caddy samples for TLS termination + mTLS trust root chain (see [`docs/en/reverse-proxy.md`](../docs/en/reverse-proxy.md))
 
 Run locally:
 

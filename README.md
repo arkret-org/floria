@@ -44,6 +44,7 @@ The config format is detected by file extension:
 
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
 See [docs/en/credential-rotation.md](./docs/en/credential-rotation.md) for the credential rotation runbook.
+See [docs/en/reverse-proxy.md](./docs/en/reverse-proxy.md) for the TLS-termination / mTLS reverse-proxy reference (sample nginx and Caddy configs in `examples/reverse-proxy/`).
 
 Quick notes:
 - `proxy` in the config file takes precedence over `HTTPS_PROXY`

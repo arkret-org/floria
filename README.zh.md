@@ -44,6 +44,7 @@
 
 完整配置参考请参阅 [docs/zh/configuration.md](./docs/zh/configuration.md)。
 凭据轮换流程请参阅 [docs/zh/credential-rotation.md](./docs/zh/credential-rotation.md)。
+反向代理 / TLS 终结 / mTLS 部署细节请参阅 [docs/zh/reverse-proxy.md](./docs/zh/reverse-proxy.md)（nginx 与 Caddy 参考样例位于 `examples/reverse-proxy/`）。
 
 要点：
 - 配置文件中的 `proxy` 优先于 `HTTPS_PROXY` 环境变量

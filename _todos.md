@@ -1,7 +1,7 @@
 # floria TODO
 
 > 整理日期: 2026-05-07
-> 范围: Contrix Push Gateway。当前基线: provider capability matrix 已冻结，production_mode 已落地，retry/DLQ + replay nonce + Redis 限流 + Custom URL pushkin 已落地。
+> 范围: Contrix Push Gateway。当前基线: provider capability matrix 已冻结，production_mode 已落地，retry/DLQ + replay nonce + Redis 限流 + Custom URL pushkin 已落地，TLS 反向代理 runbook 已就绪。
 
 ## 当前状态摘要
 
@@ -9,7 +9,7 @@
 - legacy HTTP/DTO/config alias 已删除；service 模块拆分、privacy fail-closed、legacy-shaped reject、delivery receipt redaction 都有回归测试。
 - F2 provider_capabilities matrix 已冻结到 `PROVIDER_CAPABILITIES_VERSION = "2026-05-07"`。
 - 全功能面（A1-A5、R1-R5、B1-B5、O1-O5、F1/F3/F4）已落地。
-- 本仓唯一剩余开放项是 TLS-side trust roots 需 reverse-proxy 协同。
+- 本仓所有开放任务均已闭环；mTLS 入口由 `docs/{en,zh}/reverse-proxy.md` 与 `examples/reverse-proxy/` 中的 nginx / Caddy 参考配置承担运维侧。
 
 ## 标记说明
 
@@ -21,9 +21,7 @@
 
 ## 开放任务
 
-| # | 状态 | 任务 | 文件/区域 | 说明 |
-|---|---|---|---|---|
-| A4-tls 🔒 ⚠ | `[~]` | TLS-side trust roots | reverse-proxy 配置 | gateway 已强制 `mtls_subject_dn`/`mtls_subject_alt_names` 与 fingerprint allowlist；TLS 终结端的 trust root 链仍需 reverse-proxy 协同。 |
+（无）
 
 ## 跨项目登记
 
@@ -41,3 +39,4 @@
 - `[x]` R1 Redis dedup、R2 Redis rate-limit、R3 retry/DLQ + 后台 worker、R4 per-pushkin/per-app metrics、R5 `/notify` span。
 - `[x]` B1 APNs JWT rotation、B2 FCM HTTP/2 batching、B3 WebPush VAPID rotation、B4 JPush channel-aware retry、B5 Custom URL pushkin。
 - `[x]` O1 Dockerfile 多阶段最小化、O2 credential-rotation runbook、O3 sample-secret scan + grammar regression、O4 production_mode startup validation、O5 service blackbox tests 拆分。
+- `[x]` A4-tls 反向代理参考: `docs/{en,zh}/reverse-proxy.md` + `examples/reverse-proxy/{nginx.conf,Caddyfile}.sample`，配置文档补齐 `mtls_subject_dn_header` / `mtls_subject_alt_names_header`。

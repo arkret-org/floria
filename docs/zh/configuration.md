@@ -124,6 +124,8 @@ http {
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
 | `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | 由入口层注入、表示 mTLS 已校验通过的 header |
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | 由入口层注入、携带客户端证书指纹的 header |
+| `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | 由入口层注入、携带客户端证书 Subject DN 的 header |
+| `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | 由入口层注入、携带逗号分隔 SAN 列表的 header |
 | `notify_auth.service_principals` | object | — | 以 origin service DID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
 | `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service DID 在单窗口内允许的 `/notify` 次数 |
@@ -173,6 +175,8 @@ http {
 ```
 
 生产部署时，应让 `/api/v1/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
+
+启用 mTLS 入口时，TLS 终结的反向代理负责用固化的信任根链校验客户端证书，并把上表中的 4 条 `X-Client-Certificate-*` header 转发给 gateway。详见 [docs/zh/reverse-proxy.md](./reverse-proxy.md) 与 `examples/reverse-proxy/` 中的 nginx / Caddy 参考配置。
 
 ### `metrics`
 
