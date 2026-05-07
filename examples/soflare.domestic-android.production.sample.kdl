@@ -11,7 +11,7 @@
 
 log {
   access {
-    x_forwarded_for true
+    x_forwarded_for #true
   }
 }
 
@@ -22,17 +22,17 @@ http {
 
 metrics {
   prometheus {
-    enabled true
+    enabled #true
     address "127.0.0.1"
     port 8000
   }
   opentracing {
-    enabled false
+    enabled #false
     implementation "jaeger"
     service_name "floria"
   }
   sentry {
-    enabled false
+    enabled #false
   }
 }
 
@@ -50,11 +50,11 @@ apps {
     inflight_request_limit 512
     platforms "android" "hmos"
     time_to_live 86400
-    apns_production true
+    apns_production #true
     builder_id 1
     large_icon "https://cdn.example.com/push/icon.png"
     intent "intent:#Intent;component=com.example.android/.MainActivity;end"
-    send_badge_counts true
+    send_badge_counts #true
     third_party_channel {
       xiaomi {
         distribution "jpush"
@@ -90,7 +90,7 @@ apps {
     inflight_request_limit 512
     channel_id "messages"
     ttl_seconds 3600
-    send_badge_counts true
+    send_badge_counts #true
     click_action {
       type 2
       url "https://example.com/app"
@@ -99,7 +99,7 @@ apps {
       collapse_key -1
     }
     android_notification {
-      default_sound true
+      default_sound #true
     }
   }
 
@@ -115,7 +115,7 @@ apps {
     inflight_request_limit 512
     channel_id "messages"
     ttl_seconds 3600
-    send_badge_counts true
+    send_badge_counts #true
     click_action {
       type 2
       url "https://example.com/app"
@@ -124,7 +124,7 @@ apps {
       collapse_key -1
     }
     android_notification {
-      default_sound true
+      default_sound #true
     }
   }
 
@@ -135,14 +135,14 @@ apps {
     restricted_package_name "com.example.android"
     max_connections 20
     inflight_request_limit 512
-    pass_through false
+    pass_through #false
     notify_type 2
     time_to_live 3600
     notify_id 1
     channel_id "messages"
     notify_effect 2
     intent_uri "intent:#Intent;component=com.example.android/.MainActivity;end"
-    send_badge_counts true
+    send_badge_counts #true
     extra {
       notification_style_type 1
     }
@@ -157,7 +157,7 @@ apps {
     inflight_request_limit 512
     channel_id "messages"
     click_action_type 1
-    send_badge_counts true
+    send_badge_counts #true
     action_parameters {
       action_type 1
     }
@@ -176,7 +176,7 @@ apps {
     inflight_request_limit 512
     channel_id "messages"
     click_action_type 1
-    send_badge_counts true
+    send_badge_counts #true
     action_parameters {
       action_type 1
     }
@@ -201,14 +201,14 @@ apps {
     category "IM"
     push_mode 0
     notify_id 1
-    foreground_show true
-    send_badge_counts true
+    foreground_show #true
+    send_badge_counts #true
     extra {
       callback.id "push-receipt"
       callback.param "matrix"
     }
     timed_display {
-      overtimeDisplay true
+      overtimeDisplay #true
       showStartTime 1735707600000
       showEndTime 1735711200000
     }

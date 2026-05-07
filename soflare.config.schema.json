@@ -1,0 +1,369 @@
+{
+  "$id": "https://contrix.dev/schema/floria/2026-05-07/soflare.config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
+  "properties": {
+    "apps": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "description": "Per-provider keys are passed through; required fields differ per `type` and are validated at startup.",
+        "properties": {
+          "inflight_request_limit": {
+            "default": 512,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "max_connections": {
+            "default": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "apns",
+              "fcm",
+              "honor",
+              "huawei",
+              "jpush",
+              "oneplus",
+              "oppo",
+              "vivo",
+              "webpush",
+              "xiaomi"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "description": "Map of app identifiers to provider configuration.",
+      "type": "object"
+    },
+    "http": {
+      "additionalProperties": false,
+      "properties": {
+        "bind_addresses": {
+          "default": "127.0.0.1",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ]
+        },
+        "notify_auth": {
+          "additionalProperties": false,
+          "properties": {
+            "bearer_token_hashes": {
+              "description": "Plain or `sha256:`-prefixed 32-byte hex digests of bearer tokens.",
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "bearer_tokens": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "gateway_service_did": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mtls_fingerprint_header": {
+              "default": "x-client-certificate-sha256",
+              "type": "string"
+            },
+            "mtls_verified_header": {
+              "default": "x-client-certificate-verified",
+              "type": "string"
+            },
+            "plaintext_metadata_service_dids": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "production_mode": {
+              "default": false,
+              "description": "When true, refuses to start in profiles that allow anonymous or bearer-only auth without HTTP Message Signature/mTLS.",
+              "type": "boolean"
+            },
+            "require_message_signatures": {
+              "default": false,
+              "type": "boolean"
+            },
+            "service_principals": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "allow_plaintext_metadata": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "bearer_token_hashes": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "bearer_tokens": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "mtls_cert_fingerprints": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ]
+                  },
+                  "require_mtls": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "service_endpoint": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "service_type": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "signature_key_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "signature_public_key_hex": {
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "signature_max_skew_seconds": {
+              "default": 300,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "trusted_service_dids": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "notify_dedup": {
+          "additionalProperties": false,
+          "properties": {
+            "backend": {
+              "default": "memory",
+              "enum": [
+                "memory",
+                "redis"
+              ],
+              "type": "string"
+            },
+            "key_prefix": {
+              "default": "floria",
+              "type": "string"
+            },
+            "redis_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "notify_dedup_ttl_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notify_rate_limits": {
+          "additionalProperties": false,
+          "properties": {
+            "per_app_id": {
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "per_endpoint": {
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "per_origin_service": {
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "per_provider": {
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "per_push_key_hash": {
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "window_seconds": {
+              "default": 60,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "port": {
+          "default": 5000,
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "log": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "additionalProperties": false,
+          "properties": {
+            "x_forwarded_for": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "prometheus": {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "default": "127.0.0.1",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "port": {
+              "default": 8000,
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "proxy": {
+      "description": "Outbound proxy URL for APNs/FCM/WebPush. Falls back to HTTPS_PROXY env.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "floria gateway configuration",
+  "type": "object",
+  "x-floria-schema-version": "2026-05-07"
+}

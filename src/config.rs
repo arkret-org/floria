@@ -261,6 +261,12 @@ pub struct NotifyAuthConfig {
     pub signature_max_skew_seconds: u64,
     pub mtls_verified_header: String,
     pub mtls_fingerprint_header: String,
+    /// When true, refuse to accept bearer-only or anonymous notify
+    /// requests; every authenticated caller must satisfy HTTP Message
+    /// Signature or mTLS, and the gateway DID must be configured.
+    /// Also forbids dev-only conveniences (anonymous bypass, bearer
+    /// fallback when no signature is present on a known principal).
+    pub production_mode: bool,
     #[serde(default)]
     pub service_principals: HashMap<String, NotifyServicePrincipalConfig>,
     #[serde(flatten)]
@@ -322,8 +328,74 @@ impl NotifyAuthConfig {
         for (did, principal) in &self.service_principals {
             principal.validate(did)?;
         }
+        if self.production_mode {
+            self.validate_production_mode()?;
+        }
         Ok(())
     }
+
+    fn validate_production_mode(&self) -> Result<()> {
+        if !self.enabled() {
+            bail!(
+                "http.notify_auth.production_mode requires authentication; configure service_principals or signed access"
+            );
+        }
+        if self.gateway_service_did.is_none() {
+            bail!(
+                "http.notify_auth.production_mode requires http.notify_auth.gateway_service_did"
+            );
+        }
+        if self.service_principals.is_empty() {
+            bail!(
+                "http.notify_auth.production_mode requires at least one configured service_principal"
+            );
+        }
+        for (did, principal) in &self.service_principals {
+            let has_signature = principal.signature_key_id.is_some()
+                && principal.signature_public_key_hex.is_some();
+            if !has_signature && !principal.require_mtls {
+                bail!(
+                    "http.notify_auth.production_mode requires service_principals.{did} to set HTTP Message Signature or require_mtls"
+                );
+            }
+            if principal.allow_plaintext_metadata {
+                let kind = principal
+                    .service_type
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                let Some(kind) = kind else {
+                    bail!(
+                        "http.notify_auth.production_mode requires service_principals.{did}.service_type when allow_plaintext_metadata is true"
+                    );
+                };
+                if !is_plaintext_eligible_service_kind(kind) {
+                    bail!(
+                        "http.notify_auth.production_mode rejects allow_plaintext_metadata for service_type `{kind}` on service_principals.{did}"
+                    );
+                }
+            }
+        }
+        if !self.bearer_tokens.is_empty() || !self.bearer_token_hashes.is_empty() {
+            bail!(
+                "http.notify_auth.production_mode rejects gateway-wide bearer_tokens; configure per-principal credentials instead"
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Caller `service_type` values that are allowed to send plaintext
+/// metadata (sender/space/flow names, DID literals, etc.).
+///
+/// Active service kinds — kept in sync with `cx.profile.*` artifacts in
+/// the principal services. New kinds must be reviewed for whether they
+/// can legitimately read/forward plaintext bound to a user identity.
+pub fn is_plaintext_eligible_service_kind(kind: &str) -> bool {
+    matches!(
+        kind.trim().to_ascii_lowercase().as_str(),
+        "sync" | "sync_service" | "principal" | "principal_service"
+    )
 }
 
 impl Default for NotifyAuthConfig {
@@ -338,6 +410,7 @@ impl Default for NotifyAuthConfig {
             signature_max_skew_seconds: 300,
             mtls_verified_header: "x-client-certificate-verified".to_owned(),
             mtls_fingerprint_header: "x-client-certificate-sha256".to_owned(),
+            production_mode: false,
             service_principals: HashMap::new(),
             extra: Map::new(),
         }
@@ -781,6 +854,204 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
     Ok(format!("[{addr}]:{default_port}"))
 }
 
+// --- Schema artifact ---
+
+/// Returns the JSON schema for `floria.{kdl,yaml}` configuration.
+///
+/// Both YAML and KDL deserialize through the same `Config` struct, so a
+/// single schema document covers both formats. Consumers (ops tooling,
+/// editor tooling, soland config drift detection) should refresh when
+/// `Config::SCHEMA_VERSION` changes.
+pub fn config_json_schema() -> Value {
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://contrix.dev/schema/floria/2026-05-07/soflare.config.schema.json",
+        "title": "floria gateway configuration",
+        "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
+        "type": "object",
+        "x-floria-schema-version": Config::SCHEMA_VERSION,
+        "additionalProperties": false,
+        "properties": {
+            "http": http_schema(),
+            "log": log_schema(),
+            "metrics": metrics_schema(),
+            "proxy": {"type": ["string", "null"], "description": "Outbound proxy URL for APNs/FCM/WebPush. Falls back to HTTPS_PROXY env."},
+            "apps": {
+                "type": "object",
+                "additionalProperties": app_config_schema(),
+                "description": "Map of app identifiers to provider configuration."
+            }
+        }
+    })
+}
+
+fn http_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 5000},
+            "bind_addresses": {
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1}
+                ],
+                "default": "127.0.0.1"
+            },
+            "notify_dedup_ttl_seconds": {"type": "integer", "minimum": 0, "default": 0},
+            "notify_dedup": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
+                    "redis_url": {"type": ["string", "null"]},
+                    "key_prefix": {"type": "string", "default": "floria"}
+                }
+            },
+            "notify_auth": notify_auth_schema(),
+            "notify_rate_limits": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "window_seconds": {"type": "integer", "minimum": 1, "default": 60},
+                    "per_origin_service": {"type": ["integer", "null"], "minimum": 0},
+                    "per_app_id": {"type": ["integer", "null"], "minimum": 0},
+                    "per_provider": {"type": ["integer", "null"], "minimum": 0},
+                    "per_push_key_hash": {"type": ["integer", "null"], "minimum": 0},
+                    "per_endpoint": {"type": ["integer", "null"], "minimum": 0}
+                }
+            }
+        }
+    })
+}
+
+fn notify_auth_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "bearer_tokens": string_or_string_list_schema(),
+            "bearer_token_hashes": {
+                "description": "Plain or `sha256:`-prefixed 32-byte hex digests of bearer tokens.",
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}}
+                ]
+            },
+            "trusted_service_dids": string_or_string_list_schema(),
+            "plaintext_metadata_service_dids": string_or_string_list_schema(),
+            "gateway_service_did": {"type": ["string", "null"]},
+            "require_message_signatures": {"type": "boolean", "default": false},
+            "signature_max_skew_seconds": {"type": "integer", "minimum": 1, "default": 300},
+            "mtls_verified_header": {"type": "string", "default": "x-client-certificate-verified"},
+            "mtls_fingerprint_header": {"type": "string", "default": "x-client-certificate-sha256"},
+            "production_mode": {
+                "type": "boolean",
+                "default": false,
+                "description": "When true, refuses to start in profiles that allow anonymous or bearer-only auth without HTTP Message Signature/mTLS."
+            },
+            "service_principals": {
+                "type": "object",
+                "additionalProperties": service_principal_schema()
+            }
+        }
+    })
+}
+
+fn service_principal_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "service_type": {"type": ["string", "null"]},
+            "allow_plaintext_metadata": {"type": "boolean", "default": false},
+            "bearer_tokens": string_or_string_list_schema(),
+            "bearer_token_hashes": string_or_string_list_schema(),
+            "signature_key_id": {"type": ["string", "null"]},
+            "signature_public_key_hex": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"},
+            "require_mtls": {"type": "boolean", "default": false},
+            "mtls_cert_fingerprints": string_or_string_list_schema(),
+            "service_endpoint": {"type": ["string", "null"]}
+        }
+    })
+}
+
+fn log_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "access": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "x_forwarded_for": {"type": "boolean", "default": false}
+                }
+            }
+        }
+    })
+}
+
+fn metrics_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "prometheus": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "enabled": {"type": "boolean", "default": false},
+                    "address": {"type": "string", "default": "127.0.0.1"},
+                    "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 8000}
+                }
+            }
+        }
+    })
+}
+
+fn app_config_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+            "type": {
+                "type": "string",
+                "enum": [
+                    "apns",
+                    "fcm",
+                    "honor",
+                    "huawei",
+                    "jpush",
+                    "oneplus",
+                    "oppo",
+                    "vivo",
+                    "webpush",
+                    "xiaomi"
+                ]
+            },
+            "inflight_request_limit": {"type": "integer", "minimum": 1, "default": 512},
+            "max_connections": {"type": "integer", "minimum": 1, "default": 20}
+        },
+        "additionalProperties": true,
+        "description": "Per-provider keys are passed through; required fields differ per `type` and are validated at startup."
+    })
+}
+
+fn string_or_string_list_schema() -> Value {
+    serde_json::json!({
+        "oneOf": [
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}}
+        ]
+    })
+}
+
+impl Config {
+    /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
+    pub const SCHEMA_VERSION: &'static str = "2026-05-07";
+}
+
 // --- KDL support ---
 
 fn parse_kdl_to_json(body: &str) -> Result<Value> {
@@ -1108,5 +1379,269 @@ apps: {}
 
         let error = config.validate().unwrap_err().to_string();
         assert!(error.contains("bearer_token_hashes"));
+    }
+
+    #[test]
+    fn production_mode_requires_signed_or_mtls_principal() {
+        let mut config = Config::default();
+        config.http.notify_auth.production_mode = true;
+        config.http.notify_auth.gateway_service_did =
+            Some("did:web:push.example.com".to_owned());
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.bearer_tokens = vec!["principal-token".to_owned()];
+        config
+            .http
+            .notify_auth
+            .service_principals
+            .insert("did:web:sync.example.com".to_owned(), principal);
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.contains("HTTP Message Signature or require_mtls"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn production_mode_rejects_gateway_wide_bearer_tokens() {
+        let mut config = Config::default();
+        config.http.notify_auth.production_mode = true;
+        config.http.notify_auth.gateway_service_did =
+            Some("did:web:push.example.com".to_owned());
+        config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+        principal.signature_public_key_hex = Some("a".repeat(64));
+        config
+            .http
+            .notify_auth
+            .service_principals
+            .insert("did:web:sync.example.com".to_owned(), principal);
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.contains("rejects gateway-wide bearer_tokens"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn production_mode_rejects_plaintext_for_non_eligible_kind() {
+        let mut config = Config::default();
+        config.http.notify_auth.production_mode = true;
+        config.http.notify_auth.gateway_service_did =
+            Some("did:web:push.example.com".to_owned());
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+        principal.signature_public_key_hex = Some("b".repeat(64));
+        principal.allow_plaintext_metadata = true;
+        principal.service_type = Some("legacy_pusher".to_owned());
+        config
+            .http
+            .notify_auth
+            .service_principals
+            .insert("did:web:sync.example.com".to_owned(), principal);
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.contains("rejects allow_plaintext_metadata for service_type"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn production_mode_accepts_signed_eligible_principal() {
+        let mut config = Config::default();
+        config.http.notify_auth.production_mode = true;
+        config.http.notify_auth.gateway_service_did =
+            Some("did:web:push.example.com".to_owned());
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+        principal.signature_public_key_hex = Some("c".repeat(64));
+        principal.allow_plaintext_metadata = true;
+        principal.service_type = Some("sync".to_owned());
+        config
+            .http
+            .notify_auth
+            .service_principals
+            .insert("did:web:sync.example.com".to_owned(), principal);
+
+        config.validate().expect("eligible production principal must validate");
+    }
+
+    #[test]
+    fn schema_artifact_matches_committed_snapshot() {
+        let snapshot_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("soflare.config.schema.json");
+        let live = serde_json::to_string_pretty(&config_json_schema()).unwrap();
+        let on_disk = std::fs::read_to_string(&snapshot_path).expect(
+            "soflare.config.schema.json missing — refresh with `cargo run --example emit_schema > soflare.config.schema.json`",
+        );
+        let on_disk = on_disk.trim_end_matches(['\n', '\r']);
+        assert_eq!(
+            live.trim_end_matches(['\n', '\r']),
+            on_disk,
+            "soflare.config.schema.json is stale — refresh with `cargo run --example emit_schema > soflare.config.schema.json`"
+        );
+    }
+
+    #[test]
+    fn yaml_and_kdl_produce_equivalent_configs() {
+        let yaml = r#"
+http:
+  port: 8080
+  bind_addresses:
+    - "0.0.0.0"
+  notify_dedup_ttl_seconds: 30
+  notify_dedup:
+    backend: memory
+    key_prefix: floria
+  notify_rate_limits:
+    window_seconds: 30
+    per_origin_service: 10
+    per_app_id: 20
+metrics:
+  prometheus:
+    enabled: true
+    address: "127.0.0.1"
+    port: 9000
+log:
+  access:
+    x_forwarded_for: true
+apps:
+  com.example.test:
+    type: apns
+    keyfile: "./test.p8"
+    inflight_request_limit: 256
+"#;
+        let kdl = r#"
+http {
+    port 8080
+    bind_addresses "0.0.0.0"
+    notify_dedup_ttl_seconds 30
+    notify_dedup {
+        backend "memory"
+        key_prefix "floria"
+    }
+    notify_rate_limits {
+        window_seconds 30
+        per_origin_service 10
+        per_app_id 20
+    }
+}
+metrics {
+    prometheus {
+        enabled #true
+        address "127.0.0.1"
+        port 9000
+    }
+}
+log {
+    access {
+        x_forwarded_for #true
+    }
+}
+apps {
+    com.example.test {
+        type "apns"
+        keyfile "./test.p8"
+        inflight_request_limit 256
+    }
+}
+"#;
+
+        let yaml_config: Config = serde_saphyr::from_str(yaml).unwrap();
+        let kdl_json = parse_kdl_to_json(kdl).unwrap();
+        let kdl_config: Config = serde_json::from_value(kdl_json).unwrap();
+
+        // Compare via the public-shaped projection — both must produce
+        // the same observable configuration.
+        assert_eq!(yaml_config.http.port, kdl_config.http.port);
+        assert_eq!(yaml_config.http.bind_addresses, kdl_config.http.bind_addresses);
+        assert_eq!(
+            yaml_config.http.notify_dedup_ttl_seconds,
+            kdl_config.http.notify_dedup_ttl_seconds
+        );
+        assert_eq!(
+            yaml_config.http.notify_dedup.backend_kind(),
+            kdl_config.http.notify_dedup.backend_kind()
+        );
+        assert_eq!(
+            yaml_config.http.notify_rate_limits.window_seconds,
+            kdl_config.http.notify_rate_limits.window_seconds
+        );
+        assert_eq!(
+            yaml_config.http.notify_rate_limits.per_origin_service,
+            kdl_config.http.notify_rate_limits.per_origin_service
+        );
+        assert_eq!(
+            yaml_config.http.notify_rate_limits.per_app_id,
+            kdl_config.http.notify_rate_limits.per_app_id
+        );
+        assert_eq!(
+            yaml_config.metrics.prometheus.enabled,
+            kdl_config.metrics.prometheus.enabled
+        );
+        assert_eq!(
+            yaml_config.metrics.prometheus.port,
+            kdl_config.metrics.prometheus.port
+        );
+        assert_eq!(yaml_config.log.access.x_forwarded_for, kdl_config.log.access.x_forwarded_for);
+        assert_eq!(yaml_config.apps.len(), kdl_config.apps.len());
+        let yaml_app = yaml_config.apps.get("com.example.test").unwrap();
+        let kdl_app = kdl_config.apps.get("com.example.test").unwrap();
+        assert_eq!(yaml_app.kind, kdl_app.kind);
+        assert_eq!(
+            yaml_app.get_string("keyfile").unwrap(),
+            kdl_app.get_string("keyfile").unwrap()
+        );
+        assert_eq!(
+            yaml_app.get_u64("inflight_request_limit").unwrap(),
+            kdl_app.get_u64("inflight_request_limit").unwrap()
+        );
+    }
+
+    #[test]
+    fn kdl_to_json_round_trip_preserves_nested_structure() {
+        let kdl = r#"
+apps {
+    com.example.jpush {
+        type "jpush"
+        app_key "test-key"
+        master_secret "test-secret"
+        third_party_channel {
+            xiaomi {
+                distribution "jpush"
+            }
+            huawei {
+                distribution "first_ospush"
+            }
+        }
+    }
+}
+"#;
+        let parsed = parse_kdl_to_json(kdl).unwrap();
+        let serialized = serde_json::to_string(&parsed).unwrap();
+        let reparsed: Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(parsed, reparsed);
+
+        // Round-tripping through Config preserves the nested provider config.
+        let config: Config = serde_json::from_value(parsed).unwrap();
+        let app = config.apps.get("com.example.jpush").unwrap();
+        let channel = app.get_object("third_party_channel").unwrap().unwrap();
+        assert_eq!(
+            channel
+                .get("xiaomi")
+                .and_then(|value| value.get("distribution"))
+                .and_then(Value::as_str),
+            Some("jpush"),
+        );
+        assert_eq!(
+            channel
+                .get("huawei")
+                .and_then(|value| value.get("distribution"))
+                .and_then(Value::as_str),
+            Some("first_ospush"),
+        );
     }
 }

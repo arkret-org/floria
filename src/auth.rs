@@ -48,6 +48,17 @@ pub fn authenticate_notify_request(
     reject_query_string_auth(req)?;
 
     if !auth.enabled() {
+        if auth.production_mode {
+            tracing::error!(
+                request_id,
+                "rejecting /notify request: production_mode is enabled but notify_auth is not configured"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "anonymous /notify is disabled in production mode".to_owned(),
+            });
+        }
         return Ok(AuthenticatedNotifyCaller {
             origin_service_did: "<anonymous>".to_owned(),
             allow_plaintext_metadata: true,
@@ -97,14 +108,27 @@ pub fn authenticate_notify_request(
             });
         }
 
-        if !authenticated
-            && bearer_matches(
+        if !authenticated {
+            if auth.production_mode {
+                tracing::warn!(
+                    request_id,
+                    origin_service_did = %origin_did,
+                    "rejecting /notify request: production_mode requires HTTP Message Signature or mTLS, bearer fallback is disabled"
+                );
+                return Err(AuthFailure {
+                    status: StatusCode::UNAUTHORIZED,
+                    code: "unauthenticated",
+                    message: "production mode requires HTTP Message Signature or mTLS"
+                        .to_owned(),
+                });
+            }
+            if bearer_matches(
                 req,
                 &principal.bearer_tokens,
                 &principal.bearer_token_hashes,
-            )
-        {
-            authenticated = true;
+            ) {
+                authenticated = true;
+            }
         }
         if !authenticated {
             tracing::warn!(
@@ -121,13 +145,52 @@ pub fn authenticate_notify_request(
 
         verify_mtls_profile(req, auth, principal, &origin_did, request_id)?;
 
+        // RFC 9530 Content-Digest is verified inside verify_message_signature
+        // when a signature was supplied. When the caller authenticated via
+        // mTLS only (no signature) we still want body integrity in
+        // production mode, so verify the digest header against the raw
+        // body here as well.
+        if auth.production_mode && !has_signature_headers(req) {
+            verified_content_digest(req, body)?;
+        }
+
+        let allow_plaintext = principal.allow_plaintext_metadata
+            && principal_is_plaintext_eligible(principal);
         return Ok(AuthenticatedNotifyCaller {
             origin_service_did: origin_did.to_owned(),
-            allow_plaintext_metadata: principal.allow_plaintext_metadata,
+            allow_plaintext_metadata: allow_plaintext,
+        });
+    }
+
+    if auth.production_mode {
+        tracing::warn!(
+            request_id,
+            origin_service_did = origin_did.as_deref().unwrap_or("<missing>"),
+            "rejecting /notify request: production_mode rejects gateway-wide bearer fallback"
+        );
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthenticated",
+            message: "production mode requires a configured service principal".to_owned(),
         });
     }
 
     authenticate_bearer_request(req, auth, origin_did.as_deref(), request_id)
+}
+
+fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> bool {
+    let Some(kind) = principal
+        .service_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        // Without a declared service kind we keep the legacy
+        // permissive behaviour outside of production mode; production
+        // validation already rejects this combination at startup.
+        return true;
+    };
+    crate::config::is_plaintext_eligible_service_kind(kind)
 }
 
 fn reject_query_string_auth(req: &Request) -> Result<(), AuthFailure> {
@@ -233,12 +296,13 @@ fn authenticate_bearer_request(
 
     verify_destination_service_did(req, auth, origin_did, request_id)?;
 
+    let allow_plaintext_metadata = auth
+        .plaintext_metadata_service_dids
+        .iter()
+        .any(|candidate| candidate == origin_did);
     Ok(AuthenticatedNotifyCaller {
         origin_service_did: origin_did.to_owned(),
-        allow_plaintext_metadata: auth
-            .plaintext_metadata_service_dids
-            .iter()
-            .any(|candidate| candidate == origin_did),
+        allow_plaintext_metadata,
     })
 }
 

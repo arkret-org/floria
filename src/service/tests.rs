@@ -199,6 +199,23 @@ fn restricted_notify_auth_config() -> NotifyAuthConfig {
     config
 }
 
+fn production_notify_auth_config() -> NotifyAuthConfig {
+    use crate::config::NotifyServicePrincipalConfig;
+    let mut config = NotifyAuthConfig::default();
+    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.production_mode = true;
+    let mut principal = NotifyServicePrincipalConfig::default();
+    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_public_key_hex = Some(
+        "deadbeef".repeat(8),
+    );
+    principal.service_type = Some("sync".to_owned());
+    config
+        .service_principals
+        .insert("did:web:sync.example.com".to_owned(), principal);
+    config
+}
+
 fn payload(devices: Vec<Value>) -> Value {
     json!({
         "operation_id": NOTIFY_OPERATION_ID,
@@ -343,7 +360,7 @@ async fn integration_describe_lists_operational_surfaces() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    assert_eq!(body["version"], json!("2026-05-05-scaffold"));
+    assert_eq!(body["version"], json!("2026-05-07"));
 
     let surfaces = body["surfaces"].as_array().expect("surfaces array");
     let surface_names = surfaces
@@ -428,6 +445,16 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
     assert_eq!(entry["supports_badge"], json!(true));
     assert_eq!(entry["default_payload_shape"], json!("data_only_blind_wakeup"));
     assert_eq!(entry["credential_kinds"], json!(["service_account_v1"]));
+    assert_eq!(
+        entry["credential_rotation"],
+        json!("rotate_service_account_yearly_or_on_compromise")
+    );
+    assert_eq!(entry["blind_wakeup_required"], json!(true));
+    assert!(entry.get("notes").is_none());
+    assert_eq!(
+        body["provider_capabilities_version"],
+        json!(crate::pushkin::PROVIDER_CAPABILITIES_VERSION)
+    );
 }
 
 #[tokio::test]
@@ -1820,6 +1847,145 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
     }
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn production_mode_rejects_anonymous_requests() {
+    let mut config = NotifyAuthConfig::default();
+    config.production_mode = true;
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        config,
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+    let body = assert_notify_error(&mut response, "unauthenticated", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("anonymous /notify is disabled in production mode")
+    );
+}
+
+#[tokio::test]
+async fn production_mode_rejects_bearer_only_principal() {
+    use crate::config::NotifyServicePrincipalConfig;
+    let mut config = production_notify_auth_config();
+    let mut principal = NotifyServicePrincipalConfig::default();
+    principal.bearer_tokens = vec!["principal-token".to_owned()];
+    config
+        .service_principals
+        .insert("did:web:sync.example.com".to_owned(), principal);
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        config,
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .add_header("authorization", "Bearer principal-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_DID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+    let body = assert_notify_error(&mut response, "unauthenticated", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("production mode requires HTTP Message Signature or mTLS")
+    );
+}
+
+#[tokio::test]
+async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
+    let mut config = production_notify_auth_config();
+    config.bearer_tokens = vec!["gateway-token".to_owned()];
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        config,
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .add_header("authorization", "Bearer gateway-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_DID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+    let body = assert_notify_error(&mut response, "unauthenticated", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("production mode requires a configured service principal")
+    );
+}
+
+#[tokio::test]
+async fn principal_plaintext_policy_requires_eligible_service_kind() {
+    use crate::config::NotifyServicePrincipalConfig;
+    let mut config = NotifyAuthConfig::default();
+    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    let mut principal = NotifyServicePrincipalConfig::default();
+    principal.bearer_tokens = vec!["principal-token".to_owned()];
+    principal.allow_plaintext_metadata = true;
+    // `push` is a delegated push service (so the request is accepted)
+    // but is NOT plaintext-eligible (so plaintext metadata is rejected).
+    principal.service_type = Some("push".to_owned());
+    config
+        .service_principals
+        .insert("did:web:sync.example.com".to_owned(), principal);
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        config,
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .add_header("authorization", "Bearer principal-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_DID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    // The principal is allowed to push, but its declared service_type is not in
+    // the plaintext-eligible kind list, so the plaintext metadata in the
+    // payload (sender_display_name etc.) is rejected.
+    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
+    let body = assert_notify_error(&mut response, "capability_denied", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("caller is not authorized to send sender_display_name or flow/space name metadata")
+    );
 }
 
 #[tokio::test]

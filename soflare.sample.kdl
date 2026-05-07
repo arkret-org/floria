@@ -5,7 +5,7 @@
 log {
   access {
     // Proxied access log formatting is not implemented yet.
-    x_forwarded_for false
+    x_forwarded_for #false
   }
 }
 
@@ -27,16 +27,16 @@ http {
     // gateway_service_did "did:web:push.example.com"
     //
     // Stronger production profile:
-    // require_message_signatures true
+    // require_message_signatures #true
     // service_principals {
     //   "did:web:sync.example.com" {
-    //     allow_plaintext_metadata true
+    //     allow_plaintext_metadata #true
     //     bearer_tokens "replace-me"
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
     //     service_endpoint "https://push.example.com/api/v1/push/notify"
-    //     require_mtls true
+    //     require_mtls #true
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
     // }
@@ -53,17 +53,17 @@ http {
 
 metrics {
   prometheus {
-    enabled false
+    enabled #false
     address "127.0.0.1"
     port 8000
   }
   opentracing {
-    enabled false
+    enabled #false
     implementation "jaeger"
     service_name "floria"
   }
   sentry {
-    enabled false
+    enabled #false
   }
 }
 
@@ -80,7 +80,7 @@ apps {
   //   team_id "DEF456GHIJ"
   //   topic "com.example.ios"
   //   platform "production"
-  //   convert_device_token_to_hex false
+  //   convert_device_token_to_hex #false
   //   inflight_request_limit 512
   // }
 
@@ -118,7 +118,7 @@ apps {
   //   max_connections 20
   //   inflight_request_limit 512
   //   time_to_live 86400
-  //   apns_production true
+  //   apns_production #true
   //   builder_id 1
   //   large_icon "https://cdn.example.com/push/icon.png"
   //   intent "intent:#Intent;component=com.example.android/.MainActivity;end"
@@ -162,7 +162,7 @@ apps {
   //     collapse_key -1
   //   }
   //   android_notification {
-  //     default_sound true
+  //     default_sound #true
   //   }
   // }
 
@@ -173,7 +173,7 @@ apps {
   //   restricted_package_name "com.example.android"
   //   max_connections 20
   //   inflight_request_limit 512
-  //   pass_through false
+  //   pass_through #false
   //   notify_type 2
   //   time_to_live 3600
   //   notify_id 1
@@ -231,12 +231,12 @@ apps {
   //   classification 1
   //   category "IM"
   //   notify_id 1
-  //   foreground_show true
+  //   foreground_show #true
   //   extra {
   //     callback.id "push-receipt"
   //   }
   //   timed_display {
-  //     overtimeDisplay true
+  //     overtimeDisplay #true
   //     showStartTime 1735707600000
   //     showEndTime 1735711200000
   //   }
@@ -259,7 +259,7 @@ apps {
   //     collapse_key -1
   //   }
   //   android_notification {
-  //     default_sound true
+  //     default_sound #true
   //   }
   // }
 

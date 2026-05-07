@@ -1,62 +1,78 @@
 # floria TODO
 
-> 更新时间：2026-05-06
-> 当前基线：仓内 legacy/compat 路径已清理到 active-only。
+> 整理日期: 2026-05-07
+> 范围: Contrix Push Gateway。当前基线: provider capability matrix 已冻结，production_mode 已落地。
 
-## 已完成收口
+## 当前状态摘要
 
-- canonical surface 只保留 `/api/v1/push/{notify,describe,bridge/describe}`、`/api/v1/integration/describe`、`/health`、`/ready` 和独立 `/metrics`
-- 已删除旧 HTTP alias、DTO/config alias、`sender_service_did` / `push_key` / `plaintext_visible_services` 兼容入口
-- FCM 已收敛为 HTTP v1 单一路径；`gcm` / `api_version` / legacy batching 已移除
-- examples / sample config / README / configuration 文档已同步到 active-only
-- service 已拆模块，privacy fail-closed、legacy-shaped input reject、delivery receipt redaction 已有回归测试
+- canonical surface: `/api/v1/push/{notify,describe,bridge/describe}`、`/api/v1/integration/describe`、`/health`、`/ready`、`/metrics`。
+- legacy HTTP/DTO/config alias 已删除；service 模块拆分、privacy fail-closed、legacy-shaped reject、delivery receipt redaction 都有回归测试。
+- F2 provider_capabilities matrix 已冻结到 `PROVIDER_CAPABILITIES_VERSION = "2026-05-07"`，新增 `credential_rotation`/`blind_wakeup_required` 字段，移除 scaffold notes。
+- F3 `soflare.config.schema.json` 已落地为提交制品；F4 KDL/YAML round-trip + 等价性测试已加入。
+- A1+A5+A3 production_mode 已落地：拒绝 anonymous、拒绝 bearer-only fallback、强制 Content-Digest，按 caller `service_type` 绑定 plaintext 政策。
+- R4 metrics 扩展 `floria_notify_delivery_outcome_by_provider_total` / `_by_app_total`、`floria_notify_rate_limit_reject_total`、`floria_notify_dedup_lookup_total`、`floria_pushkin_dispatch_seconds`。
+- R5 `/notify` 链路打 span（caller / request_id 字段），sub-events 自动继承。
+- O3 加入 `tests/sample_config_secret_scan.rs` 防止真凭据进 sample；`tests/sample_config_parse.rs` 防 KDL/YAML grammar drift（已修复 sample.kdl bare-bool bug）。
 
-## 本仓剩余任务
+## 标记说明
 
-### P0 · 近期可独立推进
+- `[ ]` 未完成
+- `[~]` 部分完成
+- `🅿` parallel-safe
+- `🔒` sequential
+- `⚠` privacy / auth / delivery contract 高风险
 
-| # | 任务 | 说明 |
-|---|---|---|
-| F2 | Pushkin trait 重构 | 抽统一 provider result / retry / backoff / dedup binding，减少各 pushkin 自己拼 dispatch 生命周期 |
-| F4 | 配置 schema 产物 | 输出单一 `soflare.config.schema.json`，让 KDL/YAML 共用一套 schema |
-| F-2 | config round-trip 测试 | 补 KDL/YAML -> JSON -> config 的 round-trip 覆盖，防止格式漂移 |
-| E1 | `bridge/describe` 的 `provider_capabilities` | 暴露每个 provider 对 batch / TTL / collapse / badge/default payload 等能力矩阵 |
+## P0 · Contract / Provider foundation
 
-### P1 · Privacy / Auth / Reliability
+| # | 状态 | 任务 | 文件/区域 | 阻塞 |
+|---|---|---|---|---|
+| F1 🔒 | `[ ]` | Pushkin trait 重构（统一 result/retry/backoff/dedup binding） | `src/pushkin/*`、`src/service/*` | 需要先与 R3 retry queue 联调，单独提 PR |
 
-| # | 任务 | 说明 |
-|---|---|---|
-| A3 | plaintext metadata policy 注入 | 从 spec/artifacts 读 active service kind，并把 plaintext-visible policy 绑定到 caller kind |
-| C1 | Redis dedup 多实例语义 | 扩展 cluster / hash strategy，明确多实例一致性边界 |
-| C2 | rate-limit 持久化 | 内存限流替换为 Redis 窗口实现 |
-| C3 | retry / dead-letter queue | provider 失败后的重试队列、最大尝试次数和失败回报事件 |
-| C4 | metrics 扩展 | 增加 per-pushkin/per-app outcome、latency、dedup、rate-limit breakdown |
-| C5 | structured tracing | `/notify` 全链路 span，带 caller / app_id / provider / outcome |
-| D1 | HTTP Message Signature 完整化 | 强制 `@method` / `@target-uri` / `@authority` / `content-digest` / `created` / `expires` |
-| D2 | Content-Digest 强制 | `/notify` 请求体必须通过 RFC 9530 digest 校验 |
-| D3 | mTLS trust roots + DID 绑定 | 配置化 client cert trust roots 与 service DID 绑定 |
-| D4 | production 禁用 bearer fallback | 非开发模式仅允许 HTTP Signature / mTLS |
+## P1 · Privacy / Auth / Reliability
 
-### P2 · Provider / Ops / CI
+| # | 状态 | 任务 | 文件/区域 | 说明 |
+|---|---|---|---|---|
+| A2 ⚠ | `[~]` | HTTP Message Signature 完整化 | `src/auth.rs` | `@method/@target-uri/@authority/content-digest/created/expires` 已强制；下一步 nonce / replay-window store。 |
+| A4 ⚠ | `[ ]` | mTLS trust roots + DID 绑定 | auth config | 已有 `mtls_cert_fingerprints` 白名单；TLS-side trust roots 需 reverse-proxy 协同。 |
+| R1 🅿 | `[ ]` | Redis dedup 多实例语义 | `src/dedup.rs` | 当前 single-redis 工作；需要 cluster / hash strategy 与一致性边界。 |
+| R2 🅿 | `[ ]` | Redis rate-limit 持久化 | `src/rate_limit.rs` | 当前内存窗口；多实例需要 sliding window 的 redis 实现。 |
+| R3 🅿 | `[ ]` | retry / dead-letter queue | delivery queue | provider 失败后的重试、最大尝试次数、失败回报事件。 |
 
-| # | 任务 | 说明 |
-|---|---|---|
-| B1 | APNs token rotation / cert fallback | 明确 JWT 轮换与失败回退行为 |
-| B2 | FCM v1 batching | 若仍需要群播优化，再引入官方 v1 batch 策略 |
-| B3 | WebPush VAPID rotation | 管理 public key / lifetime 并对外 describe |
-| B4 | JPush channel-aware retry | 把 `third_party_channel` 从透传升级到按 channel 处理重试/限流 |
-| B5 | Custom URL pushkin | HMAC / Bearer / mTLS 三套出站鉴权模型 |
-| F-1 | Docker 最小镜像 | multi-stage，压缩运行镜像体积 |
-| F-3 | provider credential rotation 文档 | 补 OPPO / vivo / 极光 / 华为等轮换手册 |
-| Q3 | sample secret scan | 对 `*.sample.{yaml,kdl}` 做真值扫描，防止误提交 |
-| Q4 | production feature 安全收口 | dev-only / mock path 在 production 下硬关闭 |
-| Q5 | blackbox tests 拆分 | 按 pushkin / 主题拆文件，方便并行扩展 |
+## P2 · Provider / Ops / CI
 
-## 跨仓任务
+| # | 状态 | 任务 | 说明 |
+|---|---|---|---|
+| B1 🅿 | `[ ]` | APNs token rotation / cert fallback | JWT 轮换与失败回退实现 |
+| B2 🅿 | `[ ]` | FCM v1 batching | 群播优化时引入官方 batch 策略 |
+| B3 🅿 | `[ ]` | WebPush VAPID rotation | public key / lifetime 管理并对外 describe |
+| B4 🅿 | `[ ]` | JPush channel-aware retry | `third_party_channel` 升级到按 channel 处理重试/限流 |
+| B5 🅿 | `[ ]` | Custom URL pushkin | HMAC / Bearer / mTLS 三套出站鉴权 |
+| O1 🅿 | `[ ]` | Docker 最小镜像 | multi-stage 减少运行镜像 |
+| O2 🅿 | `[ ]` | provider credential rotation 文档 | OPPO / vivo / 极光 / 华为运维手册 |
+| O5 🅿 | `[ ]` | blackbox tests 拆分 | 按 pushkin / 主题拆文件 |
 
-| # | 任务 | 说明 |
-|---|---|---|
-| S1 | 与 soland 联调 `bridge/describe` / drift detection | 需要跨仓稳定 contract version |
-| S2 | 与 chime SDK 联调 | 验证 register/unregister/notify shape |
-| S3 | 接入 cotest live matrix | 让 floria 成为默认 compose harness 的真实外部依赖 |
-| S4 | conformance negative vectors | DID leak / plaintext violation / blind-wakeup-with-body 联调测试 |
+## 跨项目登记
+
+| 根任务 | 本仓责任 |
+|---|---|
+| C4 | bridge/describe `provider_capabilities_version=2026-05-07` 已对外冻结；通知 `soland` drift detection、`chime` typed DTO、`yougen` real token、`cotest` privacy matrix 同步刷新。 |
+| C8 | 已为 cotest 暴露 plaintext-policy / production_mode 失败向量；live gateway rows 仍待挂入 cotest live matrix。 |
+| C9 | health/ready/metrics + production_mode + sample-secret scan 已落地；CI 接入仍需 ops 侧。 |
+
+## 已完成（短 changelog）
+
+- `[x]` active-only surface 和 legacy cleanup。
+- `[x]` FCM HTTP v1 单一路径。
+- `[x]` service 拆模块和 privacy fail-closed 回归测试。
+- `[x]` F2 provider_capabilities matrix 冻结 + 版本化。
+- `[x]` F3 `soflare.config.schema.json` 制品 + 一致性快照测试。
+- `[x]` F4 KDL/YAML round-trip 等价性测试。
+- `[x]` A1 plaintext metadata 绑定 caller `service_type`。
+- `[x]` A2 signed required-component 强制（`@method/@target-uri/@authority/content-digest`）。
+- `[x]` A3 Content-Digest 在 production_mode 下对所有 /notify body 强制。
+- `[x]` A5 production_mode 禁用 anonymous + bearer-only fallback。
+- `[x]` R4 per-pushkin / per-app / scope metrics + dispatch latency histogram。
+- `[x]` R5 `/notify` span + caller/request_id 结构化字段。
+- `[x]` O3 sample-secret scan + sample-config grammar regression tests。
+- `[x]` O4 production_mode startup validation（service_principal 必须签名/mTLS、禁用 gateway-wide bearer、plaintext 限制于 sync/principal kind）。
+- `[x]` 修复 `*.sample.kdl` 在 KDL 2.0 下 bare-bool 解析失败的隐藏 bug（已加回归测试）。

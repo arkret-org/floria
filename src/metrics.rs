@@ -69,6 +69,51 @@ static NOTIFY_DELIVERY_OUTCOME_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(
     .expect("register floria_notify_delivery_outcome_total")
 });
 
+static NOTIFY_DELIVERY_OUTCOME_BY_PROVIDER_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_delivery_outcome_by_provider_total",
+        "Per-pushkin delivery outcome breakdown emitted by /notify",
+        &["pushkin", "outcome"]
+    )
+    .expect("register floria_notify_delivery_outcome_by_provider_total")
+});
+
+static NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_delivery_outcome_by_app_total",
+        "Per-app delivery outcome breakdown emitted by /notify",
+        &["app_id", "outcome"]
+    )
+    .expect("register floria_notify_delivery_outcome_by_app_total")
+});
+
+static NOTIFY_RATE_LIMIT_REJECT_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_rate_limit_reject_total",
+        "Number of /notify requests rejected by the in-process rate limiter, by scope",
+        &["scope"]
+    )
+    .expect("register floria_notify_rate_limit_reject_total")
+});
+
+static NOTIFY_DEDUP_LOOKUP_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_dedup_lookup_total",
+        "Outcome of /notify dedup cache lookups (hit, miss, conflict)",
+        &["outcome"]
+    )
+    .expect("register floria_notify_dedup_lookup_total")
+});
+
+static PUSHKIN_DISPATCH_HISTOGRAM: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
+        "floria_pushkin_dispatch_seconds",
+        "Time taken for a pushkin to dispatch a single notification, by pushkin and outcome",
+        &["pushkin", "outcome"]
+    )
+    .expect("register floria_pushkin_dispatch_seconds")
+});
+
 static NOTIFS_RECEIVED_DEVICE_PUSH_COUNTER: LazyLock<IntCounter> = LazyLock::new(|| {
     register_int_counter!(
         "floria_notifications_devices_received",
@@ -121,6 +166,11 @@ pub fn init() {
     LazyLock::force(&NOTIFY_PARTIAL_SUCCESS_COUNTER);
     LazyLock::force(&NOTIFY_RETRY_WITH_SKIPS_COUNTER);
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_COUNTER);
+    LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_PROVIDER_COUNTER);
+    LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER);
+    LazyLock::force(&NOTIFY_RATE_LIMIT_REJECT_COUNTER);
+    LazyLock::force(&NOTIFY_DEDUP_LOOKUP_COUNTER);
+    LazyLock::force(&PUSHKIN_DISPATCH_HISTOGRAM);
     LazyLock::force(&NOTIFS_RECEIVED_DEVICE_PUSH_COUNTER);
     LazyLock::force(&NOTIFS_BY_PUSHKIN);
     LazyLock::force(&PUSHGATEWAY_HTTP_RESPONSES_COUNTER);
@@ -181,6 +231,42 @@ pub fn notify_delivery_outcomes(accepted: usize, rejected: usize, retryable: usi
             .with_label_values(&["failed"])
             .inc_by(failed as u64);
     }
+}
+
+pub fn notify_delivery_outcome_by_provider(pushkin: &str, outcome: &str, count: usize) {
+    if count == 0 {
+        return;
+    }
+    NOTIFY_DELIVERY_OUTCOME_BY_PROVIDER_COUNTER
+        .with_label_values(&[pushkin, outcome])
+        .inc_by(count as u64);
+}
+
+pub fn notify_delivery_outcome_by_app(app_id: &str, outcome: &str, count: usize) {
+    if count == 0 || app_id.is_empty() {
+        return;
+    }
+    NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER
+        .with_label_values(&[app_id, outcome])
+        .inc_by(count as u64);
+}
+
+pub fn notify_rate_limit_reject(scope: &str) {
+    NOTIFY_RATE_LIMIT_REJECT_COUNTER
+        .with_label_values(&[scope])
+        .inc();
+}
+
+pub fn notify_dedup_lookup(outcome: &str) {
+    NOTIFY_DEDUP_LOOKUP_COUNTER
+        .with_label_values(&[outcome])
+        .inc();
+}
+
+pub fn observe_pushkin_dispatch(pushkin: &str, outcome: &str, elapsed: Duration) {
+    PUSHKIN_DISPATCH_HISTOGRAM
+        .with_label_values(&[pushkin, outcome])
+        .observe(elapsed.as_secs_f64());
 }
 
 pub fn device_push_received() {
@@ -263,6 +349,11 @@ mod tests {
         notify_partial_success(StatusCode::OK);
         notify_retry_with_skips(StatusCode::SERVICE_UNAVAILABLE);
         notify_delivery_outcomes(1, 2, 3, 4);
+        notify_delivery_outcome_by_provider("apns", "accepted", 1);
+        notify_delivery_outcome_by_app("com.example.app", "accepted", 1);
+        notify_rate_limit_reject("origin_service");
+        notify_dedup_lookup("hit");
+        observe_pushkin_dispatch("apns", "accepted", Duration::from_millis(12));
 
         let service = Service::new(build_router());
         let mut response = TestClient::get("http://127.0.0.1/metrics")
@@ -278,5 +369,10 @@ mod tests {
         assert!(body.contains("floria_notify_partial_success_total"));
         assert!(body.contains("floria_notify_retry_with_skips_total"));
         assert!(body.contains("floria_notify_delivery_outcome_total"));
+        assert!(body.contains("floria_notify_delivery_outcome_by_provider_total"));
+        assert!(body.contains("floria_notify_delivery_outcome_by_app_total"));
+        assert!(body.contains("floria_notify_rate_limit_reject_total"));
+        assert!(body.contains("floria_notify_dedup_lookup_total"));
+        assert!(body.contains("floria_pushkin_dispatch_seconds"));
     }
 }

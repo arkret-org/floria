@@ -662,6 +662,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let started = Instant::now();
     let _inflight = app_metrics::track_inflight("V1NotifyHandler");
 
+    let span = tracing::info_span!(
+        "notify",
+        request_id = tracing::field::Empty,
+        caller = tracing::field::Empty,
+        provider = tracing::field::Empty,
+        outcome = tracing::field::Empty,
+    );
+    let _entered = span.enter();
+
     let state = match depot.obtain::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
@@ -678,6 +687,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
     let request_id = Uuid::new_v4().to_string();
+    span.record("request_id", tracing::field::display(&request_id));
 
     let body = match req.payload_with_max_size(MAX_REQUEST_SIZE).await {
         Ok(bytes) => bytes.to_vec(),
@@ -709,7 +719,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let caller =
         match authenticate_notify_request(req, body.as_ref(), &state.notify_auth, &request_id) {
-            Ok(caller) => caller,
+            Ok(caller) => {
+                span.record(
+                    "caller",
+                    tracing::field::display(&caller.origin_service_did),
+                );
+                caller
+            }
             Err(error) => {
                 finish_error(
                     res,
@@ -903,6 +919,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .unwrap_or_else(|| request_fingerprint.clone());
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         if deduplicator.conflicts(&dedup_key, &request_fingerprint) {
+            app_metrics::notify_dedup_lookup("conflict");
             finish_error(
                 res,
                 StatusCode::CONFLICT,
@@ -915,6 +932,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
         if let Some(cached) = deduplicator.lookup(&dedup_key, &request_fingerprint) {
+            app_metrics::notify_dedup_lookup("hit");
             app_metrics::notify_request_cache_hit();
             tracing::info!(
                 request_id = %request_id,
@@ -932,6 +950,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
+        app_metrics::notify_dedup_lookup("miss");
     }
     app_metrics::notification_received();
 
@@ -951,6 +970,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     if let Some(rate_limiter) = state.notify_rate_limiter.as_ref() {
         let checks = notify_rate_limit_checks(req, &state, &notification);
         if let Err(rejection) = rate_limiter.check_many(&checks) {
+            app_metrics::notify_rate_limit_reject(rejection.scope);
             tracing::warn!(
                 request_id = %request_id,
                 scope = rejection.scope,
@@ -1062,10 +1082,28 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
                 app_metrics::pushkin_selected(pushkin.name());
                 let dispatch_targets = pushkin.dispatch_targets(&notification, device);
-                match pushkin
+                let dispatch_started = Instant::now();
+                let dispatch_result = pushkin
                     .dispatch_notification(&notification, device, &context)
-                    .await
-                {
+                    .await;
+                let dispatch_outcome = match &dispatch_result {
+                    Ok(rejected) if rejected.is_empty() => "accepted",
+                    Ok(_) => "partial",
+                    Err(error) if error.is_temporary() => "retryable",
+                    Err(error) if error.is_remote() => "remote_error",
+                    Err(_) => "internal_error",
+                };
+                app_metrics::observe_pushkin_dispatch(
+                    pushkin.name(),
+                    dispatch_outcome,
+                    dispatch_started.elapsed(),
+                );
+                app_metrics::notify_delivery_outcome_by_app(
+                    app_id,
+                    dispatch_outcome,
+                    1,
+                );
+                match dispatch_result {
                     Ok(mut pushkin_rejected) => {
                         let rejected_set = pushkin_rejected
                             .iter()

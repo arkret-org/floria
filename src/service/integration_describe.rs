@@ -42,7 +42,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
     res.status_code(StatusCode::OK);
     res.render(Json(IntegrationDescribeResponse {
         contract: "contrix.rest.integration_manifest.v1",
-        version: "2026-05-05-scaffold",
+        version: "2026-05-07",
         service: "floria",
         service_kind: "push_gateway",
         api_base_path: "/api/v1",
@@ -69,24 +69,24 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 method: "GET",
                 path: "/api/v1/push/bridge/describe",
                 contract: "cx.push.bridge.describe",
-                stability: "scaffold",
-                todo: "TODO: freeze provider auth modes, plaintext boundary classes, and example payloads as final machine-readable contract fields.",
+                stability: "active",
+                todo: "GET /api/v1/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
             },
             IntegrationSurfaceDescriptor {
                 name: "push_notify",
                 method: "POST",
                 path: "/api/v1/push/notify",
                 contract: "cx.push.notify.v1",
-                stability: "scaffold",
-                todo: "TODO: back the notify path with durable dedup, retry, and provider error taxonomy.",
+                stability: "active",
+                todo: "POST /api/v1/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
             },
             IntegrationSurfaceDescriptor {
                 name: "gateway_describe",
                 method: "GET",
                 path: "/api/v1/push/describe",
                 contract: "cx.profile.push_gateway.v1",
-                stability: "scaffold",
-                todo: "TODO: align profile and bridge describe fields so soland and chime can derive one canonical gateway snapshot.",
+                stability: "active",
+                todo: "GET /api/v1/push/describe is a profile-level snapshot kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
                 name: "health",
@@ -132,10 +132,6 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 }
             }
         }),
-        todos: vec![
-            "TODO: persist contract snapshots and drift state so principal servers can cache gateway compatibility.",
-            "TODO: publish provider capability examples that match real gateway auth modes.",
-            "TODO: align the integration manifest and push bridge describe contracts with one shared version cadence.",
-        ],
+        todos: vec![],
     }));
 }

@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
-use crate::pushkin::ProviderCapabilityDescriptor;
+use crate::pushkin::{PROVIDER_CAPABILITIES_VERSION, ProviderCapabilityDescriptor};
 
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::server_describe::{
@@ -23,11 +23,10 @@ struct PushBridgeDescribeResponse {
     gateway: PushBridgeGatewayDescriptor,
     notify: PushBridgeNotifyDescriptor,
     privacy: PushBridgePrivacyDescriptor,
+    provider_capabilities_version: &'static str,
     provider_capabilities: Vec<ProviderCapabilityDescriptor>,
     failure_codes: Vec<PushBridgeFailureCodeDescriptor>,
     examples: PushBridgeDescribeExamples,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    todos: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -115,7 +114,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
 
     let body = PushBridgeDescribeResponse {
         contract: "cx.push.bridge.describe",
-        version: "2026-05-06",
+        version: "2026-05-07",
         api_base_path: "/api/v1/push",
         gateway: PushBridgeGatewayDescriptor {
             service_did: state.notify_auth.gateway_service_did.clone(),
@@ -151,6 +150,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "notification.subject_id",
             ],
         },
+        provider_capabilities_version: PROVIDER_CAPABILITIES_VERSION,
         provider_capabilities: state.registry.provider_capabilities(),
         failure_codes: vec![
             PushBridgeFailureCodeDescriptor {
@@ -229,12 +229,6 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 }
             }),
         },
-        todos: vec![
-            "TODO(push-bridge): publish OpenAPI/schema artifacts for bridge/describe and cx.push.notify together",
-            "TODO(push-bridge): freeze provider_capabilities scaffold values (batch / TTL / payload) into contracted matrix",
-            "TODO(push-bridge): expose provider credential rotation state alongside the capability matrix",
-            "TODO(push-bridge): replace coarse auth_modes with proof-bound service principal policy details",
-        ],
     };
 
     res.status_code(StatusCode::OK);

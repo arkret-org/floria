@@ -46,6 +46,33 @@ pub(super) fn record_delivery_receipt_outcomes(
         .filter(|receipt| receipt.status.as_deref() == Some("failed"))
         .count();
     app_metrics::notify_delivery_outcomes(accepted, rejected, retryable, failed);
+
+    let mut per_provider: std::collections::HashMap<(String, &'static str), usize> =
+        std::collections::HashMap::new();
+    for receipt in delivery_receipts {
+        let Some(status) = receipt.status.as_deref() else {
+            continue;
+        };
+        let outcome = canonical_outcome(status);
+        let Some(provider) = receipt.provider.as_deref() else {
+            continue;
+        };
+        *per_provider.entry((provider.to_owned(), outcome)).or_default() += 1;
+    }
+    for ((provider, outcome), count) in per_provider {
+        app_metrics::notify_delivery_outcome_by_provider(&provider, outcome, count);
+    }
+}
+
+fn canonical_outcome(status: &str) -> &'static str {
+    match status {
+        "accepted" => "accepted",
+        "accepted_cached" => "accepted_cached",
+        "rejected" => "rejected",
+        "retryable" => "retryable",
+        "failed" => "failed",
+        _ => "other",
+    }
 }
 
 pub(super) fn finish_error(

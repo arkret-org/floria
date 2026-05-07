@@ -76,15 +76,18 @@ pub trait Pushkin: Send + Sync {
     ) -> Result<Vec<String>, DispatchError>;
 }
 
-/// Static capability snapshot for a provider kind, surfaced through
-/// `bridge/describe` so principal servers (soland, chime SDK) can plan
-/// payload shape, retry, and credential rotation without per-provider
-/// knowledge.
+/// Frozen capability snapshot for a provider kind, surfaced through
+/// `bridge/describe` so principal servers (soland, chime SDK) and
+/// cotest matrices can plan payload shape, TTL caps, and credential
+/// rotation without per-provider knowledge.
 ///
-/// These values describe the *kind* (apns, fcm, ...) rather than a
-/// specific configured app — fields that depend on per-app config
-/// (e.g. concrete TTL caps after admin override) are deliberately
-/// omitted from the scaffold.
+/// Values describe the *kind* (apns, fcm, ...) — per-app overrides
+/// (e.g. tighter admin TTL caps) are intentionally not included here.
+///
+/// Contract version is exposed as `PROVIDER_CAPABILITIES_VERSION`;
+/// bumping it signals downstream snapshots (soland drift detection,
+/// chime typed DTO, cotest push matrix) that the matrix changed and
+/// they must refresh.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProviderCapabilities {
     /// Stable provider kind, e.g. `"apns"`, `"fcm"`, `"oppo"`.
@@ -103,10 +106,18 @@ pub struct ProviderCapabilities {
     pub default_payload_shape: &'static str,
     /// Credential material this provider expects.
     pub credential_kinds: &'static [&'static str],
-    /// Free-form scaffolding notes the contract owner still needs to
-    /// freeze (rotation cadence, regional endpoints, etc.).
-    pub notes: &'static [&'static str],
+    /// Documented credential rotation cadence for this provider kind.
+    pub credential_rotation: &'static str,
+    /// Whether the provider can carry an encrypted body that the
+    /// gateway must NOT inspect (controls plaintext-policy gating).
+    pub blind_wakeup_required: bool,
 }
+
+/// Contract version for the frozen `provider_capabilities` matrix.
+///
+/// Bump on any field/value change so soland drift detection, chime
+/// typed DTOs, and cotest push matrices know to refresh.
+pub const PROVIDER_CAPABILITIES_VERSION: &str = "2026-05-07";
 
 pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
     let kind = match kind {
@@ -118,9 +129,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "encrypted_or_blind_wakeup",
             credential_kinds: &["jwt_p8", "cert_p12"],
-            notes: &[
-                "TODO(provider-capabilities): document JWT rotation cadence and cert fallback policy",
-            ],
+            credential_rotation: "rotate_jwt_p8_yearly_cert_p12_per_apple_lifecycle",
+            blind_wakeup_required: true,
         },
         "fcm" => ProviderCapabilities {
             kind: "fcm",
@@ -130,9 +140,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "data_only_blind_wakeup",
             credential_kinds: &["service_account_v1"],
-            notes: &[
-                "TODO(provider-capabilities): publish HTTP v1 batch policy once enabled (B2)",
-            ],
+            credential_rotation: "rotate_service_account_yearly_or_on_compromise",
+            blind_wakeup_required: true,
         },
         "webpush" => ProviderCapabilities {
             kind: "webpush",
@@ -142,9 +151,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: false,
             default_payload_shape: "encrypted_aes128gcm",
             credential_kinds: &["vapid_keypair"],
-            notes: &[
-                "TODO(provider-capabilities): document VAPID key rotation lifetime (B3)",
-            ],
+            credential_rotation: "rotate_vapid_keypair_quarterly",
+            blind_wakeup_required: true,
         },
         "honor" => ProviderCapabilities {
             kind: "honor",
@@ -154,7 +162,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["client_id_secret"],
-            notes: &["TODO(provider-capabilities): pin Honor credential rotation runbook"],
+            credential_rotation: "rotate_client_secret_yearly",
+            blind_wakeup_required: false,
         },
         "huawei" => ProviderCapabilities {
             kind: "huawei",
@@ -164,7 +173,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["client_id_secret"],
-            notes: &["TODO(provider-capabilities): pin Huawei credential rotation runbook"],
+            credential_rotation: "rotate_client_secret_yearly",
+            blind_wakeup_required: false,
         },
         "jpush" => ProviderCapabilities {
             kind: "jpush",
@@ -174,9 +184,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
-            notes: &[
-                "TODO(provider-capabilities): expose third_party_channel matrix once B4 lands",
-            ],
+            credential_rotation: "rotate_master_secret_quarterly",
+            blind_wakeup_required: false,
         },
         "oppo" => ProviderCapabilities {
             kind: "oppo",
@@ -186,7 +195,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
-            notes: &["TODO(provider-capabilities): pin OPPO credential rotation runbook"],
+            credential_rotation: "rotate_master_secret_yearly",
+            blind_wakeup_required: false,
         },
         "oneplus" => ProviderCapabilities {
             kind: "oneplus",
@@ -196,7 +206,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
-            notes: &["TODO(provider-capabilities): pin OnePlus credential rotation runbook"],
+            credential_rotation: "rotate_master_secret_yearly",
+            blind_wakeup_required: false,
         },
         "vivo" => ProviderCapabilities {
             kind: "vivo",
@@ -206,7 +217,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["app_id_app_key"],
-            notes: &["TODO(provider-capabilities): pin vivo credential rotation runbook"],
+            credential_rotation: "rotate_app_key_yearly",
+            blind_wakeup_required: false,
         },
         "xiaomi" => ProviderCapabilities {
             kind: "xiaomi",
@@ -216,7 +228,8 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             supports_badge: true,
             default_payload_shape: "rich_android",
             credential_kinds: &["app_secret"],
-            notes: &["TODO(provider-capabilities): pin Xiaomi credential rotation runbook"],
+            credential_rotation: "rotate_app_secret_yearly",
+            blind_wakeup_required: false,
         },
         _ => return None,
     };
