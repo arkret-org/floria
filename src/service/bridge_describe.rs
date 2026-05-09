@@ -211,18 +211,18 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             }),
             blind_wakeup_request: serde_json::json!({
                 "notification": {
-                    "event_id": "cx:event:01js0000000000000000000000",
-                    "flow_id": "cx:flow:01js0000000000000000000000",
-                    "space_id": "cx:space:01js0000000000000000000000",
+                    "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
+                    "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
+                    "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
                     "push_hint": "new_activity",
                     "counts": {"unread": 3}
                 }
             }),
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
-                    "event_id": "cx:event:01js0000000000000000000000",
-                    "flow_id": "cx:flow:01js0000000000000000000000",
-                    "space_id": "cx:space:01js0000000000000000000000",
+                    "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
+                    "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
+                    "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
                     "push_hint": "message_visible_to_service",
                     "preview": "Alice: deploy is complete",
                     "counts": {"unread": 3}

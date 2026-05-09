@@ -1,10 +1,10 @@
 {
   "operation_id": "cx.push.notify",
   "notification": {
-    "event_id": "cx:event:01js0000000000000000000000",
-    "message_id": "cx:message:01js0000000000000000000000",
-    "flow_id": "cx:flow:01js0000000000000000000000",
-    "space_id": "cx:space:01js0000000000000000000000",
+    "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
+    "message_id": "cx:message:01964000-0000-7000-8000-000000000000",
+    "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
+    "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
     "type": "cx.message.create",
     "push_hint": "new_activity",
     "counts": {
