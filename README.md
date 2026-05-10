@@ -35,6 +35,9 @@ Push gateway service in Rust.
 - `SOFLARE_CONF` env var
 - `HTTPS_PROXY` env var fallback for outbound proxying
 - KDL config (default) and YAML config, detected by file extension
+- structured logging via `log.setup` (text or JSON formatter, EnvFilter / `RUST_LOG`)
+- distributed tracing via `metrics.opentracing` (OTLP / OpenTelemetry, gRPC)
+- error reporting via `metrics.sentry` (DSN, environment, release, sample rates)
 
 ## Configuration
 
@@ -78,11 +81,6 @@ Sample files:
 - Keep direct `Huawei Push Kit`, `HONOR Push`, `Xiaomi Mi Push`, `OPPO / OnePlus Push`, and `vivo Push` enabled for apps that already hold first-party credentials or need tighter channel control.
 - Use JPush `third_party_channel` to steer Huawei/Xiaomi/OPPO/vivo/HONOR/HMOS routing without adding another backend integration per OEM.
 - JPush currently has no explicit `third_party_channel.oneplus` vendor key; OnePlus should use the dedicated `oneplus` provider.
-
-## Current gaps
-
-- `metrics.opentracing` and `metrics.sentry` are not implemented yet
-- `log.setup` is not implemented yet
 
 ## Run
 

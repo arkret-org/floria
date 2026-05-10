@@ -30,7 +30,13 @@ sha2 = "0.10.9"
 thiserror = "2.0.18"
 tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json", "registry"] }
+tracing-opentelemetry = { version = "0.32.1", default-features = false, features = ["tracing-log"] }
+opentelemetry = { version = "0.31.0", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["trace", "grpc-tonic"] }
+sentry = { version = "0.48.1", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry-tracing = "0.48.1"
 uuid = { version = "1.22.0", features = ["serde", "v4"] }
 web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"] }
 x509-parser = "0.18.1"

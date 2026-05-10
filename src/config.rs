@@ -79,7 +79,20 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         self.http.validate()?;
+        self.metrics.opentracing.validate()?;
+        self.metrics.sentry.validate()?;
         Ok(())
+    }
+
+    /// Snapshot the observability inputs for
+    /// [`crate::observability::init_telemetry`]. Cheap clone — none of
+    /// the underlying types own large allocations.
+    pub fn observability(&self) -> ObservabilityConfig {
+        ObservabilityConfig::from_parts(
+            self.log.setup.clone(),
+            self.metrics.opentracing.clone(),
+            self.metrics.sentry.clone(),
+        )
     }
 }
 
@@ -837,6 +850,7 @@ fn validate_bearer_token_hashes(scope: &str, hashes: &[String]) -> Result<()> {
 #[serde(default)]
 pub struct LogConfig {
     pub access: AccessLogConfig,
+    pub setup: LogSetupConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -845,6 +859,7 @@ impl Default for LogConfig {
     fn default() -> Self {
         Self {
             access: AccessLogConfig::default(),
+            setup: LogSetupConfig::default(),
             extra: Map::new(),
         }
     }
@@ -857,7 +872,74 @@ impl LogConfig {
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
         self.access.emit_startup_warnings();
+        self.setup.emit_startup_warnings();
     }
+}
+
+/// Tracing-subscriber setup. Drives the global subscriber installed at
+/// startup by [`crate::observability::init_telemetry`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct LogSetupConfig {
+    pub level: TracingLevel,
+    pub format: TracingFormat,
+    /// Optional explicit `EnvFilter` directive (e.g.
+    /// `"floria=debug,tower_http=info"`). When unset, falls back to
+    /// `RUST_LOG` and finally to `level`.
+    pub filter: Option<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl Default for LogSetupConfig {
+    fn default() -> Self {
+        Self {
+            level: TracingLevel::Info,
+            format: TracingFormat::Text,
+            filter: None,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl LogSetupConfig {
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "log.setup",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TracingLevel {
+    Trace,
+    Debug,
+    #[default]
+    Info,
+    Warn,
+    Error,
+}
+
+impl TracingLevel {
+    pub fn as_directive(self) -> &'static str {
+        match self {
+            TracingLevel::Trace => "trace",
+            TracingLevel::Debug => "debug",
+            TracingLevel::Info => "info",
+            TracingLevel::Warn => "warn",
+            TracingLevel::Error => "error",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TracingFormat {
+    #[default]
+    Text,
+    Json,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -890,6 +972,8 @@ impl AccessLogConfig {
 #[serde(default)]
 pub struct MetricsConfig {
     pub prometheus: PrometheusConfig,
+    pub opentracing: OpentracingConfig,
+    pub sentry: SentryConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -898,6 +982,8 @@ impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
             prometheus: PrometheusConfig::default(),
+            opentracing: OpentracingConfig::default(),
+            sentry: SentryConfig::default(),
             extra: Map::new(),
         }
     }
@@ -910,6 +996,177 @@ impl MetricsConfig {
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
         self.prometheus.emit_startup_warnings();
+        self.opentracing.emit_startup_warnings();
+        self.sentry.emit_startup_warnings();
+    }
+}
+
+/// OpenTelemetry / OTLP span-exporter configuration. Lives under
+/// `metrics.opentracing` for parity with the rest of the metrics
+/// section. Disabled by default; when enabled an OTLP endpoint must be
+/// configured.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct OpentracingConfig {
+    pub enabled: bool,
+    pub endpoint: Option<String>,
+    pub service_name: String,
+    pub sample_rate: f64,
+    pub timeout_seconds: u64,
+    /// Reserved for future tracer back-ends. Currently OTLP / gRPC is
+    /// the only supported implementation; the field is preserved so
+    /// existing samples that set `implementation "jaeger"` keep working
+    /// (the value is ignored).
+    pub implementation: Option<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl Default for OpentracingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: None,
+            service_name: "floria".to_owned(),
+            sample_rate: 1.0,
+            timeout_seconds: 10,
+            implementation: None,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl OpentracingConfig {
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "metrics.opentracing",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self
+            .endpoint
+            .as_deref()
+            .map(str::trim)
+            .is_none_or(str::is_empty)
+        {
+            bail!("metrics.opentracing.enabled requires metrics.opentracing.endpoint to be set");
+        }
+        if !(0.0..=1.0).contains(&self.sample_rate) {
+            bail!(
+                "metrics.opentracing.sample_rate must be between 0.0 and 1.0; got {}",
+                self.sample_rate
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Sentry error-capture configuration. Hooks into the tracing
+/// subscriber so any `tracing::error!` (and panics) are forwarded.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct SentryConfig {
+    pub enabled: bool,
+    pub dsn: Option<String>,
+    pub environment: Option<String>,
+    pub release: Option<String>,
+    /// Fraction of error events to send (0.0–1.0).
+    pub sample_rate: f64,
+    /// Fraction of transactions/spans to send (0.0–1.0).
+    pub traces_sample_rate: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl Default for SentryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            dsn: None,
+            environment: None,
+            release: None,
+            sample_rate: 1.0,
+            traces_sample_rate: 0.0,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl SentryConfig {
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "metrics.sentry",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.dsn.as_deref().map(str::trim).is_none_or(str::is_empty) {
+            bail!("metrics.sentry.enabled requires metrics.sentry.dsn to be set");
+        }
+        if !(0.0..=1.0).contains(&self.sample_rate) {
+            bail!(
+                "metrics.sentry.sample_rate must be between 0.0 and 1.0; got {}",
+                self.sample_rate
+            );
+        }
+        if !(0.0..=1.0).contains(&self.traces_sample_rate) {
+            bail!(
+                "metrics.sentry.traces_sample_rate must be between 0.0 and 1.0; got {}",
+                self.traces_sample_rate
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Aggregated view passed to [`crate::observability::init_telemetry`].
+/// Sourced from `log.setup`, `metrics.opentracing`, and `metrics.sentry`
+/// — keeping the underlying config sections separate keeps user-visible
+/// YAML/KDL grouped by domain (logging vs metrics) while still letting
+/// the telemetry initialiser take a single argument.
+#[derive(Debug, Clone)]
+pub struct ObservabilityConfig {
+    pub tracing: LogSetupConfig,
+    pub opentracing: OpentracingConfig,
+    pub sentry: SentryConfig,
+}
+
+impl Default for ObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            tracing: LogSetupConfig::default(),
+            opentracing: OpentracingConfig::default(),
+            sentry: SentryConfig::default(),
+        }
+    }
+}
+
+impl ObservabilityConfig {
+    pub fn from_parts(
+        tracing: LogSetupConfig,
+        opentracing: OpentracingConfig,
+        sentry: SentryConfig,
+    ) -> Self {
+        Self {
+            tracing,
+            opentracing,
+            sentry,
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.opentracing.validate()?;
+        self.sentry.validate()?;
+        Ok(())
     }
 }
 
@@ -1130,7 +1387,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-07/soflare.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-10/soflare.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1292,6 +1549,27 @@ fn log_schema() -> Value {
                 "properties": {
                     "x_forwarded_for": {"type": "boolean", "default": false}
                 }
+            },
+            "setup": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "tracing-subscriber setup. Controls the global subscriber installed at startup.",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "enum": ["trace", "debug", "info", "warn", "error"],
+                        "default": "info"
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["text", "json"],
+                        "default": "text"
+                    },
+                    "filter": {
+                        "type": ["string", "null"],
+                        "description": "Optional EnvFilter directive (e.g. `floria=debug,tower_http=info`). Falls back to RUST_LOG, then `level`."
+                    }
+                }
             }
         }
     })
@@ -1309,6 +1587,38 @@ fn metrics_schema() -> Value {
                     "enabled": {"type": "boolean", "default": false},
                     "address": {"type": "string", "default": "127.0.0.1"},
                     "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 8000}
+                }
+            },
+            "opentracing": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "OpenTelemetry / OTLP span exporter (gRPC).",
+                "properties": {
+                    "enabled": {"type": "boolean", "default": false},
+                    "endpoint": {
+                        "type": ["string", "null"],
+                        "description": "OTLP gRPC endpoint (e.g. http://otel-collector:4317). Required when enabled."
+                    },
+                    "service_name": {"type": "string", "default": "floria"},
+                    "sample_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 1.0},
+                    "timeout_seconds": {"type": "integer", "minimum": 1, "default": 10},
+                    "implementation": {
+                        "type": ["string", "null"],
+                        "description": "Reserved for future tracer back-ends; currently OTLP/gRPC is the only supported implementation. Existing values like `jaeger` are accepted but ignored."
+                    }
+                }
+            },
+            "sentry": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Sentry error capture via the tracing subscriber.",
+                "properties": {
+                    "enabled": {"type": "boolean", "default": false},
+                    "dsn": {"type": ["string", "null"], "description": "Sentry DSN. Required when enabled."},
+                    "environment": {"type": ["string", "null"]},
+                    "release": {"type": ["string", "null"]},
+                    "sample_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 1.0},
+                    "traces_sample_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.0}
                 }
             }
         }
@@ -1355,7 +1665,7 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-07";
+    pub const SCHEMA_VERSION: &'static str = "2026-05-10";
 }
 
 // --- KDL support ---

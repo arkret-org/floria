@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-07/soflare.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-05-10/soflare.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -461,6 +461,39 @@
             }
           },
           "type": "object"
+        },
+        "setup": {
+          "additionalProperties": false,
+          "description": "tracing-subscriber setup. Controls the global subscriber installed at startup.",
+          "properties": {
+            "filter": {
+              "description": "Optional EnvFilter directive (e.g. `floria=debug,tower_http=info`). Falls back to RUST_LOG, then `level`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "format": {
+              "default": "text",
+              "enum": [
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
+            "level": {
+              "default": "info",
+              "enum": [
+                "trace",
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"
@@ -468,6 +501,46 @@
     "metrics": {
       "additionalProperties": false,
       "properties": {
+        "opentracing": {
+          "additionalProperties": false,
+          "description": "OpenTelemetry / OTLP span exporter (gRPC).",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "endpoint": {
+              "description": "OTLP gRPC endpoint (e.g. http://otel-collector:4317). Required when enabled.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "implementation": {
+              "description": "Reserved for future tracer back-ends; currently OTLP/gRPC is the only supported implementation. Existing values like `jaeger` are accepted but ignored.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sample_rate": {
+              "default": 1.0,
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "service_name": {
+              "default": "floria",
+              "type": "string"
+            },
+            "timeout_seconds": {
+              "default": 10,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
         "prometheus": {
           "additionalProperties": false,
           "properties": {
@@ -487,6 +560,48 @@
             }
           },
           "type": "object"
+        },
+        "sentry": {
+          "additionalProperties": false,
+          "description": "Sentry error capture via the tracing subscriber.",
+          "properties": {
+            "dsn": {
+              "description": "Sentry DSN. Required when enabled.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "environment": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "release": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sample_rate": {
+              "default": 1.0,
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "traces_sample_rate": {
+              "default": 0.0,
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"
@@ -501,5 +616,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-07"
+  "x-floria-schema-version": "2026-05-10"
 }

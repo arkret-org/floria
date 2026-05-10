@@ -35,6 +35,9 @@
 - `SOFLARE_CONF` 环境变量
 - `HTTPS_PROXY` 环境变量用于出站代理回退
 - KDL 配置（默认）与 YAML 配置，按文件扩展名自动检测
+- 通过 `log.setup` 进行结构化日志（文本或 JSON 格式器，EnvFilter / `RUST_LOG`）
+- 通过 `metrics.opentracing` 进行分布式追踪（OTLP / OpenTelemetry，gRPC）
+- 通过 `metrics.sentry` 进行错误上报（DSN、environment、release、采样率）
 
 ## 配置
 
@@ -78,11 +81,6 @@
 - 对于已持有厂商凭据或需要更精细通道控制的应用，保留直接接入`华为推送`、`荣耀推送`、`小米推送`、`OPPO / OnePlus 推送`和 `vivo 推送`。
 - 利用极光推送的 `third_party_channel` 路由华为/小米/OPPO/vivo/荣耀/HMOS，无需为每个 OEM 单独集成后端。
 - 极光推送目前没有 `third_party_channel.oneplus` 厂商键；OnePlus 需使用专用的 `oneplus` provider。
-
-## 当前不足
-
-- `metrics.opentracing` 和 `metrics.sentry` 尚未实现
-- `log.setup` 尚未实现
 
 ## 运行
 

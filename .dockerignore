@@ -1,4 +1,8 @@
+# Top-level build artefacts. The `**/target/` glob is critical — a
+# nested workspace-member or claude-worktree target/ would otherwise
+# pour gigabytes into the build context.
 target/
+**/target/
 .git/
 .github/
 Dockerfile

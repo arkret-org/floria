@@ -1,8 +1,13 @@
 // Soflare configuration (KDL format)
-//
-// floria currently uses tracing / RUST_LOG instead of custom YAML logging setup.
 
 log {
+  setup {
+    // Tracing-subscriber setup. `level` is used when neither `filter`
+    // nor RUST_LOG is set. `filter` accepts a full EnvFilter directive.
+    level "info"
+    format "text"  // text | json
+    // filter "floria=debug,tower_http=info"
+  }
   access {
     // Proxied access log formatting is not implemented yet.
     x_forwarded_for #false
@@ -90,12 +95,24 @@ metrics {
     port 8000
   }
   opentracing {
+    // OTLP / OpenTelemetry span exporter (gRPC). When enabled, set
+    // `endpoint` to your collector (e.g. http://otel-collector:4317).
     enabled #false
-    implementation "jaeger"
+    // endpoint "http://127.0.0.1:4317"
     service_name "floria"
+    sample_rate 1.0
+    timeout_seconds 10
+    // Reserved; currently OTLP/gRPC is the only supported back-end.
+    // implementation "jaeger"
   }
   sentry {
+    // Sentry error capture via the tracing subscriber.
     enabled #false
+    // dsn "https://public@o0.ingest.sentry.io/0"
+    // environment "production"
+    // release "floria@0.1.0"
+    sample_rate 1.0
+    traces_sample_rate 0.0
   }
 }
 

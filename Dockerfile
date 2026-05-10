@@ -56,13 +56,22 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends \
-        ca-certificates \
-        curl \
-        libnghttp2-14 \
-        libssl3 \
-        zlib1g \
+# Retry apt-get up to 5x to absorb transient 5xx from upstream Debian
+# mirrors / corporate proxies (C36.5 + C37.3 lesson — Docker Desktop
+# proxy intermittently 502s on debian-security InRelease). The
+# Acquire::Retries config covers per-package fetch retry; the
+# enclosing for-loop covers full-resolve failures.
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && for i in 1 2 3 4 5; do \
+        apt-get update \
+        && apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            curl \
+            libnghttp2-14 \
+            libssl3 \
+            zlib1g \
+        && break || (echo "apt retry $i" && sleep 10); \
+    done \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
     && groupadd --system --gid 65532 floria \
     && useradd --system --uid 65532 --gid floria --no-create-home --shell /usr/sbin/nologin floria

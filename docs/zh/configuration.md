@@ -187,14 +187,20 @@ metrics {
     address "127.0.0.1"
     port 8000
   }
-  // 已解析但尚未实现：
   opentracing {
-    enabled false
-    implementation "jaeger"
+    enabled true
+    endpoint "http://otel-collector:4317"
     service_name "floria"
+    sample_rate 0.1
+    timeout_seconds 10
   }
   sentry {
-    enabled false
+    enabled true
+    dsn "https://public@o0.ingest.sentry.io/0"
+    environment "production"
+    release "floria@0.1.0"
+    sample_rate 1.0
+    traces_sample_rate 0.0
   }
 }
 ```
@@ -204,6 +210,39 @@ metrics {
 | `prometheus.enabled` | bool | `false` | 启动 Prometheus `/metrics` 监听器 |
 | `prometheus.address` | string | `"127.0.0.1"` | Prometheus 监听绑定地址 |
 | `prometheus.port` | u16 | `8000` | Prometheus 监听端口 |
+| `opentracing.enabled` | bool | `false` | 启用 OTLP / OpenTelemetry span 导出器（gRPC） |
+| `opentracing.endpoint` | string | – | OTLP gRPC 端点（启用时必填） |
+| `opentracing.service_name` | string | `"floria"` | span 上的 `service.name` 资源属性 |
+| `opentracing.sample_rate` | float | `1.0` | TraceIdRatioBased 采样率，0.0–1.0 |
+| `opentracing.timeout_seconds` | u64 | `10` | OTLP exporter 请求超时 |
+| `sentry.enabled` | bool | `false` | 通过 tracing 订阅器把 `tracing::error!` 与 panic 上报 Sentry |
+| `sentry.dsn` | string | – | Sentry DSN（启用时必填） |
+| `sentry.environment` | string | – | 可选 `environment` 标签 |
+| `sentry.release` | string | – | 可选 `release` 标签 |
+| `sentry.sample_rate` | float | `1.0` | 错误事件采样率 |
+| `sentry.traces_sample_rate` | float | `0.0` | 事务/span 采样率 |
+
+### `log`
+
+```kdl
+log {
+  setup {
+    level "info"        // trace | debug | info | warn | error
+    format "json"       // text | json
+    // filter "floria=debug,tower_http=info"
+  }
+  access {
+    x_forwarded_for true
+  }
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `setup.level` | string | `"info"` | 当 `filter` 与 `RUST_LOG` 都未设置时使用的默认 tracing 级别 |
+| `setup.format` | string | `"text"` | `text`（紧凑文本）或 `json`（结构化 JSON）格式器 |
+| `setup.filter` | string | – | 可选的 `EnvFilter` 指令；优先于 `RUST_LOG` 与 `level` |
+| `access.x_forwarded_for` | bool | `false` | 预留 — 反代访问日志格式化暂未实现 |
 
 ### `proxy`
 

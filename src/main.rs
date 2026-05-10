@@ -7,19 +7,19 @@ use floria::config::Config;
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
 use floria::nonce_store::NonceStore;
+use floria::observability::{self, TelemetryGuard};
 use floria::pushkin::PushkinRegistry;
 use floria::rate_limit::NotifyRateLimiter;
 use floria::retry_queue::{RetryQueue, RetryQueueConfig};
 use floria::service::build_router_with_access_log;
 use salvo::prelude::*;
 use tokio::task::JoinSet;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_tracing();
-
     let (config, path) = Config::load()?;
+    let _telemetry: TelemetryGuard = observability::init_telemetry(&config.observability())
+        .context("initialise telemetry")?;
     tracing::info!(config = %path.display(), "using configuration file");
     config.emit_startup_warnings();
     metrics::init();
@@ -219,13 +219,4 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(false)
-        .compact()
-        .init();
 }

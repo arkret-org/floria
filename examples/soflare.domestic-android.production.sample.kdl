@@ -10,6 +10,11 @@
 //    token_url / api_base_url if your account region requires different endpoints.
 
 log {
+  setup {
+    level "info"
+    format "json"
+    // filter "floria=info,reqwest=warn"
+  }
   access {
     x_forwarded_for #true
   }
@@ -28,11 +33,18 @@ metrics {
   }
   opentracing {
     enabled #false
-    implementation "jaeger"
+    // endpoint "http://otel-collector.observability.svc.cluster.local:4317"
     service_name "floria"
+    sample_rate 0.1
+    timeout_seconds 10
   }
   sentry {
     enabled #false
+    // dsn "https://public@o0.ingest.sentry.io/0"
+    // environment "production"
+    // release "floria@0.1.0"
+    sample_rate 1.0
+    traces_sample_rate 0.0
   }
 }
 

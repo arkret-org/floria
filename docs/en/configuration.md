@@ -188,14 +188,20 @@ metrics {
     address "127.0.0.1"
     port 8000
   }
-  // parsed but not yet implemented:
   opentracing {
-    enabled false
-    implementation "jaeger"
+    enabled true
+    endpoint "http://otel-collector:4317"
     service_name "floria"
+    sample_rate 0.1
+    timeout_seconds 10
   }
   sentry {
-    enabled false
+    enabled true
+    dsn "https://public@o0.ingest.sentry.io/0"
+    environment "production"
+    release "floria@0.1.0"
+    sample_rate 1.0
+    traces_sample_rate 0.0
   }
 }
 ```
@@ -205,6 +211,39 @@ metrics {
 | `prometheus.enabled` | bool | `false` | Start a Prometheus `/metrics` listener |
 | `prometheus.address` | string | `"127.0.0.1"` | Prometheus listener bind address |
 | `prometheus.port` | u16 | `8000` | Prometheus listener port |
+| `opentracing.enabled` | bool | `false` | Enable the OTLP / OpenTelemetry span exporter (gRPC) |
+| `opentracing.endpoint` | string | – | OTLP gRPC endpoint (required when enabled) |
+| `opentracing.service_name` | string | `"floria"` | `service.name` resource attribute on emitted spans |
+| `opentracing.sample_rate` | float | `1.0` | TraceIdRatioBased sampler ratio, 0.0–1.0 |
+| `opentracing.timeout_seconds` | u64 | `10` | OTLP exporter request timeout |
+| `sentry.enabled` | bool | `false` | Forward `tracing::error!` events and panics to Sentry |
+| `sentry.dsn` | string | – | Sentry DSN (required when enabled) |
+| `sentry.environment` | string | – | Optional `environment` tag |
+| `sentry.release` | string | – | Optional `release` tag |
+| `sentry.sample_rate` | float | `1.0` | Fraction of error events to send |
+| `sentry.traces_sample_rate` | float | `0.0` | Fraction of transactions/spans to send |
+
+### `log`
+
+```kdl
+log {
+  setup {
+    level "info"        // trace | debug | info | warn | error
+    format "json"       // text | json
+    // filter "floria=debug,tower_http=info"
+  }
+  access {
+    x_forwarded_for true
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `setup.level` | string | `"info"` | Default tracing level when neither `filter` nor `RUST_LOG` is set |
+| `setup.format` | string | `"text"` | `text` (compact) or `json` (structured) formatter |
+| `setup.filter` | string | – | Optional explicit `EnvFilter` directive; falls back to `RUST_LOG`, then `level` |
+| `access.x_forwarded_for` | bool | `false` | Reserved — proxied access log formatting is not implemented yet |
 
 ### `proxy`
 

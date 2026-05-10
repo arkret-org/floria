@@ -5,6 +5,7 @@ pub mod error;
 pub mod metrics;
 pub mod models;
 pub mod nonce_store;
+pub mod observability;
 pub mod pushkin;
 pub mod rate_limit;
 pub mod retry_queue;

@@ -1,4 +1,8 @@
 log:
+  setup:
+    level: info
+    format: json
+    # filter: "floria=info,reqwest=warn"
   access:
     x_forwarded_for: true
 
@@ -14,11 +18,17 @@ metrics:
     port: 8000
   opentracing:
     enabled: false
-    implementation: jaeger
+    # endpoint: http://otel-collector.observability.svc.cluster.local:4317
     service_name: floria
-    jaeger: {}
+    sample_rate: 0.1
+    timeout_seconds: 10
   sentry:
     enabled: false
+    # dsn: "https://public@o0.ingest.sentry.io/0"
+    # environment: production
+    # release: floria@0.1.0
+    sample_rate: 1.0
+    traces_sample_rate: 0.0
 
 # Optional outbound proxy for mainland / cross-border egress.
 # If omitted, HTTPS_PROXY will be used when present.
