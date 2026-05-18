@@ -206,7 +206,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                     "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
                     "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
                     "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
-                    "push_hint": "new_activity",
+                    "push_hint": "new_message",
                     "counts": {"unread": 3}
                 }
             }),
@@ -215,7 +215,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                     "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
                     "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
                     "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
-                    "push_hint": "message_visible_to_service",
+                    "push_hint": "new_message",
                     "preview": "Alice: deploy is complete",
                     "counts": {"unread": 3}
                 }

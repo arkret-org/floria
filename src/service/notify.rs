@@ -449,38 +449,19 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
 }
 
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
-    let normalized = push_hint.to_ascii_lowercase();
-    let sensitive_markers = [
-        "candidate:",
-        "ice-ufrag",
-        "ice-pwd",
-        "a=crypto:",
-        "turn:",
-        "turns:",
-        "sdp",
-        "v=0\r",
-        "v=0\n",
-        "title:",
-        "body:",
-        "flow_name:",
-        "space_name:",
-        "flow name:",
-        "space name:",
-        "sender_display_name:",
-        "\"title\"",
-        "\"body\"",
-        "\"flow_name\"",
-        "\"space_name\"",
-    ];
-
-    if sensitive_markers
-        .iter()
-        .any(|marker| normalized.contains(marker))
-    {
-        Err("Contrix blind wakeup push_hint must not contain plaintext preview or call setup material".to_owned())
-    } else {
-        Ok(())
+    if matches!(push_hint, "new_message" | "incoming_call" | "mention_self") {
+        return Ok(());
     }
+    if let Some(key) = push_hint.strip_prefix("l10n_key:")
+        && !key.is_empty()
+        && key.len() <= 64
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    {
+        return Ok(());
+    }
+    Err("Contrix blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
 }
 
 fn validate_blind_content(path: &str, value: &Value) -> Result<(), String> {

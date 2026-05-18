@@ -534,7 +534,7 @@ pub async fn run_worker(
             let notification = Notification {
                 devices: vec![device.clone()],
                 prio: Some("low".to_owned()),
-                push_hint: Some("retry-replay".to_owned()),
+                push_hint: Some("new_message".to_owned()),
                 ..Notification::default()
             };
             let context = NotificationContext {

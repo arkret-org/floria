@@ -120,7 +120,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "sender_display_name": "Alice",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "push_hint": "wakeup-msg-01",
+                "push_hint": "new_message",
                 "devices": [
                     {"app_id": "com.example.app", "push_key": "cached"},
                     {"app_id": "com.example.app", "push_key": "cached"}
@@ -132,7 +132,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "devices": [
                     {"push_key": "cached", "app_id": "com.example.app"}
                 ],
-                "push_hint": "wakeup-msg-01",
+                "push_hint": "new_message",
                 "wakeup_kind": "message",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "sender_display_name": "Alice",

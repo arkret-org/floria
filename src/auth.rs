@@ -533,23 +533,23 @@ fn verify_message_signature(
         })?;
 
     // ----- header pull + parse via SDK ----------------------------------
-    let raw_signature_input =
-        req.header::<String>(SIGNATURE_INPUT_HEADER)
-            .ok_or_else(|| AuthFailure {
-                status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
-                message: "missing Signature-Input header".to_owned(),
-            })?;
-    let signature_input = sdk_sig::parse_signature_input(&raw_signature_input)
-        .map_err(map_signature_input_error)?;
-
-    let raw_signature_header = req
-        .header::<String>(SIGNATURE_HEADER)
+    let raw_signature_input = req
+        .header::<String>(SIGNATURE_INPUT_HEADER)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthenticated",
-            message: "missing Signature header".to_owned(),
+            message: "missing Signature-Input header".to_owned(),
         })?;
+    let signature_input =
+        sdk_sig::parse_signature_input(&raw_signature_input).map_err(map_signature_input_error)?;
+
+    let raw_signature_header =
+        req.header::<String>(SIGNATURE_HEADER)
+            .ok_or_else(|| AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "missing Signature header".to_owned(),
+            })?;
     // We parse the raw signature header solely to fail fast on a missing
     // label / malformed base64 — verify_signature will redo the decoding,
     // but this lets us produce a precise AuthFailure before building the
@@ -633,11 +633,12 @@ fn verify_message_signature(
         code: "invalid_signature",
         message: "configured signature public key is not valid hex".to_owned(),
     })?;
-    let public_key = sdk_sig::public_key_from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: "invalid_signature",
-        message: "configured signature public key is invalid".to_owned(),
-    })?;
+    let public_key =
+        sdk_sig::public_key_from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "configured signature public key is invalid".to_owned(),
+        })?;
     sdk_sig::verify_signature(&message, &signature_b64, &public_key).map_err(|err| match err {
         SignatureError::InvalidSignatureBase64 => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
@@ -756,9 +757,7 @@ fn verified_content_digest(req: &Request, body: &[u8]) -> Result<String, AuthFai
 /// same offending parameter so log scrapers and tests don't break.
 fn map_signature_input_error(err: SignatureError) -> AuthFailure {
     let message = match err {
-        SignatureError::MalformedSignatureInput => {
-            "Signature-Input is malformed".to_owned()
-        }
+        SignatureError::MalformedSignatureInput => "Signature-Input is malformed".to_owned(),
         SignatureError::EmptyCoveredComponents => {
             "Signature-Input must cover at least one component".to_owned()
         }
@@ -791,9 +790,7 @@ fn map_signature_header_error(err: SignatureError) -> AuthFailure {
         SignatureError::MalformedSignatureHeader(_) => {
             "Signature header does not contain the declared signature label".to_owned()
         }
-        SignatureError::InvalidSignatureBase64 => {
-            "Signature header is not valid base64".to_owned()
-        }
+        SignatureError::InvalidSignatureBase64 => "Signature header is not valid base64".to_owned(),
         _ => "Signature header is malformed".to_owned(),
     };
     AuthFailure {
@@ -1144,7 +1141,7 @@ mod tests {
                 "space_id": "cx:space:01JS0SP000000000000000000",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "push_hint": "New message",
+                "push_hint": "new_message",
                 "devices": [{
                     "app_id": "com.example.app",
                     "push_key": "accept"
@@ -1198,7 +1195,7 @@ mod tests {
                 "space_id": "cx:space:01JS0SP000000000000000000",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "push_hint": "New message",
+                "push_hint": "new_message",
                 "devices": [{
                     "app_id": "com.example.app",
                     "push_key": "accept"
@@ -1253,7 +1250,7 @@ mod tests {
                 "space_id": "cx:space:01JS0SP000000000000000000",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "push_hint": "New message",
+                "push_hint": "new_message",
                 "devices": [{
                     "app_id": "com.example.app",
                     "push_key": "accept"
@@ -1322,7 +1319,7 @@ mod tests {
                 "space_id": "cx:space:01JS0SP000000000000000000",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "push_hint": "New message",
+                "push_hint": "new_message",
                 "devices": [{"app_id": "com.example.app", "push_key": "accept"}]
             }
         });
