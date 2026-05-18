@@ -89,6 +89,14 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 todo: "GET /api/v1/push/describe is a profile-level snapshot kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
+                name: "server_describe_alias",
+                method: "GET",
+                path: "/api/v1/server/describe",
+                contract: "cx.profile.push_gateway.v1",
+                stability: "active",
+                todo: "Alias of GET /api/v1/push/describe for generic service discovery; responses are identical.",
+            },
+            IntegrationSurfaceDescriptor {
                 name: "health",
                 method: "GET",
                 path: "/health",

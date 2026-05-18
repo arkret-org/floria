@@ -42,6 +42,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             Router::with_path("api/v1/push/bridge/describe").get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
+        .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
 }
@@ -59,6 +60,7 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
             Router::with_path("api/v1/push/bridge/describe").get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
+        .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
 }

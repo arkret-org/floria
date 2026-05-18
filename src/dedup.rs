@@ -155,29 +155,29 @@ impl NotifyDeduplicator {
         &self,
         notification_key: &str,
         app_id: &str,
-        pushkey: &str,
+        push_key: &str,
     ) -> bool {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => {
-                backend.contains_delivered_device(notification_key, app_id, pushkey)
+                backend.contains_delivered_device(notification_key, app_id, push_key)
             }
             NotifyDedupBackend::Redis(backend) => {
-                backend.contains_delivered_device(notification_key, app_id, pushkey)
+                backend.contains_delivered_device(notification_key, app_id, push_key)
             }
         }
     }
 
-    pub fn mark_delivered_device(&self, notification_key: &str, app_id: &str, pushkey: &str) {
+    pub fn mark_delivered_device(&self, notification_key: &str, app_id: &str, push_key: &str) {
         if self.ttl.is_zero() {
             return;
         }
 
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => {
-                backend.mark_delivered_device(self.ttl, notification_key, app_id, pushkey)
+                backend.mark_delivered_device(self.ttl, notification_key, app_id, push_key)
             }
             NotifyDedupBackend::Redis(backend) => {
-                backend.mark_delivered_device(self.ttl, notification_key, app_id, pushkey)
+                backend.mark_delivered_device(self.ttl, notification_key, app_id, push_key)
             }
         }
     }
@@ -234,9 +234,9 @@ impl MemoryNotifyDeduplicator {
         &self,
         notification_key: &str,
         app_id: &str,
-        pushkey: &str,
+        push_key: &str,
     ) -> bool {
-        let key = delivered_device_key(notification_key, app_id, pushkey);
+        let key = delivered_device_key(notification_key, app_id, push_key);
         let now = Instant::now();
         let mut entries = self
             .delivered_devices
@@ -251,9 +251,9 @@ impl MemoryNotifyDeduplicator {
         ttl: Duration,
         notification_key: &str,
         app_id: &str,
-        pushkey: &str,
+        push_key: &str,
     ) {
-        let key = delivered_device_key(notification_key, app_id, pushkey);
+        let key = delivered_device_key(notification_key, app_id, push_key);
         let now = Instant::now();
         let mut entries = self
             .delivered_devices
@@ -377,7 +377,7 @@ impl RedisNotifyDeduplicator {
         &self,
         notification_key: &str,
         app_id: &str,
-        pushkey: &str,
+        push_key: &str,
     ) -> bool {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
@@ -386,7 +386,7 @@ impl RedisNotifyDeduplicator {
                 return false;
             }
         };
-        let delivered_key = self.delivered_key(notification_key, app_id, pushkey);
+        let delivered_key = self.delivered_key(notification_key, app_id, push_key);
         match connection.exists::<_, bool>(&delivered_key) {
             Ok(value) => value,
             Err(error) => {
@@ -401,7 +401,7 @@ impl RedisNotifyDeduplicator {
         ttl: Duration,
         notification_key: &str,
         app_id: &str,
-        pushkey: &str,
+        push_key: &str,
     ) {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
@@ -410,7 +410,7 @@ impl RedisNotifyDeduplicator {
                 return;
             }
         };
-        let delivered_key = self.delivered_key(notification_key, app_id, pushkey);
+        let delivered_key = self.delivered_key(notification_key, app_id, push_key);
         let ttl_seconds = ttl_seconds(ttl);
         if let Err(error) = connection.set_ex::<_, _, ()>(&delivered_key, "1", ttl_seconds as u64) {
             tracing::warn!(error = %error, backend = %self.target_label, redis_key = %delivered_key, "failed to store Redis delivered-device cache entry");
@@ -431,8 +431,8 @@ impl RedisNotifyDeduplicator {
         format!("{}:notify:response:{{{key}}}", self.key_prefix)
     }
 
-    fn delivered_key(&self, notification_key: &str, app_id: &str, pushkey: &str) -> String {
-        let key = delivered_device_key(notification_key, app_id, pushkey);
+    fn delivered_key(&self, notification_key: &str, app_id: &str, push_key: &str) -> String {
+        let key = delivered_device_key(notification_key, app_id, push_key);
         format!(
             "{}:notify:delivered:{{{notification_key}}}:{key}",
             self.key_prefix
@@ -446,13 +446,13 @@ pub fn request_hash(request_body: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn delivered_device_key(notification_key: &str, app_id: &str, pushkey: &str) -> String {
+fn delivered_device_key(notification_key: &str, app_id: &str, push_key: &str) -> String {
     let mut hasher = Blake2s256::new();
     hasher.update(notification_key.as_bytes());
     hasher.update([0]);
     hasher.update(app_id.as_bytes());
     hasher.update([0]);
-    hasher.update(pushkey.as_bytes());
+    hasher.update(push_key.as_bytes());
     hex::encode(hasher.finalize())
 }
 
@@ -480,7 +480,7 @@ mod tests {
         let response = NotifyResponse {
             request_id: "request-1".to_owned(),
             accepted: 1,
-            rejected: vec![RejectedDevice::new(Some("com.example.app"), "pushkey")],
+            rejected: vec![RejectedDevice::new(Some("com.example.app"), "push_key")],
             provider_retries: vec![],
             delivery_receipts: vec![],
         };
@@ -520,9 +520,9 @@ mod tests {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
         let notification_key = request_hash(br#"{"notification":{}}"#);
 
-        dedup.mark_delivered_device(&notification_key, "com.example.app", "pushkey");
+        dedup.mark_delivered_device(&notification_key, "com.example.app", "push_key");
 
-        assert!(dedup.contains_delivered_device(&notification_key, "com.example.app", "pushkey"));
+        assert!(dedup.contains_delivered_device(&notification_key, "com.example.app", "push_key"));
     }
 
     #[test]

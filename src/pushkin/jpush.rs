@@ -208,7 +208,7 @@ impl JpushPushkin {
         );
         body.insert(
             "audience".to_owned(),
-            json!({ "registration_id": [device.pushkey.clone()] }),
+            json!({ "registration_id": [device.push_key.clone()] }),
         );
 
         let mut notification_object = Map::new();
@@ -388,7 +388,7 @@ impl JpushPushkin {
                 retry_after,
             )),
             400 if body.contains("registration_id") && body.contains("invalid") => {
-                Ok(vec![device.pushkey.clone()])
+                Ok(vec![device.push_key.clone()])
             }
             _ => Err(DispatchError::remote(jpush_error_message(body, status))),
         }
@@ -417,19 +417,19 @@ impl Pushkin for JpushPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.pushkey.trim().is_empty() {
+        if device.push_key.trim().is_empty() {
             tracing::warn!("rejecting JPush device due to empty registration_id");
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         let default_payload = match device.default_payload() {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
-                    "rejecting JPush pushkey due to invalid default_payload"
+                    push_key_hash = %device.redacted_push_key(),
+                    "rejecting JPush push_key due to invalid default_payload"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
         let Some(payload) = build_android_notification_payload(
@@ -460,13 +460,13 @@ impl Pushkin for JpushPushkin {
                     // the base when they are configured. operators
                     // can disable this by setting third_party_channel
                     // to the looser vendors only.
-                    let stricter = self
-                        .config
-                        .third_party_channel
-                        .as_ref()
-                        .is_some_and(|channel| {
-                            channel.contains_key("huawei") || channel.contains_key("xiaomi")
-                        });
+                    let stricter =
+                        self.config
+                            .third_party_channel
+                            .as_ref()
+                            .is_some_and(|channel| {
+                                channel.contains_key("huawei") || channel.contains_key("xiaomi")
+                            });
                     let multiplier = if stricter { 2 } else { 1 };
                     let retry_after = error.retry_after().unwrap_or_else(|| {
                         Duration::from_secs(
@@ -594,8 +594,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.jpush".to_owned(),
-            pushkey: "regid".to_owned(),
-            pushkey_ts: 42,
+            push_key: "regid".to_owned(),
             data: Some(
                 json!({
                     "default_payload": {
@@ -631,7 +630,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -716,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_registration_response_rejects_pushkey() {
+    fn invalid_registration_response_rejects_push_key() {
         let result = pushkin()
             .handle_response(
                 StatusCode::BAD_REQUEST,

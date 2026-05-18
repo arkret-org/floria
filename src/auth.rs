@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
-use base64::Engine;
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use contrix::http_signature::{
+    self as sdk_sig, Component, ContentDigest, SignatureError, SignatureInput, SignedRequestParts,
+};
 use salvo::http::StatusCode;
 use salvo::prelude::Request;
 use sha2::{Digest, Sha256};
@@ -30,15 +31,13 @@ pub struct AuthFailure {
     pub message: String,
 }
 
-#[derive(Debug)]
-struct ParsedSignatureInput {
-    label: String,
-    covered_components: Vec<String>,
-    created: i64,
-    expires: i64,
-    key_id: String,
-    algorithm: String,
-}
+/// Backwards-compatible type alias for the in-tree name `ParsedSignatureInput`
+/// that the rest of floria's verifier referred to before FL-2. The
+/// concrete type now lives in `contrix::http_signature::SignatureInput`
+/// — keeping the alias avoids churn in tracing / log helpers that named
+/// the old type.
+#[allow(dead_code)]
+type ParsedSignatureInput = SignatureInput;
 
 pub fn authenticate_notify_request(
     req: &Request,
@@ -121,8 +120,7 @@ pub fn authenticate_notify_request(
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
                     code: "unauthenticated",
-                    message: "production mode requires HTTP Message Signature or mTLS"
-                        .to_owned(),
+                    message: "production mode requires HTTP Message Signature or mTLS".to_owned(),
                 });
             }
             if bearer_matches(
@@ -157,8 +155,8 @@ pub fn authenticate_notify_request(
             verified_content_digest(req, body)?;
         }
 
-        let allow_plaintext = principal.allow_plaintext_metadata
-            && principal_is_plaintext_eligible(principal);
+        let allow_plaintext =
+            principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal);
         return Ok(AuthenticatedNotifyCaller {
             origin_service_did: origin_did.to_owned(),
             allow_plaintext_metadata: allow_plaintext,
@@ -188,10 +186,7 @@ fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> 
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        // Without a declared service kind we keep the legacy
-        // permissive behaviour outside of production mode; production
-        // validation already rejects this combination at startup.
-        return true;
+        return false;
     };
     crate::config::is_plaintext_eligible_service_kind(kind)
 }
@@ -521,7 +516,7 @@ fn verify_message_signature(
             message: "service principal is missing signature key configuration".to_owned(),
         }
     })?;
-    let public_key = principal
+    let public_key_hex = principal
         .signature_public_key_hex
         .as_deref()
         .ok_or_else(|| {
@@ -537,23 +532,43 @@ fn verify_message_signature(
             }
         })?;
 
-    let signature_input = req
-        .header::<String>(SIGNATURE_INPUT_HEADER)
-        .ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "unauthenticated",
-            message: "missing Signature-Input header".to_owned(),
-        })
-        .and_then(|value| parse_signature_input(&value))?;
-    let signature = req
+    // ----- header pull + parse via SDK ----------------------------------
+    let raw_signature_input =
+        req.header::<String>(SIGNATURE_INPUT_HEADER)
+            .ok_or_else(|| AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "missing Signature-Input header".to_owned(),
+            })?;
+    let signature_input = sdk_sig::parse_signature_input(&raw_signature_input)
+        .map_err(map_signature_input_error)?;
+
+    let raw_signature_header = req
         .header::<String>(SIGNATURE_HEADER)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthenticated",
             message: "missing Signature header".to_owned(),
-        })
-        .and_then(|value| parse_signature_header(&value, &signature_input.label))?;
+        })?;
+    // We parse the raw signature header solely to fail fast on a missing
+    // label / malformed base64 — verify_signature will redo the decoding,
+    // but this lets us produce a precise AuthFailure before building the
+    // canonical message.
+    let signature_bytes =
+        sdk_sig::parse_signature_header(&raw_signature_header, &signature_input.label)
+            .map_err(map_signature_header_error)?;
+    if signature_bytes.len() != 64 {
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "Signature header is not a valid Ed25519 signature".to_owned(),
+        });
+    }
+    // The base64 form of the signature value, with the `label=:` wrap
+    // stripped, is what verify_signature expects.
+    let signature_b64 = sdk_sig::encode_signature_b64(&signature_bytes);
 
+    // ----- policy checks (key_id, alg, required components, skew) ------
     if signature_input.key_id != key_id {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
@@ -570,21 +585,14 @@ fn verify_message_signature(
     }
 
     let required_components = [
-        "@method",
-        "@target-uri",
-        "@authority",
-        "content-digest",
-        ORIGIN_SERVICE_DID_HEADER,
-        DESTINATION_SERVICE_DID_HEADER,
-    ]
-    .into_iter()
-    .collect::<HashSet<_>>();
-    let covered = signature_input
-        .covered_components
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-    if !required_components.is_subset(&covered) {
+        Component::Method,
+        Component::TargetUri,
+        Component::Authority,
+        Component::Header(CONTENT_DIGEST_HEADER.to_owned()),
+        Component::Header(ORIGIN_SERVICE_DID_HEADER.to_owned()),
+        Component::Header(DESTINATION_SERVICE_DID_HEADER.to_owned()),
+    ];
+    if !signature_input.covers_all(&required_components) {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "invalid_signature",
@@ -608,81 +616,101 @@ fn verify_message_signature(
         });
     }
 
-    let signing_string = build_signing_string(req, body, &signature_input)?;
-    let public_key_bytes = hex::decode(public_key).map_err(|_| AuthFailure {
+    // ----- content-digest enforcement (covered → must verify) ----------
+    // floria has always insisted that `content-digest` is a covered
+    // component (the required_components check above guarantees it), and
+    // that the body matches. We re-verify here against the raw body so
+    // tampering is caught before the canonical message is even built.
+    let verified_digest = verified_content_digest(req, body)?;
+
+    // ----- canonical message + ed25519 verify --------------------------
+    let parts = signed_request_parts(req, &verified_digest)?;
+    let message =
+        sdk_sig::canonical_message(&parts, &signature_input).map_err(map_canonical_error)?;
+
+    let public_key_bytes = hex::decode(public_key_hex).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: "invalid_signature",
         message: "configured signature public key is not valid hex".to_owned(),
     })?;
-    let public_key_bytes: [u8; 32] = public_key_bytes.try_into().map_err(|_| AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: "invalid_signature",
-        message: "configured signature public key must be 32 bytes".to_owned(),
-    })?;
-    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
+    let public_key = sdk_sig::public_key_from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: "invalid_signature",
         message: "configured signature public key is invalid".to_owned(),
     })?;
-    let signature = Signature::from_slice(&signature).map_err(|_| AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: "invalid_signature",
-        message: "Signature header is not a valid Ed25519 signature".to_owned(),
-    })?;
-    verifying_key
-        .verify(signing_string.as_bytes(), &signature)
-        .map_err(|_| AuthFailure {
+    sdk_sig::verify_signature(&message, &signature_b64, &public_key).map_err(|err| match err {
+        SignatureError::InvalidSignatureBase64 => AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "Signature header is not valid base64".to_owned(),
+        },
+        SignatureError::InvalidSignatureLength => AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "Signature header is not a valid Ed25519 signature".to_owned(),
+        },
+        _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "invalid_signature",
             message: "HTTP Message Signature verification failed".to_owned(),
-        })
+        },
+    })
 }
 
-fn build_signing_string(
+/// Project a salvo `Request` into the SDK's framework-agnostic
+/// [`SignedRequestParts`]. The pre-verified `content-digest` wire value
+/// is threaded in so `canonical_message` can emit it without re-parsing
+/// the header.
+fn signed_request_parts(
     req: &Request,
-    body: &[u8],
-    signature_input: &ParsedSignatureInput,
-) -> Result<String, AuthFailure> {
-    let mut lines = Vec::new();
-    for component in &signature_input.covered_components {
-        let value = component_value(req, body, component)?;
-        lines.push(format!("\"{component}\": {value}"));
-    }
-    lines.push(format!(
-        "\"@signature-params\": ({})\
-;created={};expires={};keyid=\"{}\";alg=\"{}\"",
-        signature_input
-            .covered_components
-            .iter()
-            .map(|component| format!("\"{component}\""))
-            .collect::<Vec<_>>()
-            .join(" "),
-        signature_input.created,
-        signature_input.expires,
-        signature_input.key_id,
-        signature_input.algorithm
+    verified_content_digest: &str,
+) -> Result<SignedRequestParts, AuthFailure> {
+    let target_uri = target_uri(req)?;
+    let authority = authority(req)?.to_owned();
+    let path = req
+        .uri()
+        .path_and_query()
+        .map(|value| value.as_str().to_owned())
+        .unwrap_or_else(|| req.uri().path().to_owned());
+    let method = req.method().as_str().to_owned();
+
+    // Forward every request header so any non-required covered
+    // component the signer chose to include is still resolvable.
+    let mut headers: Vec<(String, String)> = req
+        .headers()
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.as_str().to_ascii_lowercase(),
+                value.to_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    // floria derives `@authority` from the Host header / URI fallback,
+    // and SDK canonicalization reads it from `parts.authority` directly
+    // (not from a `host` entry in `headers`), so no extra wiring needed.
+    // Make sure the content-digest emitted in the canonical message is
+    // the body-verified one, not whatever the request header happens to
+    // contain (they should match by definition, but we belt-and-brace).
+    headers.retain(|(name, _)| name != "content-digest");
+    headers.push((
+        "content-digest".to_owned(),
+        verified_content_digest.to_owned(),
     ));
-    Ok(lines.join("\n"))
+
+    Ok(SignedRequestParts {
+        method,
+        target_uri,
+        authority,
+        path,
+        headers,
+        body_digest: Some(verified_content_digest.to_owned()),
+    })
 }
 
-fn component_value(req: &Request, body: &[u8], component: &str) -> Result<String, AuthFailure> {
-    match component {
-        "@method" => Ok(req.method().as_str().to_ascii_lowercase()),
-        "@target-uri" => Ok(target_uri(req)?),
-        "@authority" => Ok(authority(req)?.to_owned()),
-        CONTENT_DIGEST_HEADER => verified_content_digest(req, body),
-        header => req
-            .header::<String>(header)
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| AuthFailure {
-                status: StatusCode::UNAUTHORIZED,
-                code: "invalid_signature",
-                message: format!("required signed header `{header}` is missing"),
-            }),
-    }
-}
-
+/// Re-verify the RFC 9530 `Content-Digest` against the raw body and
+/// return the parsed wire value on success. Routed through SDK's
+/// [`ContentDigest`] so the parser semantics live in one place.
 fn verified_content_digest(req: &Request, body: &[u8]) -> Result<String, AuthFailure> {
     let value = req
         .header::<String>(CONTENT_DIGEST_HEADER)
@@ -691,155 +719,102 @@ fn verified_content_digest(req: &Request, body: &[u8]) -> Result<String, AuthFai
             code: "invalid_signature",
             message: "missing Content-Digest header".to_owned(),
         })?;
-    let parsed = value.trim();
-    let Some(encoded) = parsed
-        .strip_prefix("sha-256=:")
-        .and_then(|value| value.strip_suffix(':'))
-    else {
+    let parsed = ContentDigest::parse(value.trim()).map_err(|err| match err {
+        SignatureError::MalformedContentDigest => AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "Content-Digest must use sha-256 or sha-512".to_owned(),
+        },
+        _ => AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_signature",
+            message: "Content-Digest header is invalid".to_owned(),
+        },
+    })?;
+    // floria has historically locked the wire profile to sha-256 — keep
+    // that policy here rather than relaxing it just because the SDK
+    // parser also accepts sha-512.
+    if parsed.algorithm != sdk_sig::ContentDigestAlgorithm::Sha256 {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "invalid_signature",
             message: "Content-Digest must use sha-256".to_owned(),
         });
+    }
+    sdk_sig::verify_content_digest(&parsed, body).map_err(|_| AuthFailure {
+        status: StatusCode::UNAUTHORIZED,
+        code: "invalid_signature",
+        message: "Content-Digest does not match request body".to_owned(),
+    })?;
+    Ok(parsed.wire_value)
+}
+
+/// Map an SDK `Signature-Input` parse failure into floria's
+/// [`AuthFailure`] shape. The previous in-tree parser produced
+/// per-failure messages like "Signature-Input is missing created" — we
+/// preserve those exact wordings where the SDK error pinpoints the
+/// same offending parameter so log scrapers and tests don't break.
+fn map_signature_input_error(err: SignatureError) -> AuthFailure {
+    let message = match err {
+        SignatureError::MalformedSignatureInput => {
+            "Signature-Input is malformed".to_owned()
+        }
+        SignatureError::EmptyCoveredComponents => {
+            "Signature-Input must cover at least one component".to_owned()
+        }
+        SignatureError::MissingSignatureInputParameter("created") => {
+            "Signature-Input is missing created".to_owned()
+        }
+        SignatureError::MissingSignatureInputParameter("expires") => {
+            "Signature-Input is missing expires".to_owned()
+        }
+        SignatureError::MissingSignatureInputParameter("keyid") => {
+            "Signature-Input is missing keyid".to_owned()
+        }
+        SignatureError::MissingSignatureInputParameter(name) => {
+            format!("Signature-Input is missing {name}")
+        }
+        SignatureError::InvalidSignatureInputParameter(name) => {
+            format!("Signature-Input parameter `{name}` is invalid")
+        }
+        _ => "Signature-Input is malformed".to_owned(),
     };
-    let provided = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(|_| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Content-Digest is not valid base64".to_owned(),
-        })?;
-    let mut hasher = Sha256::new();
-    hasher.update(body);
-    let expected = hasher.finalize().to_vec();
-    if provided != expected {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Content-Digest does not match request body".to_owned(),
-        });
+    AuthFailure {
+        status: StatusCode::UNAUTHORIZED,
+        code: "invalid_signature",
+        message,
     }
-    Ok(parsed.to_owned())
 }
 
-fn parse_signature_input(value: &str) -> Result<ParsedSignatureInput, AuthFailure> {
-    let trimmed = value.trim();
-    let (label, remainder) = trimmed.split_once('=').ok_or_else(|| AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: "invalid_signature",
-        message: "Signature-Input is malformed".to_owned(),
-    })?;
-    let remainder = remainder.trim();
-    let end_components = remainder.find(')').ok_or_else(|| AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: "invalid_signature",
-        message: "Signature-Input is missing covered components".to_owned(),
-    })?;
-    let components_str = remainder
-        .strip_prefix('(')
-        .and_then(|value| value.get(..end_components - 1))
-        .ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input covered components are malformed".to_owned(),
-        })?;
-    let covered_components = components_str
-        .split_ascii_whitespace()
-        .map(|component| component.trim_matches('"').to_ascii_lowercase())
-        .filter(|component| !component.is_empty())
-        .collect::<Vec<_>>();
-    if covered_components.is_empty() {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input must cover at least one component".to_owned(),
-        });
-    }
-
-    let mut created = None;
-    let mut expires = None;
-    let mut key_id = None;
-    let mut algorithm = None;
-    for param in remainder[end_components + 1..]
-        .split(';')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let (name, raw_value) = param.split_once('=').ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input parameter is malformed".to_owned(),
-        })?;
-        match name {
-            "created" => {
-                created = raw_value.parse::<i64>().ok();
-            }
-            "expires" => {
-                expires = raw_value.parse::<i64>().ok();
-            }
-            "keyid" => {
-                key_id = Some(raw_value.trim_matches('"').to_owned());
-            }
-            "alg" => {
-                algorithm = Some(raw_value.trim_matches('"').to_ascii_lowercase());
-            }
-            _ => {}
+fn map_signature_header_error(err: SignatureError) -> AuthFailure {
+    let message = match err {
+        SignatureError::MalformedSignatureHeader(_) => {
+            "Signature header does not contain the declared signature label".to_owned()
         }
+        SignatureError::InvalidSignatureBase64 => {
+            "Signature header is not valid base64".to_owned()
+        }
+        _ => "Signature header is malformed".to_owned(),
+    };
+    AuthFailure {
+        status: StatusCode::UNAUTHORIZED,
+        code: "invalid_signature",
+        message,
     }
-
-    Ok(ParsedSignatureInput {
-        label: label.trim().to_owned(),
-        covered_components,
-        created: created.ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input is missing created".to_owned(),
-        })?,
-        expires: expires.ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input is missing expires".to_owned(),
-        })?,
-        key_id: key_id.ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature-Input is missing keyid".to_owned(),
-        })?,
-        algorithm: algorithm.unwrap_or_else(|| "ed25519".to_owned()),
-    })
 }
 
-fn parse_signature_header(value: &str, label: &str) -> Result<Vec<u8>, AuthFailure> {
-    for part in value
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let Some((candidate, encoded)) = part.split_once("=:") else {
-            continue;
-        };
-        if candidate.trim() != label {
-            continue;
+fn map_canonical_error(err: SignatureError) -> AuthFailure {
+    let message = match err {
+        SignatureError::MissingCoveredComponent(name) => {
+            format!("required signed header `{name}` is missing")
         }
-        let encoded = encoded.strip_suffix(':').ok_or_else(|| AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_signature",
-            message: "Signature header is malformed".to_owned(),
-        })?;
-        return base64::engine::general_purpose::STANDARD
-            .decode(encoded)
-            .map_err(|_| AuthFailure {
-                status: StatusCode::UNAUTHORIZED,
-                code: "invalid_signature",
-                message: "Signature header is not valid base64".to_owned(),
-            });
-    }
-
-    Err(AuthFailure {
+        _ => "HTTP Message Signature canonicalization failed".to_owned(),
+    };
+    AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: "invalid_signature",
-        message: "Signature header does not contain the declared signature label".to_owned(),
-    })
+        message,
+    }
 }
 
 fn has_signature_headers(req: &Request) -> bool {
@@ -1167,12 +1142,12 @@ mod tests {
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
                 "space_id": "cx:space:01JS0SP000000000000000000",
-                "type": "cx.message.create",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
                 "push_hint": "New message",
                 "devices": [{
                     "app_id": "com.example.app",
-                    "pushkey": "accept",
-                    "pushkey_ts": 42
+                    "push_key": "accept"
                 }]
             }
         });
@@ -1221,12 +1196,12 @@ mod tests {
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
                 "space_id": "cx:space:01JS0SP000000000000000000",
-                "type": "cx.message.create",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
                 "push_hint": "New message",
                 "devices": [{
                     "app_id": "com.example.app",
-                    "pushkey": "accept",
-                    "pushkey_ts": 42
+                    "push_key": "accept"
                 }]
             }
         });
@@ -1276,12 +1251,12 @@ mod tests {
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
                 "space_id": "cx:space:01JS0SP000000000000000000",
-                "type": "cx.message.create",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
                 "push_hint": "New message",
                 "devices": [{
                     "app_id": "com.example.app",
-                    "pushkey": "accept",
-                    "pushkey_ts": 42
+                    "push_key": "accept"
                 }]
             }
         });
@@ -1319,6 +1294,141 @@ mod tests {
         assert_eq!(
             redact_url_credentials("http://alice:secret@proxy.example.com:8080"),
             "http://***:***@proxy.example.com:8080/"
+        );
+    }
+
+    // ----- FL-2: SDK-routed verifier rejection coverage --------------
+    //
+    // The migration to `contrix::http_signature` changed where parsing
+    // happens (in-tree → SDK) but must NOT change which inputs floria
+    // rejects. These tests pin the rejection set so a future SDK bump
+    // can't silently loosen verification.
+
+    #[tokio::test]
+    async fn fl2_rejects_tampered_body_after_sdk_migration() {
+        let seed_hex = "0404040404040404040404040404040404040404040404040404040404040404";
+        let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+        principal.signature_public_key_hex = Some(public_key_hex);
+        let service = test_service_with_principal(principal);
+        let body = json!({
+            "operation_id": "cx.push.notify",
+            "origin_service_did": "did:web:sync.example.com",
+            "notification": {
+                "event_id": "cx:event:01JS0EV000000000000000000",
+                "message_id": "cx:message:01JS0MSG0000000000000000",
+                "flow_id": "cx:flow:01JS0FLOW000000000000000",
+                "space_id": "cx:space:01JS0SP000000000000000000",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
+                "push_hint": "New message",
+                "devices": [{"app_id": "com.example.app", "push_key": "accept"}]
+            }
+        });
+        let body_bytes = serde_json::to_vec(&body).unwrap();
+        // Sign one body, send a *different* body — content-digest
+        // recomputation in the SDK-routed verifier must reject this.
+        let (content_digest, signature_input, signature) = sign_request(
+            seed_hex,
+            "POST",
+            "http://127.0.0.1/api/v1/push/notify",
+            "127.0.0.1",
+            &body_bytes,
+        );
+        let tampered_body = json!({"hello": "world"});
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("host", "127.0.0.1", true)
+            .add_header("content-digest", content_digest, true)
+            .add_header("signature-input", signature_input, true)
+            .add_header("signature", signature, true)
+            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                DESTINATION_SERVICE_DID_HEADER,
+                "did:web:push.example.com",
+                true,
+            )
+            .json(&tampered_body)
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+        let resp_body = response.take_string().await.unwrap();
+        assert!(
+            resp_body.contains("Content-Digest does not match request body"),
+            "expected body-mismatch rejection, got: {resp_body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fl2_rejects_signature_missing_required_components_after_sdk_migration() {
+        let seed_hex = "0505050505050505050505050505050505050505050505050505050505050505";
+        let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+        principal.signature_public_key_hex = Some(public_key_hex);
+        let service = test_service_with_principal(principal);
+        let body = json!({"operation_id": "cx.push.notify"});
+        let body_bytes = serde_json::to_vec(&body).unwrap();
+
+        let seed = hex::decode(seed_hex).unwrap();
+        let seed: [u8; 32] = seed.try_into().unwrap();
+        let signing_key = SigningKey::from_bytes(&seed);
+
+        let mut hasher = Sha256::new();
+        hasher.update(&body_bytes);
+        let digest = format!(
+            "sha-256=:{}:",
+            base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
+        );
+        let now = unix_now_secs();
+        // Intentionally omit `@authority` from the covered components —
+        // floria's required-component policy must still trip this.
+        let signature_input = format!(
+            "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            now - 1,
+            now + 300
+        );
+        let signing_string = [
+            "\"@method\": post".to_owned(),
+            "\"@target-uri\": http://127.0.0.1/api/v1/push/notify".to_owned(),
+            format!("\"content-digest\": {digest}"),
+            "\"x-contrix-origin-service-did\": did:web:sync.example.com".to_owned(),
+            "\"x-contrix-destination-service-did\": did:web:push.example.com".to_owned(),
+            format!(
+                "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+                now - 1,
+                now + 300
+            ),
+        ]
+        .join("\n");
+        let signature = signing_key.sign(signing_string.as_bytes());
+        let signature = format!(
+            "sig1=:{}:",
+            base64::engine::general_purpose::STANDARD.encode(signature.to_bytes())
+        );
+
+        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+            .add_header("host", "127.0.0.1", true)
+            .add_header("content-digest", digest, true)
+            .add_header("signature-input", signature_input, true)
+            .add_header("signature", signature, true)
+            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                DESTINATION_SERVICE_DID_HEADER,
+                "did:web:push.example.com",
+                true,
+            )
+            .json(&body)
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+        let resp_body = response.take_string().await.unwrap();
+        assert!(
+            resp_body.contains("missing required covered components"),
+            "expected required-components rejection, got: {resp_body}"
         );
     }
 }

@@ -14,7 +14,7 @@ Push gateway service in Rust.
 ## Supported features
 
 - `POST /api/v1/push/notify` as the canonical Contrix notify endpoint
-- `GET /api/v1/push/describe` gateway profile discovery
+- `GET /api/v1/push/describe` gateway profile discovery (`/api/v1/server/describe` is an identical alias)
 - `GET /health`
 - `GET /ready`
 - Prometheus metrics on a dedicated `/metrics` listener
@@ -64,7 +64,7 @@ Quick notes:
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
-- legacy `room_*`, `card_*`, `subject*`, Matrix `m.room.*`, and `only_last_per_room` inputs are rejected
+- notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model
 - rejected push tokens are returned as hashes, not raw platform tokens
 - response delivery receipt refs contain provider/status/token hash metadata only, never plaintext payloads
 - bearer fallback is header-only; query string auth material is rejected

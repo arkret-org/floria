@@ -309,7 +309,7 @@ impl VivoPushkin {
 
         let mut body = Map::new();
         body.insert("appId".to_owned(), self.auth.app_id.clone());
-        body.insert("regId".to_owned(), Value::String(device.pushkey.clone()));
+        body.insert("regId".to_owned(), Value::String(device.push_key.clone()));
         body.insert(
             "notifyType".to_owned(),
             Value::Number(self.config.notify_type.into()),
@@ -472,16 +472,18 @@ impl VivoPushkin {
             200..=299 => match serde_json::from_str::<VivoSendResponse>(body) {
                 Ok(response) if response.result == 0 => Ok(vec![]),
                 Ok(response) if response.is_invalid_registration(device) => {
-                    Ok(vec![device.pushkey.clone()])
+                    Ok(vec![device.push_key.clone()])
                 }
                 Ok(response) => Err(DispatchError::remote(format!(
                     "vivo Push rejected request: {} {}",
                     response.result, response.desc
                 ))),
-                Err(_) if looks_like_invalid_registration(body) => Ok(vec![device.pushkey.clone()]),
+                Err(_) if looks_like_invalid_registration(body) => {
+                    Ok(vec![device.push_key.clone()])
+                }
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_registration(body) => Ok(vec![device.pushkey.clone()]),
+            _ if looks_like_invalid_registration(body) => Ok(vec![device.push_key.clone()]),
             _ => Err(DispatchError::remote(vivo_error_message(body, status))),
         }
     }
@@ -509,17 +511,17 @@ impl Pushkin for VivoPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.pushkey.trim().is_empty() {
+        if device.push_key.trim().is_empty() {
             tracing::warn!("rejecting vivo Push device due to empty regId");
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         if device.default_payload().is_err() {
             tracing::warn!(
-                pushkey_hash = %device.redacted_pushkey(),
-                "rejecting vivo Push pushkey due to invalid default_payload"
+                push_key_hash = %device.redacted_push_key(),
+                "rejecting vivo Push push_key due to invalid default_payload"
             );
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         for attempt in 0..VIVO_MAX_TRIES {
@@ -666,11 +668,11 @@ impl VivoSendResponse {
             || self
                 .invalid_user
                 .as_ref()
-                .is_some_and(|user| user.userid.as_deref() == Some(device.pushkey.as_str()))
+                .is_some_and(|user| user.userid.as_deref() == Some(device.push_key.as_str()))
             || self
                 .invalid_users
                 .iter()
-                .any(|user| user.userid.as_deref() == Some(device.pushkey.as_str()))
+                .any(|user| user.userid.as_deref() == Some(device.push_key.as_str()))
             || looks_like_invalid_registration(&self.desc)
     }
 }
@@ -689,8 +691,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.vivo".to_owned(),
-            pushkey: "regid".to_owned(),
-            pushkey_ts: 42,
+            push_key: "regid".to_owned(),
             data: Some(
                 json!({
                     "default_payload": {
@@ -726,7 +727,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],

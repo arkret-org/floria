@@ -387,9 +387,7 @@ impl NotifyAuthConfig {
             );
         }
         if self.gateway_service_did.is_none() {
-            bail!(
-                "http.notify_auth.production_mode requires http.notify_auth.gateway_service_did"
-            );
+            bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_did");
         }
         if self.service_principals.is_empty() {
             bail!(
@@ -525,9 +523,7 @@ impl NotifyNonceStoreConfig {
                     .map(str::trim)
                     .is_none_or(|value| value.is_empty())
                 {
-                    bail!(
-                        "http.notify_auth.nonce_store.redis_url is required when backend=redis"
-                    );
+                    bail!("http.notify_auth.nonce_store.redis_url is required when backend=redis");
                 }
             }
             backend => {
@@ -712,9 +708,7 @@ impl NotifyRateLimitConfig {
                     .map(str::trim)
                     .is_none_or(|value| value.is_empty())
                 {
-                    bail!(
-                        "http.notify_rate_limits.redis_url is required when backend=redis"
-                    );
+                    bail!("http.notify_rate_limits.redis_url is required when backend=redis");
                 }
             }
             backend => {
@@ -799,9 +793,7 @@ impl NotifyRetryQueueConfig {
             bail!("http.notify_retry_queue.default_backoff_seconds must be >= 1");
         }
         if self.max_backoff_seconds < self.default_backoff_seconds {
-            bail!(
-                "http.notify_retry_queue.max_backoff_seconds must be >= default_backoff_seconds"
-            );
+            bail!("http.notify_retry_queue.max_backoff_seconds must be >= default_backoff_seconds");
         }
         match self.backend_kind() {
             "memory" => Ok(()),
@@ -2003,8 +1995,7 @@ apps: {}
     fn production_mode_requires_signed_or_mtls_principal() {
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
-        config.http.notify_auth.gateway_service_did =
-            Some("did:web:push.example.com".to_owned());
+        config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
         let mut principal = NotifyServicePrincipalConfig::default();
         principal.bearer_tokens = vec!["principal-token".to_owned()];
         config
@@ -2024,8 +2015,7 @@ apps: {}
     fn production_mode_rejects_gateway_wide_bearer_tokens() {
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
-        config.http.notify_auth.gateway_service_did =
-            Some("did:web:push.example.com".to_owned());
+        config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
         config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
         let mut principal = NotifyServicePrincipalConfig::default();
         principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
@@ -2047,13 +2037,12 @@ apps: {}
     fn production_mode_rejects_plaintext_for_non_eligible_kind() {
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
-        config.http.notify_auth.gateway_service_did =
-            Some("did:web:push.example.com".to_owned());
+        config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
         let mut principal = NotifyServicePrincipalConfig::default();
         principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
         principal.signature_public_key_hex = Some("b".repeat(64));
         principal.allow_plaintext_metadata = true;
-        principal.service_type = Some("legacy_pusher".to_owned());
+        principal.service_type = Some("external_pusher".to_owned());
         config
             .http
             .notify_auth
@@ -2071,8 +2060,7 @@ apps: {}
     fn production_mode_accepts_signed_eligible_principal() {
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
-        config.http.notify_auth.gateway_service_did =
-            Some("did:web:push.example.com".to_owned());
+        config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
         let mut principal = NotifyServicePrincipalConfig::default();
         principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
         principal.signature_public_key_hex = Some("c".repeat(64));
@@ -2084,13 +2072,15 @@ apps: {}
             .service_principals
             .insert("did:web:sync.example.com".to_owned(), principal);
 
-        config.validate().expect("eligible production principal must validate");
+        config
+            .validate()
+            .expect("eligible production principal must validate");
     }
 
     #[test]
     fn schema_artifact_matches_committed_snapshot() {
-        let snapshot_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("soflare.config.schema.json");
+        let snapshot_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("soflare.config.schema.json");
         let live = serde_json::to_string_pretty(&config_json_schema()).unwrap();
         let on_disk = std::fs::read_to_string(&snapshot_path).expect(
             "soflare.config.schema.json missing — refresh with `cargo run --example emit_schema > soflare.config.schema.json`",
@@ -2175,7 +2165,10 @@ apps {
         // Compare via the public-shaped projection — both must produce
         // the same observable configuration.
         assert_eq!(yaml_config.http.port, kdl_config.http.port);
-        assert_eq!(yaml_config.http.bind_addresses, kdl_config.http.bind_addresses);
+        assert_eq!(
+            yaml_config.http.bind_addresses,
+            kdl_config.http.bind_addresses
+        );
         assert_eq!(
             yaml_config.http.notify_dedup_ttl_seconds,
             kdl_config.http.notify_dedup_ttl_seconds
@@ -2204,7 +2197,10 @@ apps {
             yaml_config.metrics.prometheus.port,
             kdl_config.metrics.prometheus.port
         );
-        assert_eq!(yaml_config.log.access.x_forwarded_for, kdl_config.log.access.x_forwarded_for);
+        assert_eq!(
+            yaml_config.log.access.x_forwarded_for,
+            kdl_config.log.access.x_forwarded_for
+        );
         assert_eq!(yaml_config.apps.len(), kdl_config.apps.len());
         let yaml_app = yaml_config.apps.get("com.example.test").unwrap();
         let kdl_app = kdl_config.apps.get("com.example.test").unwrap();

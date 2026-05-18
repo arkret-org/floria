@@ -52,10 +52,7 @@ const PLACEHOLDER_MARKERS: &[&str] = &[
 
 /// Allowed "values that look like real config but are actually
 /// well-known constants" — IDs from sample placeholders.
-const SAFE_NUMERIC_VALUES: &[&str] = &[
-    "1234567890123456789",
-    "100000001",
-];
+const SAFE_NUMERIC_VALUES: &[&str] = &["1234567890123456789", "100000001"];
 
 #[test]
 fn sample_configs_do_not_contain_real_secrets() {

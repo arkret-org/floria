@@ -135,7 +135,7 @@ http {
 | `notify_rate_limits.per_push_key_hash` | u64 | — | Max `/notify` requests per push token hash per window |
 | `notify_rate_limits.per_endpoint` | u64 | — | Max `/notify` requests per HTTP endpoint path per window |
 
-`push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Legacy `room_*`, `card_*`, `subject*`, Matrix `m.room.*`, and `only_last_per_room` inputs are rejected. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
+`push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
 
 Production `/notify` profile example:
 

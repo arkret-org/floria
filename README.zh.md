@@ -14,7 +14,7 @@
 ## 支持的功能
 
 - `POST /api/v1/push/notify` 作为 Contrix canonical notify endpoint
-- `GET /api/v1/push/describe` 网关 profile discovery
+- `GET /api/v1/push/describe` 网关 profile discovery（`/api/v1/server/describe` 是完全相同的 alias）
 - `GET /health`
 - `GET /ready`
 - 独立 `/metrics` 监听器上的 Prometheus 指标
@@ -64,7 +64,7 @@
 - 错误响应使用 JSON envelope，网关 contract 错误码包括 `capability_denied`、`unsupported_feature`、`schema_violation`、`payload_too_large`、`rate_limited` 和 `temporarily_unavailable`
 - E2EE 场景下会校验 blind/minimized payload：正文、密文字节、SDP、ICE、TURN credential 都会被拒绝
 - 未经 plaintext metadata 授权的调用方不能携带 `sender_display_name`、`flow_name`、`space_name`
-- legacy `room_*`、`card_*`、`subject*`、Matrix `m.room.*` 和 `only_last_per_room` 输入会被直接拒绝
+- notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝
 - `rejected` 中返回的是 push token hash，不是原始平台 token
 - 响应里的 delivery receipt refs 只包含 provider/status/token hash metadata，不包含明文 payload
 - bearer fallback 只接受 header；query string 中的认证材料会被拒绝

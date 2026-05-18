@@ -291,7 +291,7 @@ apps:
   # Example Custom URL pushkin (HMAC / Bearer / mTLS to an operator endpoint)
   # com.example.custom:
   #   type: custom
-  #   url: https://hooks.example.com/notify/{pushkey}
+  #   url: https://hooks.example.com/notify/{push_key}
   #   # auth: bearer
   #   # bearer_token: replace-me
   #   # auth: hmac

@@ -52,7 +52,7 @@ pub const DEFAULT_MAX_CONNECTIONS: usize = 20;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DispatchTarget {
     pub app_id: String,
-    pub pushkey: String,
+    pub push_key: String,
 }
 
 /// Unified result of a single pushkin dispatch attempt.
@@ -72,12 +72,12 @@ pub struct DispatchOutcome {
 }
 
 impl DispatchOutcome {
-    pub fn from_legacy(targets: &[DispatchTarget], rejected: Vec<String>) -> Self {
+    pub fn from_rejected_tokens(targets: &[DispatchTarget], rejected: Vec<String>) -> Self {
         let rejected_set: std::collections::HashSet<&str> =
             rejected.iter().map(String::as_str).collect();
         let accepted = targets
             .iter()
-            .filter(|target| !rejected_set.contains(target.pushkey.as_str()))
+            .filter(|target| !rejected_set.contains(target.push_key.as_str()))
             .cloned()
             .collect();
         Self {
@@ -101,7 +101,7 @@ pub trait Pushkin: Send + Sync {
     ) -> Vec<DispatchTarget> {
         vec![DispatchTarget {
             app_id: device.app_id.clone(),
-            pushkey: device.pushkey.clone(),
+            push_key: device.push_key.clone(),
         }]
     }
     async fn dispatch_notification(
@@ -126,7 +126,7 @@ pub trait Pushkin: Send + Sync {
         let rejected = self
             .dispatch_notification(notification, device, context)
             .await?;
-        Ok(DispatchOutcome::from_legacy(&targets, rejected))
+        Ok(DispatchOutcome::from_rejected_tokens(&targets, rejected))
     }
 }
 

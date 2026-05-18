@@ -60,7 +60,6 @@ struct PushBridgePrivacyDescriptor {
     default_mode: &'static str,
     plaintext_visibility_class: &'static str,
     active_reference_fields: Vec<&'static str>,
-    rejected_legacy_fields: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,15 +138,8 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             default_mode: "e2ee_blind_wakeup",
             plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth),
             active_reference_fields: vec![
-                "notification.event_id",
-                "notification.message_id",
-                "notification.flow_id",
-                "notification.space_id",
-            ],
-            rejected_legacy_fields: vec![
-                "notification.room_id",
-                "notification.card_id",
-                "notification.subject_id",
+                "notification.push_target_id",
+                "notification.wakeup_kind",
             ],
         },
         provider_capabilities_version: PROVIDER_CAPABILITIES_VERSION,

@@ -5,5 +5,8 @@
 
 fn main() {
     let schema = floria::config::config_json_schema();
-    println!("{}", serde_json::to_string_pretty(&schema).expect("schema must serialize"));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&schema).expect("schema must serialize")
+    );
 }

@@ -159,7 +159,7 @@ impl HuaweiPushkin {
         let mut message = Map::new();
         message.insert(
             "token".to_owned(),
-            Value::Array(vec![Value::String(device.pushkey.clone())]),
+            Value::Array(vec![Value::String(device.push_key.clone())]),
         );
         message.insert(
             "notification".to_owned(),
@@ -300,16 +300,16 @@ impl HuaweiPushkin {
                 Ok(response) if response.code.as_deref().is_none_or(is_huawei_success_code) => {
                     Ok(vec![])
                 }
-                Ok(response) if response.is_invalid_token() => Ok(vec![device.pushkey.clone()]),
+                Ok(response) if response.is_invalid_token() => Ok(vec![device.push_key.clone()]),
                 Ok(response) => Err(DispatchError::remote(format!(
                     "Huawei Push rejected request: {} {}",
                     response.code.unwrap_or_else(|| status.as_u16().to_string()),
                     response.msg.unwrap_or_else(|| body.to_owned())
                 ))),
-                Err(_) if looks_like_invalid_token(body) => Ok(vec![device.pushkey.clone()]),
+                Err(_) if looks_like_invalid_token(body) => Ok(vec![device.push_key.clone()]),
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_token(body) => Ok(vec![device.pushkey.clone()]),
+            _ if looks_like_invalid_token(body) => Ok(vec![device.push_key.clone()]),
             _ => Err(DispatchError::remote(huawei_error_message(body, status))),
         }
     }
@@ -337,19 +337,19 @@ impl Pushkin for HuaweiPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.pushkey.trim().is_empty() {
+        if device.push_key.trim().is_empty() {
             tracing::warn!("rejecting Huawei Push device due to empty token");
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         let default_payload = match device.default_payload() {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
+                    push_key_hash = %device.redacted_push_key(),
                     "rejecting Huawei Push token due to invalid default_payload"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
         let Some(payload) = build_android_notification_payload(
@@ -416,8 +416,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.huawei".to_owned(),
-            pushkey: "hw-token".to_owned(),
-            pushkey_ts: 42,
+            push_key: "hw-token".to_owned(),
             data: Some(
                 json!({
                     "default_payload": {
@@ -453,7 +452,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_token_response_rejects_pushkey() {
+    fn invalid_token_response_rejects_push_key() {
         let result = pushkin()
             .handle_response(
                 StatusCode::OK,

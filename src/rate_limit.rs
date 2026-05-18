@@ -102,7 +102,9 @@ impl NotifyRateLimiter {
     pub fn ready(&self) -> Result<(), String> {
         match &self.backend {
             RateLimiterBackend::Memory(_) => Ok(()),
-            RateLimiterBackend::Redis(backend) => backend.ready().map_err(|error| error.to_string()),
+            RateLimiterBackend::Redis(backend) => {
+                backend.ready().map_err(|error| error.to_string())
+            }
         }
     }
 
@@ -257,7 +259,11 @@ impl RedisRateLimiter {
                     scope: check.scope,
                     subject: check.subject.clone(),
                     limit: check.limit,
-                    retry_after: self.retry_after_for(&mut connection, &keys[(index as usize) - 1], window),
+                    retry_after: self.retry_after_for(
+                        &mut connection,
+                        &keys[(index as usize) - 1],
+                        window,
+                    ),
                 })
             }
             Ok(other) => {

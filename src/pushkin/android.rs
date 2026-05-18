@@ -61,7 +61,7 @@ fn merge_notification_data(
             "sender_display_name",
             notification.sender_display_name.as_deref(),
         ),
-        ("type", notification.r#type.as_deref()),
+        ("wakeup_kind", notification.wakeup_kind()),
         ("push_hint", notification.push_hint.as_deref()),
     ] {
         if let Some(value) = value.filter(|value| !value.is_empty()) {
@@ -142,11 +142,9 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
     let room = notification.scope_name().map(ToOwned::to_owned);
 
     let title = room.clone().unwrap_or_else(|| sender.clone());
-    let summary = match notification.r#type.as_deref() {
-        Some("cx.message.create") | Some("cx.message.revise") => {
-            message_summary(notification, &sender)
-        }
-        Some("cx.call.signal") => {
+    let summary = match notification.wakeup_kind.as_deref() {
+        Some("message") => message_summary(notification, &sender),
+        Some("incoming_call") => {
             if let Some(push_hint) = notification.push_hint_text() {
                 push_hint.to_owned()
             } else {
@@ -165,7 +163,7 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
                 }
             }
         }
-        Some("cx.space.member")
+        Some("member")
             if notification.user_is_target == Some(true)
                 && notification.membership.as_deref() == Some("invite") =>
         {
@@ -263,8 +261,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.cn".to_owned(),
-            pushkey: "pushkey".to_owned(),
-            pushkey_ts: 42,
+            push_key: "push_key".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
         }
@@ -292,7 +289,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -362,7 +360,8 @@ mod tests {
                 flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
                 space_id: None,
                 user_is_target: Some(true),
-                r#type: Some("cx.space.member".to_owned()),
+                push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+                wakeup_kind: Some("member".to_owned()),
                 sender: Some("@major:example.com".to_owned()),
                 push_hint: None,
                 devices: vec![device()],

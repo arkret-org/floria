@@ -224,7 +224,7 @@ impl FcmPushkin {
             data_strings.insert(key, Value::String(string_value));
         }
         message.insert("data".to_owned(), Value::Object(data_strings));
-        message.insert("token".to_owned(), Value::String(device.pushkey.clone()));
+        message.insert("token".to_owned(), Value::String(device.push_key.clone()));
 
         let priority = Value::String(if notification.prio.as_deref() == Some("low") {
             "normal".to_owned()
@@ -280,7 +280,7 @@ impl FcmPushkin {
                     FCM_STATUS_CODES
                         .with_label_values(&[self.name(), &response.status().as_u16().to_string()])
                         .inc();
-                    match self.handle_v1_response(response, &device.pushkey).await {
+                    match self.handle_v1_response(response, &device.push_key).await {
                         Ok(result) => return Ok(result),
                         Err(error @ DispatchError::Temporary { .. })
                             if attempt + 1 < FCM_MAX_TRIES =>
@@ -307,7 +307,7 @@ impl FcmPushkin {
     async fn handle_v1_response(
         &self,
         response: reqwest::Response,
-        pushkey: &str,
+        push_key: &str,
     ) -> Result<Vec<String>, DispatchError> {
         let status = response.status();
         let retry_after = parse_retry_after(response.headers());
@@ -315,7 +315,7 @@ impl FcmPushkin {
             DispatchError::remote(format!("failed to read FCM response: {error}"))
         })?;
 
-        classify_fcm_v1_response(status.as_u16(), retry_after, &body, pushkey)
+        classify_fcm_v1_response(status.as_u16(), retry_after, &body, push_key)
     }
 
     fn build_data(
@@ -329,7 +329,7 @@ impl FcmPushkin {
         for (attr, value) in [
             ("event_id", notification.event_id.as_deref()),
             ("message_id", notification.message_id()),
-            ("type", notification.event_kind()),
+            ("wakeup_kind", notification.wakeup_kind()),
             ("sender", notification.sender.as_deref()),
             ("flow_name", notification.flow_name()),
             ("space_name", notification.space_name()),
@@ -445,7 +445,7 @@ impl Pushkin for FcmPushkin {
     ) -> Vec<DispatchTarget> {
         vec![DispatchTarget {
             app_id: device.app_id.clone(),
-            pushkey: device.pushkey.clone(),
+            push_key: device.push_key.clone(),
         }]
     }
 
@@ -461,10 +461,10 @@ impl Pushkin for FcmPushkin {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
-                    "rejecting FCM pushkey due to invalid default_payload"
+                    push_key_hash = %device.redacted_push_key(),
+                    "rejecting FCM push_key due to invalid default_payload"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
         let Some(data) = self.build_data(notification, default_payload)? else {
@@ -605,7 +605,7 @@ fn classify_fcm_v1_response(
     status: u16,
     retry_after: Option<Duration>,
     body: &str,
-    pushkey: &str,
+    push_key: &str,
 ) -> Result<Vec<String>, DispatchError> {
     match status {
         500..=599 => Err(DispatchError::temporary(
@@ -621,7 +621,7 @@ fn classify_fcm_v1_response(
         403 => Err(DispatchError::remote(format!(
             "FCM sender mismatch: {body}"
         ))),
-        404 => Ok(vec![pushkey.to_owned()]),
+        404 => Ok(vec![push_key.to_owned()]),
         429 => Err(DispatchError::temporary(
             "FCM message quota exceeded".to_owned(),
             retry_after.or(Some(Duration::from_secs(FCM_RETRY_DELAY_QUOTA_SECS))),
@@ -661,8 +661,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.fcm".to_owned(),
-            pushkey: "spqr".to_owned(),
-            pushkey_ts: 42,
+            push_key: "spqr".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
         }
@@ -689,7 +688,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -714,7 +714,7 @@ mod tests {
                 "event_id": "cx:event:01JS0EV000000000000000000",
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "type": "cx.message.create",
+                "wakeup_kind": "message",
                 "sender": "@major:example.com",
                 "flow_name": "Mission Control",
                 "sender_display_name": "Major Tom",
@@ -738,8 +738,7 @@ mod tests {
         let primary = device();
         let secondary = Device {
             app_id: "com.example.fcm".to_owned(),
-            pushkey: "spqr2".to_owned(),
-            pushkey_ts: 43,
+            push_key: "spqr2".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
         };
@@ -750,7 +749,7 @@ mod tests {
             pushkin.dispatch_targets(&notification, &primary),
             vec![DispatchTarget {
                 app_id: "com.example.fcm".to_owned(),
-                pushkey: "spqr".to_owned(),
+                push_key: "spqr".to_owned(),
             }]
         );
     }
@@ -769,7 +768,8 @@ mod tests {
             flow_id: None,
             space_id: None,
             user_is_target: None,
-            r#type: None,
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: None,
             sender: None,
             push_hint: None,
             devices: vec![device()],
@@ -787,7 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_not_found_rejects_pushkey() {
+    fn v1_not_found_rejects_push_key() {
         let rejected = classify_fcm_v1_response(404, None, "", "spqr").unwrap();
 
         assert_eq!(rejected, vec!["spqr".to_owned()]);

@@ -18,8 +18,8 @@ use tokio::task::JoinSet;
 #[tokio::main]
 async fn main() -> Result<()> {
     let (config, path) = Config::load()?;
-    let _telemetry: TelemetryGuard = observability::init_telemetry(&config.observability())
-        .context("initialise telemetry")?;
+    let _telemetry: TelemetryGuard =
+        observability::init_telemetry(&config.observability()).context("initialise telemetry")?;
     tracing::info!(config = %path.display(), "using configuration file");
     config.emit_startup_warnings();
     metrics::init();

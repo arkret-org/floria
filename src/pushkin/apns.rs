@@ -300,16 +300,16 @@ impl ApnsPushkin {
             .and_then(|body| body.reason)
             .unwrap_or_else(|| body.clone());
 
-        classify_apns_response(status, &reason, &device.pushkey)
+        classify_apns_response(status, &reason, &device.push_key)
     }
 
     fn device_token(&self, device: &Device) -> Result<String, DispatchError> {
         if !self.convert_device_token_to_hex {
-            return Ok(device.pushkey.clone());
+            return Ok(device.push_key.clone());
         }
 
         let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&device.pushkey)
+            .decode(&device.push_key)
             .map_err(|error| {
                 DispatchError::remote(format!("invalid APNS device token: {error}"))
             })?;
@@ -329,54 +329,7 @@ impl ApnsPushkin {
         notification: &Notification,
         default_payload: Map<String, Value>,
     ) -> Result<Option<Value>, DispatchError> {
-        if notification.event_id.is_some() && notification.r#type.is_none() {
-            return Ok(Some(
-                self.payload_event_id_only(notification, default_payload),
-            ));
-        }
-
         Ok(self.payload_full(notification, default_payload))
-    }
-
-    fn payload_event_id_only(
-        &self,
-        notification: &Notification,
-        default_payload: Map<String, Value>,
-    ) -> Value {
-        let mut payload = default_payload;
-        if let Some(flow_id) = notification.flow_id() {
-            payload.insert("flow_id".to_owned(), Value::String(flow_id.to_owned()));
-        }
-        if let Some(space_id) = notification.space_id() {
-            payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
-        }
-        if let Some(message_id) = notification.message_id() {
-            payload.insert(
-                "message_id".to_owned(),
-                Value::String(message_id.to_owned()),
-            );
-        }
-        if let Some(event_id) = &notification.event_id {
-            payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
-        }
-        if self.send_badge_counts {
-            if let Some(unread) = notification.counts.unread {
-                payload.insert("unread_count".to_owned(), Value::Number(unread.into()));
-            }
-            if let Some(missed_calls) = notification.counts.missed_calls {
-                payload.insert(
-                    "missed_calls".to_owned(),
-                    Value::Number(missed_calls.into()),
-                );
-            }
-            if let Some(highlight_count) = notification.counts.highlight_count {
-                payload.insert(
-                    "highlight_count".to_owned(),
-                    Value::Number(highlight_count.into()),
-                );
-            }
-        }
-        Value::Object(payload)
     }
 
     fn payload_full(
@@ -393,8 +346,8 @@ impl ApnsPushkin {
         let mut loc_key = None;
         let mut loc_args: Vec<String> = Vec::new();
 
-        match notification.r#type.as_deref() {
-            Some("cx.message.create") | Some("cx.message.revise") => {
+        match notification.wakeup_kind.as_deref() {
+            Some("message") => {
                 let room_display = notification
                     .scope_name()
                     .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
@@ -456,7 +409,7 @@ impl ApnsPushkin {
                     }
                 }
             }
-            Some("cx.call.signal") => {
+            Some("incoming_call") => {
                 if let Some(push_hint) = notification.push_hint_text() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
                     loc_args = vec![
@@ -481,7 +434,7 @@ impl ApnsPushkin {
                     loc_args = vec![from_display.clone()];
                 }
             }
-            Some("cx.space.member")
+            Some("member")
                 if notification.user_is_target == Some(true)
                     && notification.membership.as_deref() == Some("invite") =>
             {
@@ -627,10 +580,10 @@ impl Pushkin for ApnsPushkin {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
-                    "rejecting APNS pushkey due to invalid default_payload"
+                    push_key_hash = %device.redacted_push_key(),
+                    "rejecting APNS push_key due to invalid default_payload"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
 
@@ -746,13 +699,13 @@ struct ApnsErrorBody {
 fn classify_apns_response(
     status: u16,
     reason: &str,
-    pushkey: &str,
+    push_key: &str,
 ) -> Result<Vec<String>, DispatchError> {
     match (status, reason) {
         (400, "BadDeviceToken")
         | (400, "DeviceTokenNotForTopic")
         | (400, "TopicDisallowed")
-        | (410, "Unregistered") => Ok(vec![pushkey.to_owned()]),
+        | (410, "Unregistered") => Ok(vec![push_key.to_owned()]),
         (403, "InvalidProviderToken")
         | (403, "MissingProviderToken")
         | (403, "ExpiredProviderToken") => Err(DispatchError::temporary(
@@ -935,8 +888,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.apns".to_owned(),
-            pushkey: "spqr".to_owned(),
-            pushkey_ts: 42,
+            push_key: "spqr".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
         }
@@ -978,7 +930,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -1049,7 +1002,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
-            r#type: None,
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: None,
             sender: None,
             push_hint: None,
             devices: vec![device.clone()],
@@ -1068,20 +1022,20 @@ mod tests {
         assert_eq!(
             payload,
             json!({
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "space_id": "cx:space:01JS0SP000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "unread_count": 2,
                 "aps": {
                     "mutable-content": 1,
                     "alert": {
                         "loc-key": "SINGLE_UNREAD",
                         "loc-args": []
-                    }
+                    },
+                    "badge": 2
                 }
             })
         );
+        assert!(payload.get("event_id").is_none());
+        assert!(payload.get("message_id").is_none());
+        assert!(payload.get("flow_id").is_none());
+        assert!(payload.get("space_id").is_none());
     }
 
     #[test]

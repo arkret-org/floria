@@ -444,6 +444,17 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chacha20"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
+dependencies = [
+ "cfg-if",
+ "cipher 0.4.4",
+ "cpufeatures 0.2.17",
+]
+
+[[package]]
+name = "chacha20"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
@@ -451,6 +462,19 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "rand_core 0.10.0",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
+dependencies = [
+ "aead",
+ "chacha20 0.9.1",
+ "cipher 0.4.4",
+ "poly1305",
+ "zeroize",
 ]
 
 [[package]]
@@ -473,8 +497,19 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
+]
+
+[[package]]
+name = "chrono-tz"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
+dependencies = [
+ "chrono",
+ "phf",
 ]
 
 [[package]]
@@ -485,6 +520,7 @@ checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common 0.1.6",
  "inout 0.1.4",
+ "zeroize",
 ]
 
 [[package]]
@@ -561,6 +597,128 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7bda66e858c683005a53a9a60c69a4aca7eeaa45d124526e389f7aec8e62f38"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "contrix"
+version = "0.7.0"
+dependencies = [
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "chrono",
+ "chrono-tz",
+ "contrix-api",
+ "contrix-core",
+ "contrix-crypto",
+ "contrix-ffi",
+ "contrix-html",
+ "contrix-signatures",
+ "contrix-testing",
+ "ed25519-dalek",
+ "getrandom 0.3.4",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "ulid",
+ "uuid",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "contrix-api"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "contrix-core",
+ "contrix-crypto",
+ "contrix-html",
+ "contrix-signatures",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "contrix-core"
+version = "0.7.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "contrix-identifiers",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "contrix-crypto"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "contrix-core",
+ "contrix-signatures",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "contrix-ffi"
+version = "0.7.0"
+dependencies = [
+ "contrix-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "contrix-html"
+version = "0.7.0"
+dependencies = [
+ "contrix-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "contrix-identifiers"
+version = "0.7.0"
+dependencies = [
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "serde",
+ "sha2",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "contrix-signatures"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "contrix-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "contrix-testing"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "contrix-api",
+ "contrix-core",
+ "contrix-crypto",
+ "contrix-ffi",
+ "contrix-html",
+ "contrix-signatures",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -977,6 +1135,7 @@ checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "rand_core 0.6.4",
  "serde",
  "sha2",
  "subtle",
@@ -1135,6 +1294,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "blake2",
+ "contrix",
  "ed25519-dalek",
  "futures",
  "globset",
@@ -2873,6 +3033,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
+dependencies = [
+ "siphasher",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2945,6 +3123,17 @@ dependencies = [
  "log",
  "pin-project-lite",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "poly1305"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf"
+dependencies = [
+ "cpufeatures 0.2.17",
+ "opaque-debug",
+ "universal-hash",
 ]
 
 [[package]]
@@ -3205,7 +3394,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
 dependencies = [
- "chacha20",
+ "chacha20 0.10.0",
  "getrandom 0.4.2",
  "rand_core 0.10.0",
 ]
@@ -4065,6 +4254,12 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
 ]
+
+[[package]]
+name = "siphasher"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "slab"
@@ -5502,6 +5697,16 @@ name = "writeable"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
+
+[[package]]
+name = "x25519-dalek"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7e468321c81fb07fa7f4c636c3972b9100f0346e5b6a9f2bd0603a52f7ed277"
+dependencies = [
+ "curve25519-dalek",
+ "rand_core 0.6.4",
+]
 
 [[package]]
 name = "x509-parser"

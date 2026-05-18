@@ -68,6 +68,27 @@ async fn describe_endpoint_advertises_gateway_profile() {
 }
 
 #[tokio::test]
+async fn server_describe_alias_matches_push_describe() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut push_response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+        .send(&service)
+        .await;
+    let mut server_response = TestClient::get("http://127.0.0.1/api/v1/server/describe")
+        .send(&service)
+        .await;
+
+    assert_eq!(push_response.status_code.unwrap(), StatusCode::OK);
+    assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
+    let push_body = push_response.take_json::<Value>().await.unwrap();
+    let server_body = server_response.take_json::<Value>().await.unwrap();
+    assert_eq!(server_body, push_body);
+}
+
+#[tokio::test]
 async fn integration_describe_lists_operational_surfaces() {
     let service = test_service(vec![]);
 
@@ -87,6 +108,7 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"push_bridge"));
     assert!(surface_names.contains(&"push_notify"));
     assert!(surface_names.contains(&"gateway_describe"));
+    assert!(surface_names.contains(&"server_describe_alias"));
     assert!(surface_names.contains(&"health"));
     assert!(surface_names.contains(&"ready"));
     assert!(surface_names.contains(&"metrics"));
@@ -160,7 +182,10 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
     assert_eq!(entry["batch"], json!("multicast"));
     assert_eq!(entry["supports_collapse"], json!(true));
     assert_eq!(entry["supports_badge"], json!(true));
-    assert_eq!(entry["default_payload_shape"], json!("data_only_blind_wakeup"));
+    assert_eq!(
+        entry["default_payload_shape"],
+        json!("data_only_blind_wakeup")
+    );
     assert_eq!(entry["credential_kinds"], json!(["service_account_v1"]));
     assert_eq!(
         entry["credential_rotation"],

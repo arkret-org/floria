@@ -145,7 +145,8 @@ pub fn build_env_filter(config: &LogSetupConfig) -> EnvFilter {
         return EnvFilter::try_new(filter)
             .unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()));
     }
-    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()))
+    EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()))
 }
 
 fn init_opentelemetry(

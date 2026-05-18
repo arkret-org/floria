@@ -39,7 +39,7 @@ pub struct RetryEnvelope {
     pub request_id: String,
     pub pushkin: String,
     pub app_id: String,
-    pub pushkey: String,
+    pub push_key: String,
     pub retry_at_unix_ms: u64,
     pub attempts: u32,
     pub last_error: String,
@@ -50,7 +50,7 @@ impl RetryEnvelope {
         request_id: impl Into<String>,
         pushkin: impl Into<String>,
         app_id: impl Into<String>,
-        pushkey: impl Into<String>,
+        push_key: impl Into<String>,
         retry_after: Duration,
         last_error: impl Into<String>,
     ) -> Self {
@@ -58,10 +58,9 @@ impl RetryEnvelope {
             request_id: request_id.into(),
             pushkin: pushkin.into(),
             app_id: app_id.into(),
-            pushkey: pushkey.into(),
-            retry_at_unix_ms: now_unix_ms().saturating_add(
-                u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX),
-            ),
+            push_key: push_key.into(),
+            retry_at_unix_ms: now_unix_ms()
+                .saturating_add(u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX)),
             attempts: 1,
             last_error: last_error.into(),
         }
@@ -226,11 +225,9 @@ impl RetryQueue {
 
     pub fn pending_len(&self) -> usize {
         match &self.backend {
-            Backend::Memory(backend) => backend
-                .pending
-                .lock()
-                .map(|guard| guard.len())
-                .unwrap_or(0),
+            Backend::Memory(backend) => {
+                backend.pending.lock().map(|guard| guard.len()).unwrap_or(0)
+            }
             Backend::Redis(backend) => backend.pending_len().unwrap_or(0) as usize,
         }
     }
@@ -333,7 +330,8 @@ impl RedisQueue {
                 return;
             }
         };
-        let result: redis::RedisResult<()> = connection.zadd(&key, payload, envelope.retry_at_unix_ms);
+        let result: redis::RedisResult<()> =
+            connection.zadd(&key, payload, envelope.retry_at_unix_ms);
         if let Err(error) = result {
             tracing::warn!(error = %error, backend = %self.target_label, redis_key = %key, "failed to enqueue retry on Redis");
         }
@@ -429,7 +427,8 @@ impl RedisQueue {
             }
         };
         let key = self.dead_letter_key();
-        let payloads: redis::RedisResult<Vec<String>> = connection.lrange(&key, 0, limit as isize - 1);
+        let payloads: redis::RedisResult<Vec<String>> =
+            connection.lrange(&key, 0, limit as isize - 1);
         match payloads {
             Ok(payloads) => payloads
                 .into_iter()
@@ -504,7 +503,10 @@ pub async fn run_worker(
         }
         for envelope in due {
             let pushkins = registry.find_pushkins(&envelope.app_id);
-            let pushkin = match pushkins.iter().find(|candidate| candidate.name() == envelope.pushkin) {
+            let pushkin = match pushkins
+                .iter()
+                .find(|candidate| candidate.name() == envelope.pushkin)
+            {
                 Some(pushkin) => pushkin.clone(),
                 None => {
                     tracing::warn!(
@@ -526,7 +528,7 @@ pub async fn run_worker(
             // accept blind-wakeup defaults.
             let device = Device {
                 app_id: envelope.app_id.clone(),
-                pushkey: envelope.pushkey.clone(),
+                push_key: envelope.push_key.clone(),
                 ..Device::default()
             };
             let notification = Notification {
@@ -557,8 +559,8 @@ pub async fn run_worker(
                         crate::metrics::notify_retry_replayed(&envelope.pushkin, "dead_letter");
                         queue.dead_letter(envelope.with_attempt(next_attempt));
                     } else {
-                        let backoff = retry_after
-                            .unwrap_or_else(|| queue.next_retry_at(next_attempt));
+                        let backoff =
+                            retry_after.unwrap_or_else(|| queue.next_retry_at(next_attempt));
                         let mut next = envelope.clone().with_attempt(next_attempt);
                         next.retry_at_unix_ms = now_unix_ms()
                             .saturating_add(u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX));
@@ -590,12 +592,26 @@ mod tests {
             ..RetryQueueConfig::default()
         });
         queue.enqueue(
-            RetryEnvelope::new("req", "apns", "com.example.app", "pushkey", Duration::ZERO, "boom")
-                .with_attempt(1),
+            RetryEnvelope::new(
+                "req",
+                "apns",
+                "com.example.app",
+                "push_key",
+                Duration::ZERO,
+                "boom",
+            )
+            .with_attempt(1),
         );
         queue.enqueue(
-            RetryEnvelope::new("req", "apns", "com.example.app", "pushkey", Duration::ZERO, "boom")
-                .with_attempt(2),
+            RetryEnvelope::new(
+                "req",
+                "apns",
+                "com.example.app",
+                "push_key",
+                Duration::ZERO,
+                "boom",
+            )
+            .with_attempt(2),
         );
 
         // First entry is still pending, second one short-circuits to
@@ -616,7 +632,7 @@ mod tests {
             "req",
             "apns",
             "com.example.app",
-            "pushkey",
+            "push_key",
             Duration::ZERO,
             "boom",
         ));
@@ -624,7 +640,7 @@ mod tests {
             "req",
             "apns",
             "com.example.app",
-            "pushkey",
+            "push_key",
             Duration::from_secs(3600),
             "boom",
         ));

@@ -292,7 +292,7 @@ impl OppoPushkin {
         body.insert("target_type".to_owned(), Value::Number(2.into()));
         body.insert(
             "target_value".to_owned(),
-            Value::String(device.pushkey.clone()),
+            Value::String(device.push_key.clone()),
         );
         body.insert(
             "notification".to_owned(),
@@ -413,16 +413,16 @@ impl OppoPushkin {
             )),
             200..=299 => match serde_json::from_str::<OppoSendResponse>(body) {
                 Ok(response) if response.is_success() => Ok(vec![]),
-                Ok(response) if response.is_invalid_target() => Ok(vec![device.pushkey.clone()]),
+                Ok(response) if response.is_invalid_target() => Ok(vec![device.push_key.clone()]),
                 Ok(response) => Err(DispatchError::remote(format!(
                     "{} rejected request: {}",
                     self.vendor_name(),
                     response.message().unwrap_or_else(|| body.to_owned())
                 ))),
-                Err(_) if looks_like_invalid_target(body) => Ok(vec![device.pushkey.clone()]),
+                Err(_) if looks_like_invalid_target(body) => Ok(vec![device.push_key.clone()]),
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_target(body) => Ok(vec![device.pushkey.clone()]),
+            _ if looks_like_invalid_target(body) => Ok(vec![device.push_key.clone()]),
             _ => Err(DispatchError::remote(oppo_error_message(
                 self.vendor_name(),
                 body,
@@ -457,23 +457,23 @@ impl Pushkin for OppoPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.pushkey.trim().is_empty() {
+        if device.push_key.trim().is_empty() {
             tracing::warn!(
                 "rejecting {} device due to empty target_value",
                 self.vendor_name()
             );
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         let default_payload = match device.default_payload() {
             Ok(default_payload) => default_payload,
             Err(_) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
-                    "rejecting {} pushkey due to invalid default_payload",
+                    push_key_hash = %device.redacted_push_key(),
+                    "rejecting {} push_key due to invalid default_payload",
                     self.vendor_name()
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
         let Some(payload) = build_android_notification_payload(
@@ -643,8 +643,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.oppo".to_owned(),
-            pushkey: "target-value".to_owned(),
-            pushkey_ts: 42,
+            push_key: "target-value".to_owned(),
             data: Some(
                 json!({
                     "default_payload": {
@@ -680,7 +679,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -760,7 +760,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_target_response_rejects_pushkey() {
+    fn invalid_target_response_rejects_push_key() {
         let result = pushkin(OppoVendor::Oppo)
             .handle_response(
                 StatusCode::OK,

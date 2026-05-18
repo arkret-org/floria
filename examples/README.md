@@ -29,6 +29,6 @@ Notes:
 
 - Replace `project_id` and `service_account_file` in `minimal.kdl` with real
   Firebase HTTP v1 credentials before expecting provider delivery success.
-- Replace `pushkey` in `minimal.notify.request.json` with a real device token.
+- Replace `push_key` in `minimal.notify.request.json` with a real device token.
 - The JSON file is meant to demonstrate the active `cx.push.notify` contract
   shape even before real credentials are wired up.

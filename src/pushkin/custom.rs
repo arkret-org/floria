@@ -4,10 +4,10 @@
 //! operator. Supports three outbound authentication modes that can be
 //! mixed and matched: Bearer token, HMAC-SHA256 signature header, and
 //! mTLS client certificate. The endpoint URL may include a
-//! `{pushkey}` template variable that the gateway substitutes at
+//! `{push_key}` template variable that the gateway substitutes at
 //! dispatch time so the same pushkin can fan out to per-user webhooks.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
@@ -28,9 +28,7 @@ use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
 
 use super::reqwest_support::{header_value, parse_retry_after};
-use super::{
-    AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections,
-};
+use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -49,7 +47,7 @@ static CUSTOM_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(
     .expect("register floria_custom_status_codes")
 });
 
-const PUSHKEY_PLACEHOLDER: &str = "{pushkey}";
+const PUSH_KEY_PLACEHOLDER: &str = "{push_key}";
 const CUSTOM_MAX_TRIES: usize = 3;
 const CUSTOM_RETRY_DELAY_BASE_SECS: u64 = 5;
 
@@ -64,8 +62,14 @@ pub struct CustomPushkin {
 
 enum CustomAuth {
     None,
-    Bearer { token: String },
-    Hmac { key_id: String, secret: Vec<u8>, header: String },
+    Bearer {
+        token: String,
+    },
+    Hmac {
+        key_id: String,
+        secret: Vec<u8>,
+        header: String,
+    },
 }
 
 impl CustomPushkin {
@@ -95,9 +99,7 @@ impl CustomPushkin {
             bail!("custom pushkin url must be http(s): `{url}`");
         }
 
-        let auth_kind = app
-            .get_string("auth")?
-            .unwrap_or_else(|| "none".to_owned());
+        let auth_kind = app.get_string("auth")?.unwrap_or_else(|| "none".to_owned());
         let auth = match auth_kind.as_str() {
             "none" => CustomAuth::None,
             "bearer" => {
@@ -122,9 +124,7 @@ impl CustomPushkin {
                     header,
                 }
             }
-            other => bail!(
-                "custom pushkin auth must be one of: none, bearer, hmac; got `{other}`"
-            ),
+            other => bail!("custom pushkin auth must be one of: none, bearer, hmac; got `{other}`"),
         };
 
         let identity_path = app.require_existing_file(base_dir, "client_certfile")?;
@@ -141,21 +141,23 @@ impl CustomPushkin {
     }
 
     fn resolve_url(&self, device: &Device) -> Result<String, DispatchError> {
-        if !self.url_template.contains(PUSHKEY_PLACEHOLDER) {
+        if !self.url_template.contains(PUSH_KEY_PLACEHOLDER) {
             return Ok(self.url_template.clone());
         }
-        let escaped = urlencoding_encode(&device.pushkey);
-        Ok(self.url_template.replace(PUSHKEY_PLACEHOLDER, &escaped))
+        let escaped = urlencoding_encode(&device.push_key);
+        Ok(self.url_template.replace(PUSH_KEY_PLACEHOLDER, &escaped))
     }
 
     fn build_body(&self, notification: &Notification, device: &Device) -> Map<String, Value> {
         let mut payload = Map::new();
         payload.insert(
             "delivered_at".to_owned(),
-            json!(std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()),
+            json!(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            ),
         );
         if let Some(value) = notification.event_id.as_deref() {
             payload.insert("event_id".to_owned(), Value::String(value.to_owned()));
@@ -163,16 +165,13 @@ impl CustomPushkin {
         if let Some(value) = notification.message_id() {
             payload.insert("message_id".to_owned(), Value::String(value.to_owned()));
         }
-        if let Some(value) = notification.r#type.as_deref() {
+        if let Some(value) = notification.wakeup_kind.as_deref() {
             payload.insert("type".to_owned(), Value::String(value.to_owned()));
         }
-        payload.insert(
-            "app_id".to_owned(),
-            Value::String(device.app_id.clone()),
-        );
+        payload.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
         payload.insert(
             "push_key_hash".to_owned(),
-            Value::String(device.redacted_pushkey()),
+            Value::String(device.redacted_push_key()),
         );
         if let Some(value) = notification.push_hint.as_deref() {
             payload.insert("push_hint".to_owned(), Value::String(value.to_owned()));
@@ -210,9 +209,9 @@ impl CustomPushkin {
                     "keyId=\"{key_id}\";alg=\"sha256\";signature=\"{}\"",
                     base64::engine::general_purpose::STANDARD.encode(signature)
                 );
-                let header_name: reqwest::header::HeaderName = header
-                    .parse()
-                    .map_err(|error| DispatchError::internal(format!("invalid hmac header: {error}")))?;
+                let header_name: reqwest::header::HeaderName = header.parse().map_err(|error| {
+                    DispatchError::internal(format!("invalid hmac header: {error}"))
+                })?;
                 headers.insert(header_name, header_value(&value)?);
             }
         }
@@ -239,9 +238,12 @@ impl CustomPushkin {
         let body_text = response.text().await.unwrap_or_default();
         match status.as_u16() {
             200..=299 => Ok(vec![]),
-            410 | 404 => Ok(vec![device.pushkey.clone()]),
+            410 | 404 => Ok(vec![device.push_key.clone()]),
             429 | 500..=599 => Err(DispatchError::temporary(
-                format!("custom pushkin {} responded {status}: {body_text}", redact_url_credentials(&url)),
+                format!(
+                    "custom pushkin {} responded {status}: {body_text}",
+                    redact_url_credentials(&url)
+                ),
                 retry_after,
             )),
             _ => Err(DispatchError::remote(format!(
@@ -273,16 +275,14 @@ impl Pushkin for CustomPushkin {
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
-        if device.pushkey.trim().is_empty() {
-            return Ok(vec![device.pushkey.clone()]);
+        if device.push_key.trim().is_empty() {
+            return Ok(vec![device.push_key.clone()]);
         }
 
         for attempt in 0..CUSTOM_MAX_TRIES {
             match self.send_once(notification, device).await {
                 Ok(rejected) => return Ok(rejected),
-                Err(error @ DispatchError::Temporary { .. })
-                    if attempt + 1 < CUSTOM_MAX_TRIES =>
-                {
+                Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < CUSTOM_MAX_TRIES => {
                     let retry_after = error.retry_after().unwrap_or_else(|| {
                         Duration::from_secs(CUSTOM_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
                     });
@@ -291,7 +291,9 @@ impl Pushkin for CustomPushkin {
                 Err(error) => return Err(error),
             }
         }
-        Err(DispatchError::remote("custom pushkin retried too many times"))
+        Err(DispatchError::remote(
+            "custom pushkin retried too many times",
+        ))
     }
 }
 
@@ -300,19 +302,22 @@ fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Resul
         .user_agent("floria")
         .http2_adaptive_window(true);
     if let Some(proxy) = proxy {
-        builder = builder.proxy(Proxy::all(proxy).with_context(|| {
-            format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
-        })?);
+        builder =
+            builder.proxy(Proxy::all(proxy).with_context(|| {
+                format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
+            })?);
     }
     if let Some(path) = identity_path {
-        let pem = std::fs::read(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+        let pem =
+            std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
         let (cert, key) = split_identity_pem(&pem, path)?;
         let identity =
             Identity::from_pkcs8_pem(&cert, &key).context("invalid client certificate bundle")?;
         builder = builder.identity(identity);
     }
-    builder.build().context("failed to build custom HTTP client")
+    builder
+        .build()
+        .context("failed to build custom HTTP client")
 }
 
 fn split_identity_pem(pem: &[u8], path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
@@ -351,22 +356,13 @@ fn urlencoding_encode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.as_bytes() {
         match byte {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'.'
-            | b'_'
-            | b'~' => out.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(*byte as char)
+            }
             _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
     out
-}
-
-#[allow(dead_code)]
-fn _unused_path_buf() -> PathBuf {
-    PathBuf::new()
 }
 
 #[cfg(test)]
@@ -374,18 +370,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn url_template_substitutes_pushkey() {
+    fn url_template_substitutes_push_key() {
         let pushkin = CustomPushkin {
             matcher: AppMatcher::new("com.example.custom".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
             _connection_semaphore: Arc::new(Semaphore::new(1)),
             client: Client::builder().build().unwrap(),
-            url_template: "https://example.com/notify/{pushkey}".to_owned(),
+            url_template: "https://example.com/notify/{push_key}".to_owned(),
             auth: CustomAuth::None,
         };
         let device = Device {
             app_id: "com.example.custom".to_owned(),
-            pushkey: "user/abc".to_owned(),
+            push_key: "user/abc".to_owned(),
             ..Device::default()
         };
         let url = pushkin.resolve_url(&device).unwrap();

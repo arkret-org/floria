@@ -134,7 +134,7 @@ http {
 | `notify_rate_limits.per_push_key_hash` | u64 | — | 每个 push token hash 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_endpoint` | u64 | — | 每个 HTTP endpoint path 在单窗口内允许的 `/notify` 次数 |
 
-`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。legacy `room_*`、`card_*`、`subject*`、Matrix `m.room.*` 和 `only_last_per_room` 输入会被直接拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
+`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
 
 生产环境 `/notify` 配置示例：
 

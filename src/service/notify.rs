@@ -19,7 +19,7 @@ use crate::dedup::request_hash;
 use crate::metrics as app_metrics;
 use crate::models::{
     DeliveryReceipt, Notification, NotificationContext, NotifyResponse, ProviderRetry,
-    RejectedDevice, redact_push_token, reject_legacy_notify_contract_fields,
+    RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 
@@ -185,8 +185,9 @@ fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
         return Ok(());
     };
 
-    reject_legacy_notify_contract_fields("notification", &Value::Object(notification.clone()))?;
     validate_active_notification_refs(notification)?;
+    validate_push_target_id(notification.get("push_target_id"))?;
+    validate_wakeup_kind(notification.get("wakeup_kind"))?;
     validate_device_contract_shape(notification.get("devices"))?;
 
     Ok(())
@@ -210,19 +211,10 @@ fn validate_device_contract_shape(devices: Option<&Value>) -> Result<(), String>
             let Some(data) = data.as_object() else {
                 continue;
             };
-            if data.contains_key("only_last_per_room") {
-                return Err(format!(
-                    "legacy notify contract field `{path}.data.only_last_per_room` is not supported"
-                ));
-            }
             if let Some(default_payload) = data.get("default_payload") {
                 if !default_payload.is_object() {
                     return Err(format!("{path}.data.default_payload must be an object"));
                 }
-                reject_legacy_notify_contract_fields(
-                    &format!("{path}.data.default_payload"),
-                    default_payload,
-                )?;
                 validate_blind_content(&format!("{path}.data.default_payload"), default_payload)?;
             }
         }
@@ -253,20 +245,54 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         ACTIVE_SPACE_ID_PREFIX,
     )?;
 
-    let Some(value) = notification.get("type") else {
-        return Ok(());
+    Ok(())
+}
+
+fn validate_push_target_id(value: Option<&Value>) -> Result<(), String> {
+    const PREFIX: &str = "cx:pseudonym:push:";
+    let Some(value) = value else {
+        return Err("notification.push_target_id is required".to_owned());
     };
     let Value::String(value) = value else {
-        return Err("notification.type must be a string".to_owned());
+        return Err("notification.push_target_id must be a string".to_owned());
     };
     let value = value.trim();
     if value.is_empty() {
-        return Err("notification.type must not be empty".to_owned());
+        return Err("notification.push_target_id must not be empty".to_owned());
     }
-    if !value.starts_with("cx.") {
-        return Err("notification.type must use active cx.* event names".to_owned());
+    let Some(token) = value.strip_prefix(PREFIX) else {
+        return Err(format!(
+            "notification.push_target_id must use `{PREFIX}*` typed IDs"
+        ));
+    };
+    if !(22..=128).contains(&token.len())
+        || !token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err("notification.push_target_id must be an opaque base64url token".to_owned());
     }
+    Ok(())
+}
 
+fn validate_wakeup_kind(value: Option<&Value>) -> Result<(), String> {
+    let Some(value) = value else {
+        return Err("notification.wakeup_kind is required".to_owned());
+    };
+    let Value::String(value) = value else {
+        return Err("notification.wakeup_kind must be a string".to_owned());
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("notification.wakeup_kind must not be empty".to_owned());
+    }
+    if value.len() > 32
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        return Err("notification.wakeup_kind must be an opaque snake_case token".to_owned());
+    }
     Ok(())
 }
 
@@ -608,17 +634,17 @@ fn notify_rate_limit_checks(
     }
 
     if let Some(limit) = config.per_push_key_hash.filter(|limit| *limit > 0) {
-        let pushkey_hashes = notification
+        let push_key_hashes = notification
             .devices
             .iter()
-            .map(|device| device.redacted_pushkey())
+            .map(|device| device.redacted_push_key())
             .collect::<HashSet<_>>();
         checks.extend(
-            pushkey_hashes
+            push_key_hashes
                 .into_iter()
-                .map(|pushkey_hash| NotifyRateLimitCheck {
+                .map(|push_key_hash| NotifyRateLimitCheck {
                     scope: "push_key_hash",
-                    subject: pushkey_hash,
+                    subject: push_key_hash,
                     limit,
                     units: 1,
                 }),
@@ -717,34 +743,33 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     };
-    let caller =
-        match authenticate_notify_request(
-            req,
-            body.as_ref(),
-            &state.notify_auth,
-            state.notify_nonce_store.as_deref(),
-            &request_id,
-        ) {
-            Ok(caller) => {
-                span.record(
-                    "caller",
-                    tracing::field::display(&caller.origin_service_did),
-                );
-                caller
-            }
-            Err(error) => {
-                finish_error(
-                    res,
-                    error.status,
-                    error.code,
-                    &error.message,
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
-        };
+    let caller = match authenticate_notify_request(
+        req,
+        body.as_ref(),
+        &state.notify_auth,
+        state.notify_nonce_store.as_deref(),
+        &request_id,
+    ) {
+        Ok(caller) => {
+            span.record(
+                "caller",
+                tracing::field::display(&caller.origin_service_did),
+            );
+            caller
+        }
+        Err(error) => {
+            finish_error(
+                res,
+                error.status,
+                error.code,
+                &error.message,
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    };
     let raw_request_hash = request_hash(body.as_ref());
 
     let raw = match serde_json::from_slice::<Value>(&body) {
@@ -1014,18 +1039,18 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut first_internal_error: Option<String> = None;
     for device in &notification.devices {
         let app_id = device.app_id.trim();
-        let pushkey = device.pushkey.trim();
-        if app_id.is_empty() || pushkey.is_empty() {
+        let push_key = device.push_key.trim();
+        if app_id.is_empty() || push_key.is_empty() {
             tracing::warn!(
                 request_id = %context.request_id,
                 app_id = %device.app_id,
-                pushkey_hash = %device.redacted_pushkey(),
-                "rejecting device with empty app_id or pushkey"
+                push_key_hash = %device.redacted_push_key(),
+                "rejecting device with empty app_id or push_key"
             );
-            rejected.push(rejected_device(device, Some(&device.pushkey)));
+            rejected.push(rejected_device(device, Some(&device.push_key)));
             delivery_receipts.push(delivery_receipt(
                 None,
-                &device.pushkey,
+                &device.push_key,
                 "rejected",
                 None,
                 &context.request_id,
@@ -1033,11 +1058,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             continue;
         }
 
-        if !seen_devices.insert((app_id.to_owned(), pushkey.to_owned())) {
+        if !seen_devices.insert((app_id.to_owned(), push_key.to_owned())) {
             tracing::info!(
                 request_id = %context.request_id,
                 app_id,
-                pushkey_hash = %device.redacted_pushkey(),
+                push_key_hash = %device.redacted_push_key(),
                 "skipping duplicate device entry"
             );
             continue;
@@ -1047,11 +1072,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         let pushkins = state.registry.find_pushkins(&device.app_id);
         match pushkins.as_slice() {
             [] => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey_hash = %device.redacted_pushkey(), "unknown app id");
-                rejected.push(rejected_device(device, Some(&device.pushkey)));
+                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, push_key_hash = %device.redacted_push_key(), "unknown app id");
+                rejected.push(rejected_device(device, Some(&device.push_key)));
                 delivery_receipts.push(delivery_receipt(
                     None,
-                    &device.pushkey,
+                    &device.push_key,
                     "rejected",
                     None,
                     &context.request_id,
@@ -1063,7 +1088,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     .notify_deduplicator
                     .as_ref()
                     .is_some_and(|deduplicator| {
-                        deduplicator.contains_delivered_device(&dedup_key, app_id, pushkey)
+                        deduplicator.contains_delivered_device(&dedup_key, app_id, push_key)
                     })
                 {
                     skipped_delivered += 1;
@@ -1071,7 +1096,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     app_metrics::notify_device_skip_by_pushkin(pushkin.name(), 1);
                     delivery_receipts.push(delivery_receipt(
                         Some(pushkin.name()),
-                        pushkey,
+                        push_key,
                         "accepted_cached",
                         None,
                         &context.request_id,
@@ -1079,7 +1104,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     tracing::info!(
                         request_id = %context.request_id,
                         app_id,
-                        pushkey_hash = %device.redacted_pushkey(),
+                        push_key_hash = %device.redacted_push_key(),
                         pushkin = %pushkin.name(),
                         "skipping device already delivered within dedup ttl"
                     );
@@ -1104,11 +1129,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     dispatch_outcome,
                     dispatch_started.elapsed(),
                 );
-                app_metrics::notify_delivery_outcome_by_app(
-                    app_id,
-                    dispatch_outcome,
-                    1,
-                );
+                app_metrics::notify_delivery_outcome_by_app(app_id, dispatch_outcome, 1);
                 match dispatch_result {
                     Ok(mut pushkin_rejected) => {
                         let rejected_set = pushkin_rejected
@@ -1117,14 +1138,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             .collect::<HashSet<String>>();
                         let delivered_targets = dispatch_targets
                             .iter()
-                            .filter(|target| !rejected_set.contains(&target.pushkey))
+                            .filter(|target| !rejected_set.contains(&target.push_key))
                             .collect::<Vec<_>>();
                         if !delivered_targets.is_empty() {
                             delivered_now += delivered_targets.len();
                             for target in &delivered_targets {
                                 delivery_receipts.push(delivery_receipt(
                                     Some(pushkin.name()),
-                                    &target.pushkey,
+                                    &target.push_key,
                                     "accepted",
                                     None,
                                     &context.request_id,
@@ -1136,15 +1157,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                 delivered_targets.iter().copied(),
                             );
                         }
-                        rejected.extend(pushkin_rejected.drain(..).map(|pushkey| {
+                        rejected.extend(pushkin_rejected.drain(..).map(|push_key| {
                             delivery_receipts.push(delivery_receipt(
                                 Some(pushkin.name()),
-                                &pushkey,
+                                &push_key,
                                 "rejected",
                                 None,
                                 &context.request_id,
                             ));
-                            rejected_device(device, Some(&pushkey))
+                            rejected_device(device, Some(&push_key))
                         }));
                     }
                     Err(error) if error.is_temporary() => {
@@ -1153,14 +1174,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey_hash = %device.redacted_pushkey(),
+                            push_key_hash = %device.redacted_push_key(),
                             "temporary dispatch failure"
                         );
                         provider_retries.push(ProviderRetry::new(pushkin.name(), retry_after));
                         for target in &dispatch_targets {
                             delivery_receipts.push(delivery_receipt(
                                 Some(pushkin.name()),
-                                &target.pushkey,
+                                &target.push_key,
                                 "retryable",
                                 retry_after,
                                 &context.request_id,
@@ -1170,7 +1191,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                 &context.request_id,
                                 pushkin.name(),
                                 &target.app_id,
-                                &target.pushkey,
+                                &target.push_key,
                                 retry_after,
                                 &error,
                             );
@@ -1183,13 +1204,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey_hash = %device.redacted_pushkey(),
+                            push_key_hash = %device.redacted_push_key(),
                             "remote dispatch failure"
                         );
                         for target in &dispatch_targets {
                             delivery_receipts.push(delivery_receipt(
                                 Some(pushkin.name()),
-                                &target.pushkey,
+                                &target.push_key,
                                 "failed",
                                 None,
                                 &context.request_id,
@@ -1202,13 +1223,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             error = %error,
                             request_id = %context.request_id,
                             app_id = %device.app_id,
-                            pushkey_hash = %device.redacted_pushkey(),
+                            push_key_hash = %device.redacted_push_key(),
                             "internal dispatch failure"
                         );
                         for target in &dispatch_targets {
                             delivery_receipts.push(delivery_receipt(
                                 Some(pushkin.name()),
-                                &target.pushkey,
+                                &target.push_key,
                                 "failed",
                                 None,
                                 &context.request_id,
@@ -1219,11 +1240,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 }
             }
             _ => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, pushkey_hash = %device.redacted_pushkey(), "ambiguous app id");
-                rejected.push(rejected_device(device, Some(&device.pushkey)));
+                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, push_key_hash = %device.redacted_push_key(), "ambiguous app id");
+                rejected.push(rejected_device(device, Some(&device.push_key)));
                 delivery_receipts.push(delivery_receipt(
                     None,
-                    &device.pushkey,
+                    &device.push_key,
                     "rejected",
                     None,
                     &context.request_id,
@@ -1403,13 +1424,13 @@ fn mark_delivered_devices<'a>(
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         for target in targets {
-            deduplicator.mark_delivered_device(notification_key, &target.app_id, &target.pushkey);
+            deduplicator.mark_delivered_device(notification_key, &target.app_id, &target.push_key);
         }
     }
 }
 
 fn rejected_device(device: &crate::models::Device, push_key: Option<&str>) -> RejectedDevice {
-    RejectedDevice::new(Some(&device.app_id), push_key.unwrap_or(&device.pushkey))
+    RejectedDevice::new(Some(&device.app_id), push_key.unwrap_or(&device.push_key))
 }
 
 fn delivery_receipt(
@@ -1484,8 +1505,11 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));
     }
-    if let Some(value) = notification.event_kind() {
-        normalized.insert("type".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.push_target_id.as_ref() {
+        normalized.insert("push_target_id".to_owned(), Value::String(value.clone()));
+    }
+    if let Some(value) = notification.wakeup_kind() {
+        normalized.insert("wakeup_kind".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.sender.as_ref() {
         normalized.insert("sender".to_owned(), Value::String(value.clone()));
@@ -1504,10 +1528,9 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
         .map(|device| {
             let mut normalized = Map::new();
             normalized.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
-            normalized.insert("push_key".to_owned(), Value::String(device.pushkey.clone()));
             normalized.insert(
-                "push_key_ts".to_owned(),
-                Value::Number(device.pushkey_ts.into()),
+                "push_key".to_owned(),
+                Value::String(device.push_key.clone()),
             );
             if let Some(data) = device.data.as_ref() {
                 normalized.insert(
@@ -1558,7 +1581,7 @@ fn enqueue_retry(
     request_id: &str,
     pushkin: &str,
     app_id: &str,
-    pushkey: &str,
+    push_key: &str,
     retry_after: Option<Duration>,
     error: &crate::error::DispatchError,
 ) {
@@ -1570,7 +1593,7 @@ fn enqueue_retry(
         request_id,
         pushkin,
         app_id,
-        pushkey,
+        push_key,
         backoff,
         error.to_string(),
     );

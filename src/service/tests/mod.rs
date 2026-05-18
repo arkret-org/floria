@@ -22,7 +22,6 @@ mod auth;
 mod basics;
 mod dedup;
 mod delivery;
-mod legacy;
 mod rate_limit;
 
 #[derive(Debug, Clone)]
@@ -99,7 +98,7 @@ impl Pushkin for TestPushkin {
 
         match self.behavior {
             TestBehavior::Accept => Ok(vec![]),
-            TestBehavior::Reject => Ok(vec![device.pushkey.clone()]),
+            TestBehavior::Reject => Ok(vec![device.push_key.clone()]),
             TestBehavior::RemoteError => Err(DispatchError::remote("synthetic remote failure")),
             TestBehavior::TemporaryError => Err(DispatchError::temporary(
                 "synthetic temporary failure",
@@ -215,9 +214,7 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     config.production_mode = true;
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
-    principal.signature_public_key_hex = Some(
-        "deadbeef".repeat(8),
-    );
+    principal.signature_public_key_hex = Some("deadbeef".repeat(8));
     principal.service_type = Some("sync".to_owned());
     config
         .service_principals
@@ -237,8 +234,9 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             "flow_name": "Engineering",
             "sender": "did:web:alice.example.com",
             "sender_display_name": "Alice",
-            "type": "cx.message.create",
-            "push_hint": "New message",
+            "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+            "wakeup_kind": "message",
+            "push_hint": "wakeup-msg-01",
             "devices": devices
         }
     })
@@ -254,11 +252,10 @@ pub(super) fn with_operation_id(mut request_body: Value, operation_id: &str) -> 
     request_body
 }
 
-pub(super) fn device(app_id: &str, pushkey: &str) -> Value {
+pub(super) fn device(app_id: &str, push_key: &str) -> Value {
     json!({
         "app_id": app_id,
-        "pushkey": pushkey,
-        "pushkey_ts": 42
+        "push_key": push_key
     })
 }
 

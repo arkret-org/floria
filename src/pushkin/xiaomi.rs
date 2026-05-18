@@ -169,7 +169,7 @@ impl XiaomiPushkin {
         })?;
 
         let mut form = vec![
-            ("registration_id".to_owned(), device.pushkey.clone()),
+            ("registration_id".to_owned(), device.push_key.clone()),
             (
                 "restricted_package_name".to_owned(),
                 self.config.restricted_package_name.clone(),
@@ -297,16 +297,18 @@ impl XiaomiPushkin {
             200..=299 => match serde_json::from_str::<XiaomiSendResponse>(body) {
                 Ok(response) if response.code == 0 => Ok(vec![]),
                 Ok(response) if response.is_invalid_registration() => {
-                    Ok(vec![device.pushkey.clone()])
+                    Ok(vec![device.push_key.clone()])
                 }
                 Ok(response) => Err(DispatchError::remote(format!(
                     "Xiaomi Push rejected request: {} {}",
                     response.code, response.description
                 ))),
-                Err(_) if looks_like_invalid_registration(body) => Ok(vec![device.pushkey.clone()]),
+                Err(_) if looks_like_invalid_registration(body) => {
+                    Ok(vec![device.push_key.clone()])
+                }
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_registration(body) => Ok(vec![device.pushkey.clone()]),
+            _ if looks_like_invalid_registration(body) => Ok(vec![device.push_key.clone()]),
             _ => Err(DispatchError::remote(xiaomi_error_message(body, status))),
         }
     }
@@ -334,17 +336,17 @@ impl Pushkin for XiaomiPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.pushkey.trim().is_empty() {
+        if device.push_key.trim().is_empty() {
             tracing::warn!("rejecting Xiaomi Push device due to empty registration_id");
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         if device.default_payload().is_err() {
             tracing::warn!(
-                pushkey_hash = %device.redacted_pushkey(),
-                "rejecting Xiaomi Push pushkey due to invalid default_payload"
+                push_key_hash = %device.redacted_push_key(),
+                "rejecting Xiaomi Push push_key due to invalid default_payload"
             );
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         for attempt in 0..XIAOMI_MAX_TRIES {
@@ -427,8 +429,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.xiaomi".to_owned(),
-            pushkey: "regid".to_owned(),
-            pushkey_ts: 42,
+            push_key: "regid".to_owned(),
             data: Some(
                 serde_json::json!({
                     "default_payload": {
@@ -464,7 +465,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],

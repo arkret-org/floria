@@ -7,6 +7,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotifyRequest {
     #[serde(default)]
     pub operation_id: Option<String>,
@@ -104,6 +105,7 @@ pub struct DeliveryReceipt {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Notification {
     #[serde(default)]
     pub flow_name: Option<String>,
@@ -128,7 +130,9 @@ pub struct Notification {
     #[serde(default)]
     pub user_is_target: Option<bool>,
     #[serde(default)]
-    pub r#type: Option<String>,
+    pub push_target_id: Option<String>,
+    #[serde(default)]
+    pub wakeup_kind: Option<String>,
     #[serde(default)]
     pub sender: Option<String>,
     #[serde(default)]
@@ -172,8 +176,8 @@ impl Notification {
         non_empty(self.sender_display_name.as_deref()).or(non_empty(self.sender.as_deref()))
     }
 
-    pub fn event_kind(&self) -> Option<&str> {
-        non_empty(self.r#type.as_deref())
+    pub fn wakeup_kind(&self) -> Option<&str> {
+        non_empty(self.wakeup_kind.as_deref())
     }
 
     pub fn push_hint_text(&self) -> Option<&str> {
@@ -200,11 +204,10 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Device {
     pub app_id: String,
-    pub pushkey: String,
-    #[serde(default)]
-    pub pushkey_ts: u64,
+    pub push_key: String,
     #[serde(default)]
     pub data: Option<Map<String, Value>>,
     #[serde(default)]
@@ -244,8 +247,8 @@ impl Device {
             .unwrap_or_default()
     }
 
-    pub fn redacted_pushkey(&self) -> String {
-        redact_push_token(&self.pushkey)
+    pub fn redacted_push_key(&self) -> String {
+        redact_push_token(&self.push_key)
     }
 }
 
@@ -296,84 +299,11 @@ pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
         .collect()
 }
 
-pub fn reject_legacy_notify_contract_fields(path: &str, value: &Value) -> Result<(), String> {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                if is_legacy_contract_key(key) {
-                    return Err(format!(
-                        "legacy notify contract field `{path}.{key}` is not supported"
-                    ));
-                }
-                let next_path = format!("{path}.{key}");
-                if key == "schema" && value.as_str().is_some_and(looks_like_legacy_contract_value) {
-                    return Err(format!(
-                        "legacy notify contract value `{next_path}` is not supported"
-                    ));
-                }
-                reject_legacy_notify_contract_fields(&next_path, value)?;
-            }
-            Ok(())
-        }
-        Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                reject_legacy_notify_contract_fields(&format!("{path}[{index}]"), value)?;
-            }
-            Ok(())
-        }
-        Value::String(value) if path.ends_with(".type") => {
-            if looks_like_legacy_event_type(value) || is_legacy_typed_id(value) {
-                Err(format!(
-                    "legacy notify contract value `{path}` is not supported"
-                ))
-            } else {
-                Ok(())
-            }
-        }
-        Value::String(value) if is_legacy_typed_id(value) => Err(format!(
-            "legacy notify contract value `{path}` is not supported"
-        )),
-        Value::String(_) | Value::Null | Value::Bool(_) | Value::Number(_) => Ok(()),
-    }
-}
-
-pub fn is_legacy_typed_id(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
-    normalized.starts_with("cx:room:")
-        || normalized.starts_with("cx:card:")
-        || normalized.starts_with("cx:subject:")
-}
-
-fn is_legacy_contract_key(key: &str) -> bool {
-    let lower = key.trim().to_ascii_lowercase();
-    lower == "subject"
-        || lower.starts_with("room_")
-        || lower.starts_with("card_")
-        || lower.starts_with("subject_")
-}
-
-fn looks_like_legacy_event_type(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
-    normalized.starts_with("m.room.")
-        || normalized.starts_with("m.call.")
-        || normalized.contains(".room.")
-        || normalized.contains(".card.")
-        || normalized.contains(".subject.")
-}
-
-fn looks_like_legacy_contract_value(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
-    normalized.contains("room") || normalized.contains("card") || normalized.contains("subject")
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::{
-        Counts, DeliveryReceipt, NotifyRequest, NotifyResponse,
-        reject_legacy_notify_contract_fields,
-    };
+    use super::{Counts, DeliveryReceipt, NotifyRequest, NotifyResponse};
 
     #[test]
     fn counts_accept_active_fields() {
@@ -411,11 +341,11 @@ mod tests {
             "notification": {
                 "event_id": "cx:event:01JS0EV000000000000000000",
                 "space_id": "cx:space:01JS0SP000000000000000000",
-                "type": "cx.message.create",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
                 "devices": [{
                     "app_id": "app.example.android",
-                    "pushkey": "token-123",
-                    "pushkey_ts": 42
+                    "push_key": "token-123"
                 }]
             }
         }))
@@ -456,37 +386,5 @@ mod tests {
         assert!(encoded.contains("delivery_receipts"));
         assert!(encoded.contains("pkh_"));
         assert!(!encoded.contains("token-123"));
-    }
-
-    #[test]
-    fn reject_legacy_notify_contract_fields_rejects_legacy_key_names() {
-        let error = reject_legacy_notify_contract_fields(
-            "notification",
-            &json!({
-                "room_id": "!legacy:example.com"
-            }),
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            "legacy notify contract field `notification.room_id` is not supported"
-        );
-    }
-
-    #[test]
-    fn reject_legacy_notify_contract_fields_rejects_legacy_typed_ids_in_active_fields() {
-        let error = reject_legacy_notify_contract_fields(
-            "notification",
-            &json!({
-                "flow_id": "cx:card:legacy-card"
-            }),
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error,
-            "legacy notify contract value `notification.flow_id` is not supported"
-        );
     }
 }

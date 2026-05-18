@@ -57,7 +57,9 @@ pub(super) fn record_delivery_receipt_outcomes(
         let Some(provider) = receipt.provider.as_deref() else {
             continue;
         };
-        *per_provider.entry((provider.to_owned(), outcome)).or_default() += 1;
+        *per_provider
+            .entry((provider.to_owned(), outcome))
+            .or_default() += 1;
     }
     for ((provider, outcome), count) in per_provider {
         app_metrics::notify_delivery_outcome_by_provider(&provider, outcome, count);

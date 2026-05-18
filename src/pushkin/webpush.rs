@@ -220,7 +220,7 @@ impl WebpushPushkin {
                 "sender_display_name",
                 notification.sender_display_name.as_deref(),
             ),
-            ("type", notification.r#type.as_deref()),
+            ("wakeup_kind", notification.wakeup_kind()),
             ("push_hint", notification.push_hint.as_deref()),
         ] {
             if let Some(value) = value.filter(|value| !value.is_empty()) {
@@ -314,7 +314,7 @@ impl WebpushPushkin {
             .ok_or_else(|| DispatchError::remote("webpush device data is missing auth"))?;
         Ok(SubscriptionInfo::new(
             endpoint.to_owned(),
-            device.pushkey.clone(),
+            device.push_key.clone(),
             auth.to_owned(),
         ))
     }
@@ -365,10 +365,10 @@ impl WebpushPushkin {
             | Err(WebPushError::MissingCryptoKeys)
             | Err(WebPushError::InvalidCryptoKeys) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
+                    push_key_hash = %device.redacted_push_key(),
                     "rejecting invalid webpush crypto material"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
             Err(WebPushError::InvalidTopic | WebPushError::InvalidClaims) => {
                 return Err(DispatchError::internal(
@@ -401,7 +401,7 @@ impl WebpushPushkin {
         WEBPUSH_ACTIVE_REQUESTS.dec();
         WEBPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
 
-        classify_webpush_result(result, &device.pushkey)
+        classify_webpush_result(result, &device.push_key)
     }
 }
 
@@ -429,10 +429,10 @@ impl Pushkin for WebpushPushkin {
 
         if device.data.is_none() {
             tracing::warn!(
-                pushkey_hash = %device.redacted_pushkey(),
+                push_key_hash = %device.redacted_push_key(),
                 "rejecting webpush device without data object"
             );
-            return Ok(vec![device.pushkey.clone()]);
+            return Ok(vec![device.push_key.clone()]);
         }
 
         if device.data_bool("events_only") == Some(true) && notification.event_id.is_none() {
@@ -443,11 +443,11 @@ impl Pushkin for WebpushPushkin {
             Ok(subscription) => subscription,
             Err(error) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
+                    push_key_hash = %device.redacted_push_key(),
                     error = %error,
                     "rejecting invalid webpush subscription"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
 
@@ -455,17 +455,17 @@ impl Pushkin for WebpushPushkin {
             Ok(endpoint_domain) => endpoint_domain,
             Err(error) => {
                 tracing::warn!(
-                    pushkey_hash = %device.redacted_pushkey(),
+                    push_key_hash = %device.redacted_push_key(),
                     error = %error,
                     "rejecting invalid webpush endpoint"
                 );
-                return Ok(vec![device.pushkey.clone()]);
+                return Ok(vec![device.push_key.clone()]);
             }
         };
 
         if !self.allows_endpoint(&endpoint_domain) {
             tracing::error!(
-                pushkey_hash = %device.redacted_pushkey(),
+                push_key_hash = %device.redacted_push_key(),
                 endpoint = %endpoint_domain,
                 "webpush endpoint not allowed by configuration"
             );
@@ -497,12 +497,12 @@ fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: 
 
 fn classify_webpush_result(
     result: Result<(), WebPushError>,
-    pushkey: &str,
+    push_key: &str,
 ) -> Result<Vec<String>, DispatchError> {
     match result {
         Ok(()) => Ok(vec![]),
         Err(WebPushError::EndpointNotFound(_) | WebPushError::EndpointNotValid(_)) => {
-            Ok(vec![pushkey.to_owned()])
+            Ok(vec![push_key.to_owned()])
         }
         Err(WebPushError::ServerError { retry_after, info }) => Err(DispatchError::temporary(
             format!("webpush server error: {info}"),
@@ -545,8 +545,7 @@ mod tests {
     fn device() -> Device {
         Device {
             app_id: "com.example.web".to_owned(),
-            pushkey: "p256dh-key".to_owned(),
-            pushkey_ts: 42,
+            push_key: "p256dh-key".to_owned(),
             data: Some(
                 json!({
                     "endpoint": "https://push.example.test/send",
@@ -566,8 +565,7 @@ mod tests {
     fn network_device(endpoint: &str) -> Device {
         Device {
             app_id: "com.example.web".to_owned(),
-            pushkey: "BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned(),
-            pushkey_ts: 42,
+            push_key: "BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned(),
             data: Some(
                 json!({
                     "endpoint": endpoint,
@@ -642,7 +640,8 @@ mod tests {
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            r#type: Some("cx.message.create".to_owned()),
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -790,7 +789,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn webpush_gone_endpoint_rejects_pushkey() {
+    async fn webpush_gone_endpoint_rejects_push_key() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
@@ -821,7 +820,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(rejected, vec![device.pushkey.clone()]);
+        assert_eq!(rejected, vec![device.push_key.clone()]);
         server.join().unwrap();
     }
 }
