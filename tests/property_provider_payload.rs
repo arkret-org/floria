@@ -67,6 +67,16 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "ice_candidate",
     "facet",
     "view_renderer",
+    // Round R2/R3 (2026-05-20) additions — stripped locally by floria
+    // ahead of the SDK forbidden-list update (T07/T10/T06).
+    "appeal_id",
+    "attestation_evidence",
+    "audit_purpose",
+    "attestation_chain",
+    "audit_policy_version_hash",
+    "policy_frontier_hash",
+    "trust_domain",
+    "reset_event_id",
 ];
 
 fn arb_forbidden_key() -> impl Strategy<Value = &'static str> {

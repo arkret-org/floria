@@ -538,6 +538,41 @@ impl std::fmt::Display for ProviderPayloadRejection {
     }
 }
 
+/// Round R2/R3 (2026-05-20) — extra correlation / governance identifiers
+/// that surfaced with the moderation-appeal, audit-attestation,
+/// cross-signing-reset, and policy-frontier-hash wire additions.
+///
+/// These names are NOT yet on the SDK's `is_forbidden_payload_key` list
+/// (it predates round R2/R3), so floria strips them locally as
+/// defence-in-depth. Any of these on the blind-wakeup wire is a hard
+/// correlation leak — `appeal_id` links a push back to a specific
+/// moderation appeal thread; `attestation_evidence` / `attestation_chain`
+/// / `audit_purpose` / `audit_policy_version_hash` reveal audit-agent
+/// posture; `policy_frontier_hash` is a stable per-policy correlator;
+/// `trust_domain` discloses deployment scope; `reset_event_id` links
+/// pushes back to a cross-signing reset event.
+// TODO(round23-T07): once the SDK ships `is_forbidden_payload_key`
+// coverage for these names, drop the local list.
+const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
+    "realm_id",
+    "appeal_id",
+    "attestation_evidence",
+    "audit_purpose",
+    "attestation_chain",
+    "audit_policy_version_hash",
+    "policy_frontier_hash",
+    "trust_domain",
+    "reset_event_id",
+];
+
+/// Returns `true` if `key` matches a round R2/R3 locally-stripped
+/// forbidden name (case-insensitive).
+fn is_round23_local_forbidden(key: &str) -> bool {
+    ROUND23_LOCAL_FORBIDDEN
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case(key))
+}
+
 fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // Drop forbidden top-level keys. We do *not* touch keys that are
     // provider-defined wrappers like `aps`, `android`, `notification`,
@@ -550,7 +585,7 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // defense-in-depth until the SDK catches up.
     map.retain(|key, _| {
         !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key)
-            && !key.eq_ignore_ascii_case("realm_id")
+            && !is_round23_local_forbidden(key)
     });
     for value in map.values_mut() {
         strip_value_recursive(value);
@@ -654,6 +689,82 @@ mod sanitize_tests {
         let out = sanitized_provider_payload(payload).unwrap();
         assert!(!out.contains_key("event_id"));
         assert_eq!(out.get("client"), Some(&json!("android")));
+    }
+
+    /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
+    /// policy-frontier-hash / trust-domain / reset-event-id field names
+    /// added by rounds 2+3 MUST be stripped from any provider payload
+    /// before it leaves floria. They are all stable correlators that
+    /// would let an observer link the push back to a moderation appeal,
+    /// audit agent, or cross-signing reset.
+    #[test]
+    fn sanitized_provider_payload_strips_round23_forbidden_fields() {
+        // We stage values that are safe (no `did:` / `cx:` literals)
+        // so the sanitizer doesn't reject for `sensitive_literal`; the
+        // only assertion is "key was removed from the output map".
+        let payload = json!({
+            "client": "android",
+            "wakeup_kind": "message",
+            "appeal_id": "01904100-0000-7000-8000-000000000001",
+            "attestation_evidence": "evidence-blob-ref",
+            "audit_purpose": "compliance_lawful_access",
+            "attestation_chain": ["chain-item-0", "chain-item-1"],
+            "audit_policy_version_hash": "a".repeat(64),
+            "policy_frontier_hash": "b".repeat(64),
+            "trust_domain": "example.net",
+            "reset_event_id": "01904100-0000-7000-8000-000000000002",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let out = sanitized_provider_payload(payload).unwrap();
+        for forbidden in [
+            "appeal_id",
+            "attestation_evidence",
+            "audit_purpose",
+            "attestation_chain",
+            "audit_policy_version_hash",
+            "policy_frontier_hash",
+            "trust_domain",
+            "reset_event_id",
+        ] {
+            assert!(
+                out.get(forbidden).is_none(),
+                "round R2/R3 forbidden field `{forbidden}` survived sanitization"
+            );
+        }
+        assert_eq!(out.get("client"), Some(&json!("android")));
+        assert_eq!(out.get("wakeup_kind"), Some(&json!("message")));
+    }
+
+    /// Round R2/R3 — the same field names buried inside a nested object
+    /// are also stripped by the recursive sweep.
+    #[test]
+    fn sanitized_provider_payload_strips_round23_forbidden_fields_when_nested() {
+        let payload = json!({
+            "client": "ios",
+            "wakeup_kind": "message",
+            "nested": {
+                "deep": {
+                    "appeal_id": "01904100-0000-7000-8000-000000000001",
+                    "trust_domain": "example.net",
+                    "ok_key": "value"
+                }
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let out = sanitized_provider_payload(payload).unwrap();
+        // Serialize back to JSON and assert none of the names survive.
+        let encoded = serde_json::to_string(&out).unwrap();
+        for forbidden in ["appeal_id", "trust_domain"] {
+            assert!(
+                !encoded.contains(forbidden),
+                "nested round R2/R3 forbidden field `{forbidden}` survived: {encoded}"
+            );
+        }
+        assert!(encoded.contains("ok_key"));
     }
 
     #[test]
