@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
 use contrix::http_signature::{
-    self as sdk_sig, Component, ContentDigest, SignatureError, SignatureInput, SignedRequestParts,
+    self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
 };
 use salvo::http::StatusCode;
 use salvo::prelude::Request;
@@ -30,14 +30,6 @@ pub struct AuthFailure {
     pub code: &'static str,
     pub message: String,
 }
-
-/// Backwards-compatible type alias for the in-tree name `ParsedSignatureInput`
-/// that the rest of floria's verifier referred to before FL-2. The
-/// concrete type now lives in `contrix::http_signature::SignatureInput`
-/// — keeping the alias avoids churn in tracing / log helpers that named
-/// the old type.
-#[allow(dead_code)]
-type ParsedSignatureInput = SignatureInput;
 
 pub fn authenticate_notify_request(
     req: &Request,
@@ -1294,15 +1286,11 @@ mod tests {
         );
     }
 
-    // ----- FL-2: SDK-routed verifier rejection coverage --------------
-    //
-    // The migration to `contrix::http_signature` changed where parsing
-    // happens (in-tree → SDK) but must NOT change which inputs floria
-    // rejects. These tests pin the rejection set so a future SDK bump
-    // can't silently loosen verification.
+    // Pin the verifier's rejection set so a future SDK bump can't
+    // silently loosen which inputs floria refuses.
 
     #[tokio::test]
-    async fn fl2_rejects_tampered_body_after_sdk_migration() {
+    async fn rejects_tampered_body() {
         let seed_hex = "0404040404040404040404040404040404040404040404040404040404040404";
         let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
         let mut principal = NotifyServicePrincipalConfig::default();
@@ -1325,7 +1313,7 @@ mod tests {
         });
         let body_bytes = serde_json::to_vec(&body).unwrap();
         // Sign one body, send a *different* body — content-digest
-        // recomputation in the SDK-routed verifier must reject this.
+        // recomputation must reject this.
         let (content_digest, signature_input, signature) = sign_request(
             seed_hex,
             "POST",
@@ -1359,7 +1347,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fl2_rejects_signature_missing_required_components_after_sdk_migration() {
+    async fn rejects_signature_missing_required_components() {
         let seed_hex = "0505050505050505050505050505050505050505050505050505050505050505";
         let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
         let mut principal = NotifyServicePrincipalConfig::default();
