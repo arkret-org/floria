@@ -131,6 +131,18 @@ pub struct Notification {
     pub user_is_target: Option<bool>,
     #[serde(default)]
     pub push_target_id: Option<String>,
+    /// Service DID of the recipient Principal Server this push is scoped
+    /// to. Spec 0a5ab85: `push_target_id` cell_subject is composite over
+    /// `(recipient_service_did, principal_id, device_id, push_route)`;
+    /// dispatch MUST validate the inbound binding matches this scope.
+    #[serde(default)]
+    pub recipient_service_did: Option<String>,
+    /// Receiver's accepted Space delivery-binding frontier when the
+    /// notify originated from a federation hop. Receiver returns
+    /// `delivery_binding_stale` if its accepted frontier is ahead.
+    /// Spec 0a5ab85 §4.1.
+    #[serde(default)]
+    pub delivery_binding_frontier: Option<String>,
     #[serde(default)]
     pub wakeup_kind: Option<String>,
     #[serde(default)]
