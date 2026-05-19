@@ -3,7 +3,7 @@
 //!
 //! These tests assert that the provider-facing payload that floria
 //! emits NEVER carries the stable correlation identifiers
-//! (`event_id` / `space_id` / `flow_id` / `message_id` / sender /
+//! (`event_id` / `realm_id` / `space_id` / `flow_id` / `message_id` / sender /
 //! space-name / flow-name / `target_did` / call-setup material …) that
 //! used to leak via the freeform data dictionary. Coverage is split
 //! across three layers:
@@ -147,13 +147,14 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     // only the SDK-allowed blind fields make it out.
     let notification: Notification = serde_json::from_value(json!({
         "flow_name": "Mission Control",
-        "space_name": "Apollo",
+        // Realm/Space reversal — security-boundary name is now `realm_name`.
+        "realm_name": "Apollo",
         "sender_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
         "event_id":   "cx:event:01JS0EV000000000000000000",
         "message_id": "cx:message:01JS0MSG0000000000000000",
         "flow_id":    "cx:flow:01JS0FLOW000000000000000",
-        "space_id":   "cx:space:01JS0SP000000000000000000",
+        "realm_id":   "cx:realm:01JS0SP000000000000000000",
         "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "sender": "@major:example.com",
@@ -174,11 +175,15 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "event_id",
         "message_id",
         "flow_id",
+        // TODO(realm-rework): keep both `space_id` (SDK list) and
+        // `realm_id` (floria local strip) under assertion.
         "space_id",
+        "realm_id",
         "sender",
         "sender_display_name",
         "flow_name",
         "space_name",
+        "realm_name",
         "content",
     ] {
         assert!(

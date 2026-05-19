@@ -2,6 +2,19 @@
 
 Push gateway service in Rust.
 
+## Realm vs Space
+
+`floria` forwards `cx.device.push_route` and `cx.push.notify` events that
+target a specific security boundary. After the Phase 1–4 terminology
+inversion:
+
+- **Realm:** security boundary — membership, capability, E2EE, federation.
+- **Space:** navigation container — board, list, section, calendar bucket;
+  lives inside a Realm.
+
+The push payloads carry the new `realm_id` field while keeping the old
+`space_id` alias on the wire for back-compat clients.
+
 ## Stack
 
 - `salvo` for HTTP API

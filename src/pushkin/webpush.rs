@@ -214,7 +214,7 @@ impl WebpushPushkin {
     /// Build the WebPush JSON payload that goes into the encrypted
     /// `aes128gcm` body. T4.3 — only the SDK-allowed blind-wakeup
     /// fields plus the device's static `default_payload` survive on
-    /// the wire. `flow_id` / `space_id` / `event_id` / `message_id`
+    /// the wire. `flow_id` / `realm_id` / `event_id` / `message_id`
     /// / sender / names / body / content / membership / user_is_target
     /// are all dropped: the SW pulls them server-side from an e2ee
     /// envelope keyed on `push_target_id`.
@@ -349,7 +349,7 @@ impl WebpushPushkin {
         } else {
             Urgency::Normal
         });
-        // T4.3 — the topic used to be a blake2 hash of the `space_id` /
+        // T4.3 — the topic used to be a blake2 hash of the `realm_id` /
         // `flow_id`. blake2 is non-reversible but the *same* scope still
         // produced the *same* topic across pushes, which let an observer
         // correlate every notification in a given conversation. We now
@@ -627,7 +627,7 @@ mod tests {
     fn notification(body: &str) -> Notification {
         Notification {
             flow_name: Some("Mission Control".to_owned()),
-            space_name: None,
+            realm_name: None,
             prio: Some("low".to_owned()),
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -645,7 +645,7 @@ mod tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
@@ -691,13 +691,16 @@ mod tests {
         // T4.3 — stable correlation identifiers are stripped.
         for forbidden in [
             "flow_id",
+            "realm_id",
+            // TODO(realm-rework): keep `space_id` here too — both the
+            // renamed security id AND the new container id are off-wire.
             "space_id",
             "event_id",
             "message_id",
             "sender",
             "sender_display_name",
             "flow_name",
-            "space_name",
+            "realm_name",
             "content",
             "highlight_count",
             "missed_calls",

@@ -324,7 +324,7 @@ impl FcmPushkin {
         default_payload: Map<String, Value>,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
         // T4.3 — the FCM data dictionary used to auto-copy event_id /
-        // message_id / flow_id / space_id / sender / names / push_hint
+        // message_id / flow_id / realm_id / sender / names / push_hint
         // / content_*. None of those survive on the wire any more:
         //
         //   * The client decrypts a server-side e2ee envelope to learn
@@ -407,7 +407,7 @@ impl FcmPushkin {
         // We still want to drop the dispatch entirely when the caller
         // gave us nothing routable: no push_target_id + wakeup_kind,
         // no counts. The old "has_routable_context" check used
-        // flow_id/space_id/event_id/message_id — none of those are
+        // flow_id/realm_id/event_id/message_id — none of those are
         // emitted any more, so the check is on the blind fields.
         let has_routable_context = data.contains_key("push_target_id")
             || data.contains_key("wakeup_kind")
@@ -687,7 +687,7 @@ mod tests {
     fn notification() -> Notification {
         Notification {
             flow_name: Some("Mission Control".to_owned()),
-            space_name: None,
+            realm_name: None,
             prio: Some("low".to_owned()),
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -703,7 +703,7 @@ mod tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
@@ -728,7 +728,7 @@ mod tests {
             .unwrap();
 
         // T4.3 — provider payload now carries only allowed blind
-        // fields. event_id / message_id / flow_id / space_id /
+        // fields. event_id / message_id / flow_id / realm_id /
         // sender / flow_name / sender_display_name / content_* are
         // all stripped at the gateway.
         assert_eq!(
@@ -758,11 +758,16 @@ mod tests {
             "event_id",
             "message_id",
             "flow_id",
+            "realm_id",
+            // TODO(realm-rework): SDK forbidden list still keys off
+            // `space_id`; pin `space_id` here too once SDK catches up
+            // so this defense-in-depth check covers both the renamed
+            // security id AND the new container id.
             "space_id",
             "sender",
             "sender_display_name",
             "flow_name",
-            "space_name",
+            "realm_name",
             "content_body",
             "content_msgtype",
             "highlight_count",
@@ -805,7 +810,7 @@ mod tests {
         // dispatch is dropped entirely.
         let notification = Notification {
             flow_name: None,
-            space_name: None,
+            realm_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
@@ -813,7 +818,7 @@ mod tests {
             event_id: None,
             message_id: None,
             flow_id: None,
-            space_id: None,
+            realm_id: None,
             user_is_target: None,
             push_target_id: None,
             recipient_service_did: None,

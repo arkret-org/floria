@@ -21,7 +21,10 @@ const NOTIFY_OPERATION_ID: &str = "cx.push.notify";
 const ACTIVE_EVENT_ID_PREFIX: &str = "cx:event:";
 const ACTIVE_MESSAGE_ID_PREFIX: &str = "cx:message:";
 const ACTIVE_FLOW_ID_PREFIX: &str = "cx:flow:";
-const ACTIVE_SPACE_ID_PREFIX: &str = "cx:space:";
+// Realm/Space reversal: the security boundary is now Realm with typed
+// prefix `cx:realm:`. The push wire model carries `realm_id`, never the
+// container-level `space_id` (which is on the forbidden-key list).
+const ACTIVE_REALM_ID_PREFIX: &str = "cx:realm:";
 
 fn notify_route(path: &'static str) -> Router {
     Router::with_path(path)

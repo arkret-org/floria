@@ -544,7 +544,14 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // `payload` — those are themselves on the SDK forbidden list when
     // they appear in the blind-wakeup contract, so anything that gets
     // here with one of those keys gets stripped.
-    map.retain(|key, _| !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key));
+    // TODO(realm-rework): the SDK's `is_forbidden_payload_key` covers
+    // the legacy `space_id` (formerly the security boundary, now the
+    // container) but not yet the new `realm_id`. Strip it locally as
+    // defense-in-depth until the SDK catches up.
+    map.retain(|key, _| {
+        !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key)
+            && !key.eq_ignore_ascii_case("realm_id")
+    });
     for value in map.values_mut() {
         strip_value_recursive(value);
     }
@@ -569,7 +576,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 /// still MUST run [`sanitized_provider_payload`] before sending.
 ///
 /// This intentionally drops every potentially-correlating identifier
-/// (`event_id`, `message_id`, `flow_id`, `space_id`, sender, names,
+/// (`event_id`, `message_id`, `flow_id`, `realm_id`, sender, names,
 /// body, push_hint when it carries an l10n token, etc.). The only
 /// fields that survive are:
 ///   * `push_target_id` (opaque pseudonym)
@@ -619,7 +626,7 @@ pub fn build_blind_provider_data(notification: &Notification) -> Map<String, ser
 
 /// Generate a fresh random base64url collapse_key. Used by WebPush /
 /// any provider that previously derived its collapse / topic from a
-/// stable `space_id` / `flow_id`. The blake2-of-scope-id form was
+/// stable `realm_id` / `flow_id`. The blake2-of-scope-id form was
 /// non-reversible but still acted as a stable per-conversation tag
 /// that an observer could correlate across pushes; a per-message
 /// random key removes that.
@@ -665,7 +672,7 @@ mod sanitize_tests {
     fn build_blind_provider_data_keeps_only_allowed_fields() {
         let notification = Notification {
             flow_name: Some("Mission Control".to_owned()),
-            space_name: None,
+            realm_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -673,7 +680,7 @@ mod sanitize_tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             recipient_service_did: None,
             delivery_binding_frontier: None,
             user_is_target: None,

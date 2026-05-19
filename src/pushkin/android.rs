@@ -62,7 +62,7 @@ fn merge_notification_data(
     send_badge_counts: bool,
 ) {
     // T4.3 — only emit fields that the SDK blind-wakeup contract allows.
-    // `event_id` / `message_id` / `flow_id` / `space_id` / sender / names
+    // `event_id` / `message_id` / `flow_id` / `realm_id` / sender / names
     // are stable correlation identifiers; the client now derives them
     // from the e2ee wakeup payload it pulls server-side, never from the
     // provider wire format. `push_hint` survives only when it matches
@@ -263,7 +263,7 @@ mod tests {
     fn message_notification() -> Notification {
         Notification {
             flow_name: Some("Mission Control".to_owned()),
-            space_name: None,
+            realm_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -280,7 +280,7 @@ mod tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
@@ -313,13 +313,17 @@ mod tests {
         // correlation identifiers any more. The client now derives
         // those from the e2ee wakeup material it pulls server-side.
         assert!(payload.data.get("flow_id").is_none());
+        // TODO(realm-rework): SDK forbidden list still names the legacy
+        // `space_id`; once it adds `realm_id`, this defense-in-depth
+        // assertion stays in place to cover both.
         assert!(payload.data.get("space_id").is_none());
+        assert!(payload.data.get("realm_id").is_none());
         assert!(payload.data.get("event_id").is_none());
         assert!(payload.data.get("message_id").is_none());
         assert!(payload.data.get("sender").is_none());
         assert!(payload.data.get("sender_display_name").is_none());
         assert!(payload.data.get("flow_name").is_none());
-        assert!(payload.data.get("space_name").is_none());
+        assert!(payload.data.get("realm_name").is_none());
         assert!(payload.data.get("content").is_none());
 
         // Allowed blind-wakeup fields survive.
@@ -359,7 +363,7 @@ mod tests {
         let payload = build_android_notification_payload(
             &Notification {
                 flow_name: Some("Nebula".to_owned()),
-                space_name: None,
+                realm_name: None,
                 prio: None,
                 membership: Some("invite".to_owned()),
                 sender_display_name: Some("Major Tom".to_owned()),
@@ -367,7 +371,7 @@ mod tests {
                 event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
                 message_id: None,
                 flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-                space_id: None,
+                realm_id: None,
                 user_is_target: Some(true),
                 push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
                 recipient_service_did: None,

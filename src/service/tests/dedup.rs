@@ -115,7 +115,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "event_id": "cx:event:01JS0EV000000000000000000",
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "space_id": "cx:space:01JS0SP000000000000000000",
+                "realm_id": "cx:realm:01JS0SP000000000000000000",
                 "sender": "did:web:alice.example.com",
                 "sender_display_name": "Alice",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
@@ -137,7 +137,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "sender_display_name": "Alice",
                 "sender": "did:web:alice.example.com",
-                "space_id": "cx:space:01JS0SP000000000000000000",
+                "realm_id": "cx:realm:01JS0SP000000000000000000",
                 "flow_id": "cx:flow:01JS0FLOW000000000000000",
                 "message_id": "cx:message:01JS0MSG0000000000000000",
                 "event_id": "cx:event:01JS0EV000000000000000000"

@@ -231,7 +231,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             "event_id": "cx:event:01JS0EV000000000000000000",
             "message_id": "cx:message:01JS0MSG0000000000000000",
             "flow_id": "cx:flow:01JS0FLOW000000000000000",
-            "space_id": "cx:space:01JS0SP000000000000000000",
+            "realm_id": "cx:realm:01JS0SP000000000000000000",
             "flow_name": "Engineering",
             "sender": "did:web:alice.example.com",
             "sender_display_name": "Alice",

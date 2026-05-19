@@ -124,8 +124,11 @@ pub struct DeliveryReceipt {
 pub struct Notification {
     #[serde(default)]
     pub flow_name: Option<String>,
+    /// Realm/Space reversal: the security-boundary's human name is now
+    /// `realm_name` (was `space_name`). The new container-level Space
+    /// concept does not surface a wire name on this struct.
     #[serde(default)]
-    pub space_name: Option<String>,
+    pub realm_name: Option<String>,
     #[serde(default)]
     pub prio: Option<String>,
     #[serde(default)]
@@ -140,8 +143,12 @@ pub struct Notification {
     pub message_id: Option<String>,
     #[serde(default)]
     pub flow_id: Option<String>,
+    /// Realm/Space reversal: the security boundary's id is now `realm_id`
+    /// (typed `cx:realm:`). The old container-level `place_id` becomes
+    /// the new `space_id` — that one is forbidden on the push wire
+    /// model entirely so it does NOT appear on this struct.
     #[serde(default)]
-    pub space_id: Option<String>,
+    pub realm_id: Option<String>,
     #[serde(default)]
     pub user_is_target: Option<bool>,
     #[serde(default)]
@@ -172,11 +179,11 @@ pub struct Notification {
 
 impl Notification {
     pub fn scope_id(&self) -> Option<&str> {
-        self.flow_id().or(self.space_id())
+        self.flow_id().or(self.realm_id())
     }
 
     pub fn scope_name(&self) -> Option<&str> {
-        self.flow_name().or(self.space_name())
+        self.flow_name().or(self.realm_name())
     }
 
     pub fn flow_id(&self) -> Option<&str> {
@@ -187,16 +194,16 @@ impl Notification {
         non_empty(self.message_id.as_deref())
     }
 
-    pub fn space_id(&self) -> Option<&str> {
-        non_empty(self.space_id.as_deref())
+    pub fn realm_id(&self) -> Option<&str> {
+        non_empty(self.realm_id.as_deref())
     }
 
     pub fn flow_name(&self) -> Option<&str> {
         non_empty(self.flow_name.as_deref())
     }
 
-    pub fn space_name(&self) -> Option<&str> {
-        non_empty(self.space_name.as_deref())
+    pub fn realm_name(&self) -> Option<&str> {
+        non_empty(self.realm_name.as_deref())
     }
 
     pub fn sender_label(&self) -> Option<&str> {
@@ -410,7 +417,7 @@ mod tests {
             "collapse_key": "space-1",
             "notification": {
                 "event_id": "cx:event:01JS0EV000000000000000000",
-                "space_id": "cx:space:01JS0SP000000000000000000",
+                "realm_id": "cx:realm:01JS0SP000000000000000000",
                 "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "devices": [{

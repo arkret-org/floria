@@ -430,7 +430,7 @@ impl NotifyAuthConfig {
 }
 
 /// Caller `service_type` values that are allowed to send plaintext
-/// metadata (sender/space/flow names, DID literals, etc.).
+/// metadata (sender/realm/flow names, DID literals, etc.).
 ///
 /// Active service kinds — kept in sync with `cx.profile.*` artifacts in
 /// the principal services. New kinds must be reviewed for whether they

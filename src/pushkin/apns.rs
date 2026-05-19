@@ -523,7 +523,7 @@ impl ApnsPushkin {
         }
 
         // T4.3 — the legacy gateway used to copy event_id / message_id
-        // / flow_id / space_id / highlight_count onto the APNS payload
+        // / flow_id / realm_id / highlight_count onto the APNS payload
         // alongside the `aps` notification block. Those are stable
         // correlation identifiers and must NOT survive on the wire any
         // more: the client decrypts an e2ee envelope keyed on
@@ -937,7 +937,7 @@ mod tests {
         let pushkin = pushkin();
         let notification = Notification {
             flow_name: Some("Mission Control".to_owned()),
-            space_name: None,
+            realm_name: None,
             prio: None,
             membership: None,
             sender_display_name: Some("Major Tom".to_owned()),
@@ -953,7 +953,7 @@ mod tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
@@ -1020,7 +1020,7 @@ mod tests {
         );
         let notification = Notification {
             flow_name: None,
-            space_name: None,
+            realm_name: None,
             prio: None,
             membership: None,
             sender_display_name: None,
@@ -1028,7 +1028,7 @@ mod tests {
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
@@ -1067,6 +1067,7 @@ mod tests {
         assert!(payload.get("message_id").is_none());
         assert!(payload.get("flow_id").is_none());
         assert!(payload.get("space_id").is_none());
+        assert!(payload.get("realm_id").is_none());
     }
 
     #[test]

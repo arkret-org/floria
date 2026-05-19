@@ -28,7 +28,7 @@ use super::metrics::{
 };
 use super::{
     ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX, ACTIVE_MESSAGE_ID_PREFIX,
-    ACTIVE_SPACE_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
+    ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
 };
 
 #[handler]
@@ -239,11 +239,24 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.flow_id",
         ACTIVE_FLOW_ID_PREFIX,
     )?;
+    // Realm/Space reversal — Realm/Space/Flow id. The security boundary
+    // is now Realm (`cx:realm:`); the new container-level `space_id` is
+    // forbidden on the wire and rejected by the sanitizer below.
     validate_active_ref(
-        notification.get("space_id"),
-        "notification.space_id",
-        ACTIVE_SPACE_ID_PREFIX,
+        notification.get("realm_id"),
+        "notification.realm_id",
+        ACTIVE_REALM_ID_PREFIX,
     )?;
+    // TODO(realm-rework): the SDK's `is_forbidden_payload_key` still
+    // lists the legacy `space_id`. Once it adds `realm_id`, the local
+    // defense-in-depth check in `validate_notification_contract` for
+    // `realm_id` / `space_id` can fall through to the SDK helper.
+    if notification.get("space_id").is_some() {
+        return Err(
+            "notification.space_id is forbidden on the push wire model (Realm/Space rework)"
+                .to_owned(),
+        );
+    }
 
     Ok(())
 }
@@ -346,11 +359,19 @@ fn validate_notification_contract(
     if !caller.allow_plaintext_metadata
         && (notification.sender_display_name.is_some()
             || notification.flow_name.is_some()
-            || notification.space_name.is_some())
+            || notification.realm_name.is_some())
     {
+        // Realm/Space reversal — `space_name` is gone from the wire
+        // model; the security-boundary name is now `realm_name`.
+        // TODO(realm-rework): once the broader access-policy schema
+        // splits Realm policy from Space (container) policy, gate
+        // `realm_name` here against the Realm-policy decision and the
+        // new container-`space_name` (if it ever lands on the wire)
+        // against a separate Space policy. The blind-profile blanket
+        // ban below is still safe in the meantime.
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-             sender_display_name or flow/space name metadata under the default \
+             sender_display_name or flow/realm name metadata under the default \
              `cx.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
@@ -1552,8 +1573,8 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.flow_name() {
         normalized.insert("flow_name".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.space_name() {
-        normalized.insert("space_name".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.realm_name() {
+        normalized.insert("realm_name".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.prio.as_ref() {
         normalized.insert("prio".to_owned(), Value::String(value.clone()));
@@ -1582,8 +1603,8 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.flow_id() {
         normalized.insert("flow_id".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.space_id() {
-        normalized.insert("space_id".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.realm_id() {
+        normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));

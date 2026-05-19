@@ -28,6 +28,9 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "message_id",
     "flow_id",
     "space_id",
+    // Realm/Space reversal — the new security id (`realm_id`) is on
+    // floria's local strip list ahead of the SDK catching up.
+    "realm_id",
     "thread_id",
     "correlation_id",
     "sender",
