@@ -5,8 +5,6 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
-use base64::Engine;
-use blake2::Blake2s256;
 use blake2::digest::Digest;
 use globset::{Glob, GlobMatcher};
 use isahc::HttpClient;
@@ -25,7 +23,10 @@ use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
 
-use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
+use super::{
+    AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections, random_collapse_key,
+    sanitized_provider_payload,
+};
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -69,7 +70,13 @@ static WEBPUSH_VAPID_ACTIVE_KEY: LazyLock<prometheus::IntGaugeVec> = LazyLock::n
 });
 
 const DEFAULT_WEBPUSH_TTL_SECS: u32 = 15 * 60;
+// Constants are kept (rather than removed entirely) because the
+// existing test fixtures reference them and because a future
+// visible-profile build can switch back to emitting plaintext content
+// at WebPush, in which case we'll want the same truncation policy.
+#[allow(dead_code)]
 const MAX_BODY_LENGTH: usize = 1000;
+#[allow(dead_code)]
 const MAX_CIPHERTEXT_LENGTH: usize = 2000;
 
 pub struct WebpushPushkin {
@@ -204,85 +211,78 @@ impl WebpushPushkin {
         &self.vapid_key_fingerprint
     }
 
+    /// Build the WebPush JSON payload that goes into the encrypted
+    /// `aes128gcm` body. T4.3 — only the SDK-allowed blind-wakeup
+    /// fields plus the device's static `default_payload` survive on
+    /// the wire. `flow_id` / `space_id` / `event_id` / `message_id`
+    /// / sender / names / body / content / membership / user_is_target
+    /// are all dropped: the SW pulls them server-side from an e2ee
+    /// envelope keyed on `push_target_id`.
+    ///
+    /// `truncate_chars` / `MAX_BODY_LENGTH` / `MAX_CIPHERTEXT_LENGTH`
+    /// remain unused by `build_payload` because nothing user-visible
+    /// is embedded; they are still exposed as constants in case a
+    /// visible-profile build wants to opt back in later.
     fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
+        use contrix::blind_payload_sanitizer as sdk;
+
         let mut payload = device.default_payload_lossy();
 
-        for (key, value) in [
-            ("flow_id", notification.flow_id()),
-            ("space_id", notification.space_id()),
-            ("message_id", notification.message_id()),
-            ("flow_name", notification.flow_name()),
-            ("space_name", notification.space_name()),
-            ("membership", notification.membership.as_deref()),
-            ("event_id", notification.event_id.as_deref()),
-            ("sender", notification.sender.as_deref()),
-            (
-                "sender_display_name",
-                notification.sender_display_name.as_deref(),
-            ),
-            ("wakeup_kind", notification.wakeup_kind()),
-            ("push_hint", notification.push_hint.as_deref()),
-        ] {
-            if let Some(value) = value.filter(|value| !value.is_empty()) {
-                payload.insert(key.to_owned(), Value::String(value.to_owned()));
-            }
+        if let Some(push_target_id) = notification.push_target_id.as_deref()
+            && sdk::is_valid_push_target_id(push_target_id)
+        {
+            payload.insert(
+                "push_target_id".to_owned(),
+                Value::String(push_target_id.to_owned()),
+            );
         }
-
-        if notification.user_is_target == Some(true) {
-            payload.insert("user_is_target".to_owned(), Value::Bool(true));
+        if let Some(wakeup_kind) = notification.wakeup_kind()
+            && sdk::is_valid_wakeup_kind(wakeup_kind)
+        {
+            payload.insert(
+                "wakeup_kind".to_owned(),
+                Value::String(wakeup_kind.to_owned()),
+            );
         }
-
+        if let Some(push_hint) = notification.push_hint.as_deref()
+            && sdk::is_valid_push_hint(push_hint)
+        {
+            payload.insert("push_hint".to_owned(), Value::String(push_hint.to_owned()));
+        }
         if let Some(unread) = notification.counts.unread {
-            payload.insert("unread".to_owned(), Value::Number(unread.into()));
+            payload.insert(
+                "unread_count".to_owned(),
+                Value::Number(unread.min(sdk::MAX_COUNT_VALUE).into()),
+            );
         }
         if let Some(missed_calls) = notification.counts.missed_calls {
             payload.insert(
-                "missed_calls".to_owned(),
-                Value::Number(missed_calls.into()),
-            );
-        }
-        if let Some(highlight_count) = notification.counts.highlight_count {
-            payload.insert(
-                "highlight_count".to_owned(),
-                Value::Number(highlight_count.into()),
+                "badge".to_owned(),
+                Value::Number(missed_calls.min(sdk::MAX_COUNT_VALUE).into()),
             );
         }
 
-        if let Some(content) = &notification.content {
-            let mut content = content.clone();
-            content.remove("formatted_body");
-            if let Some(body) = content.get_mut("body")
-                && let Some(text) = body.as_str()
-            {
-                let truncated = truncate_chars(text, MAX_BODY_LENGTH);
-                *body = Value::String(truncated);
+        // Final defence — strip anything forbidden that might have come
+        // in via `device.default_payload_lossy()` (operator-supplied).
+        match sanitized_provider_payload(payload) {
+            Ok(sanitized) => sanitized,
+            Err(rejection) => {
+                tracing::warn!(
+                    rejection = %rejection,
+                    "webpush default_payload contained forbidden field, falling back to minimal payload"
+                );
+                let mut minimal = Map::new();
+                if let Some(push_target_id) = notification.push_target_id.as_deref()
+                    && sdk::is_valid_push_target_id(push_target_id)
+                {
+                    minimal.insert(
+                        "push_target_id".to_owned(),
+                        Value::String(push_target_id.to_owned()),
+                    );
+                }
+                minimal
             }
-            let drop_ciphertext = content
-                .get("ciphertext")
-                .and_then(Value::as_str)
-                .is_some_and(|ciphertext| ciphertext.chars().count() > MAX_CIPHERTEXT_LENGTH);
-            if drop_ciphertext {
-                content.remove("ciphertext");
-            }
-            payload.insert("content".to_owned(), Value::Object(content));
-        } else if let Some(push_hint) = notification.push_hint_text() {
-            payload.insert(
-                "content".to_owned(),
-                Value::Object(Map::from_iter([(
-                    "body".to_owned(),
-                    Value::String(push_hint.to_owned()),
-                )])),
-            );
         }
-
-        payload
-    }
-
-    fn scope_topic(scope_id: &str) -> String {
-        let mut hasher = Blake2s256::new();
-        hasher.update(scope_id.as_bytes());
-        let digest = hasher.finalize();
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest[..22])
     }
 
     fn endpoint_domain(endpoint: &str) -> Result<String, DispatchError> {
@@ -349,12 +349,16 @@ impl WebpushPushkin {
         } else {
             Urgency::Normal
         });
-        if let Some(space_id) = notification
-            .scope_id()
-            .as_deref()
-            .filter(|_| device.data_bool("only_last_per_flow") == Some(true))
-        {
-            builder.set_topic(Self::scope_topic(space_id));
+        // T4.3 — the topic used to be a blake2 hash of the `space_id` /
+        // `flow_id`. blake2 is non-reversible but the *same* scope still
+        // produced the *same* topic across pushes, which let an observer
+        // correlate every notification in a given conversation. We now
+        // either skip the topic entirely (so the push gateway never
+        // dedupes by scope) or emit a per-message random base64 token
+        // when the device opted into the legacy "collapse to last per
+        // flow" behaviour.
+        if device.data_bool("only_last_per_flow") == Some(true) {
+            builder.set_topic(random_collapse_key());
         }
         builder.set_payload(ContentEncoding::Aes128Gcm, &payload);
         builder.set_vapid_signature(signature);
@@ -476,6 +480,7 @@ impl Pushkin for WebpushPushkin {
     }
 }
 
+#[allow(dead_code)]
 fn truncate_chars(input: &str, max_chars: usize) -> String {
     let count = input.chars().count();
     if count <= max_chars {
@@ -559,6 +564,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -579,6 +585,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -641,6 +648,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -660,48 +669,57 @@ mod tests {
             &device(),
         );
 
+        // Device-supplied static config still survives.
         assert_eq!(
             payload.get("client"),
             Some(&Value::String("web".to_owned()))
         );
+        // T4.3 — allowed blind-wakeup fields survive.
         assert_eq!(
-            payload.get("flow_id"),
+            payload.get("push_target_id"),
             Some(&Value::String(
-                "cx:flow:01JS0FLOW000000000000000".to_owned()
+                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
             ))
         );
         assert_eq!(
-            payload.get("event_id"),
-            Some(&Value::String(
-                "cx:event:01JS0EV000000000000000000".to_owned()
-            ))
+            payload.get("wakeup_kind"),
+            Some(&Value::String("message".to_owned()))
         );
-        assert_eq!(payload.get("unread"), Some(&Value::Number(2.into())));
-        assert_eq!(payload.get("missed_calls"), Some(&Value::Number(1.into())));
-        assert_eq!(
-            payload.get("highlight_count"),
-            Some(&Value::Number(1.into()))
-        );
-        assert_eq!(payload.get("user_is_target"), Some(&Value::Bool(true)));
+        assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
+        assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
 
-        let content = payload.get("content").and_then(Value::as_object).unwrap();
-        assert!(content.get("formatted_body").is_none());
-        assert!(content.get("ciphertext").is_none());
-        assert!(
-            content
-                .get("body")
-                .and_then(Value::as_str)
-                .is_some_and(|body| body.ends_with("..."))
-        );
+        // T4.3 — stable correlation identifiers are stripped.
+        for forbidden in [
+            "flow_id",
+            "space_id",
+            "event_id",
+            "message_id",
+            "sender",
+            "sender_display_name",
+            "flow_name",
+            "space_name",
+            "content",
+            "highlight_count",
+            "missed_calls",
+            "user_is_target",
+        ] {
+            assert!(
+                payload.get(forbidden).is_none(),
+                "forbidden field `{forbidden}` should not appear in webpush payload"
+            );
+        }
     }
 
     #[test]
-    fn topic_is_base64url_and_short_enough() {
-        let topic = WebpushPushkin::scope_topic("cx:flow:01JS0FLOW000000000000000");
-        assert!(topic.len() <= 32);
+    fn random_collapse_key_does_not_leak_scope_id() {
+        let a = super::super::random_collapse_key();
+        let b = super::super::random_collapse_key();
+        // Per-message randomness — two adjacent calls must differ.
+        assert_ne!(a, b);
+        // base64url alphabet only — no `cx:` or other typed-id substrings.
+        assert!(!a.contains(':'));
         assert!(
-            topic
-                .chars()
+            a.chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
         );
     }
@@ -722,10 +740,13 @@ mod tests {
 
         let payload = WebpushPushkin::build_payload(&notification("hello"), &device);
         assert!(payload.get("client").is_none());
+        // T4.3 — event_id is no longer copied onto the wire. The
+        // surviving routing hook is `push_target_id`.
+        assert!(payload.get("event_id").is_none());
         assert_eq!(
-            payload.get("event_id"),
+            payload.get("push_target_id"),
             Some(&Value::String(
-                "cx:event:01JS0EV000000000000000000".to_owned()
+                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
             ))
         );
     }

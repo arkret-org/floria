@@ -84,6 +84,21 @@ impl RejectedDevice {
             reason: None,
         }
     }
+
+    /// Attach a wire-safe reason code. Empty / whitespace strings are
+    /// dropped — floria never emits an empty `reason` field, only
+    /// `None`. The matching T4.4 contract is: caller is responsible
+    /// for using only the wire-safe `reason_code` set (e.g.
+    /// `muted` / `not_mentioned` / `not_participating`); internal
+    /// diagnostic strings are caller's problem to suppress before
+    /// they reach floria.
+    pub fn with_reason(mut self, reason: Option<&str>) -> Self {
+        self.reason = reason
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -224,6 +239,49 @@ pub struct Device {
     pub data: Option<Map<String, Value>>,
     #[serde(default)]
     pub tweaks: Tweaks,
+    /// T4.4 — Caller-supplied push-rule decision. When `deliver=false`
+    /// floria records the device as rejected with the supplied
+    /// `reason_code` (without re-evaluating watch-level rules, which
+    /// are the Sync Service's responsibility). When absent the device
+    /// is treated as delivery-eligible. Internal reasons never travel
+    /// across this hop — only the wire-safe `reason_code` is honored,
+    /// matching the `cx.push.notify` privacy descriptor.
+    #[serde(default)]
+    pub push_decision: Option<PushDecisionHint>,
+}
+
+/// T4.4 — Caller-supplied wire-safe push-rule decision hint.
+///
+/// floria does **not** evaluate watch levels itself — receiver-level
+/// muted / mentions_only / participating / all checks are the Sync
+/// Service's job. When the caller has already evaluated and chose to
+/// skip the device, it forwards the decision here so the rejection
+/// surfaces with a stable wire reason (e.g. `not_mentioned`) in the
+/// delivery receipt.
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PushDecisionHint {
+    /// `true` if the dispatcher should fan the device out to the
+    /// gateway. `false` means caller's rule engine already decided
+    /// `dont_notify`.
+    #[serde(default = "default_deliver")]
+    pub deliver: bool,
+    /// `true` when delivery should be a body-free blind wakeup. Only
+    /// meaningful when `deliver=true`. floria does not currently
+    /// rewrite the wakeup_kind based on this flag — it's recorded for
+    /// downstream observability.
+    #[serde(default)]
+    pub blind_wakeup: bool,
+    /// Wire-safe reason code. Mirrored into
+    /// `RejectedDevice.reason` when `deliver=false`. Empty / missing
+    /// is treated as `dont_notify` (no public reason emitted) — this
+    /// keeps the wire surface tight without leaking diagnostics.
+    #[serde(default)]
+    pub reason_code: Option<String>,
+}
+
+fn default_deliver() -> bool {
+    true
 }
 
 impl Device {

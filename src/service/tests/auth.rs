@@ -214,11 +214,22 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
+    // T4.3 — blind profile + plaintext metadata is now a precondition
+    // violation (caller is authenticated, just on the wrong profile),
+    // not an authorization failure.
     assert_eq!(
-        body["error"]["message"],
-        json!("caller is not authorized to send sender_display_name or flow/space name metadata")
+        response.status_code.unwrap(),
+        StatusCode::PRECONDITION_FAILED
+    );
+    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.starts_with("plaintext_in_blind_profile"),
+        "expected plaintext_in_blind_profile reason code, got: {msg}"
+    );
+    assert!(
+        msg.contains("sender_display_name") || msg.contains("flow/space name"),
+        "expected sender_display_name / flow/space mention, got: {msg}"
     );
 }
 
@@ -249,13 +260,19 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
     assert_eq!(
-        body["error"]["message"],
-        json!(
-            "caller is not authorized to send plaintext identity metadata in `notification.sender`"
-        )
+        response.status_code.unwrap(),
+        StatusCode::PRECONDITION_FAILED
+    );
+    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.starts_with("plaintext_in_blind_profile"),
+        "expected plaintext_in_blind_profile reason code, got: {msg}"
+    );
+    assert!(
+        msg.contains("notification.sender"),
+        "expected notification.sender path mention, got: {msg}"
     );
 }
 
@@ -289,13 +306,17 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!(
-            "caller is not authorized to send plaintext identity metadata in `notification.content.target_did`"
-        )
+    // `content` (and the `target_did` it carries) is a forbidden
+    // payload key per the SDK sanitizer (correlation identifier /
+    // provider escape hatch) so it's caught at content validation
+    // before the plaintext-identity-metadata pass — schema_violation
+    // / BAD_REQUEST rather than capability_denied.
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body = assert_notify_error(&mut response, "schema_violation", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.contains("forbidden_field") || msg.contains("target_did"),
+        "expected forbidden field rejection, got: {msg}"
     );
 }
 
@@ -331,13 +352,16 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!(
-            "caller is not authorized to send DID literal in `notification.content.call_wakeup.relay_username`"
-        )
+    // DID-literal strings inside `content` are caught by the SDK
+    // blind-payload sanitizer (sensitive_literal) before the
+    // plaintext-identity-metadata pass, so the response is
+    // BAD_REQUEST / schema_violation rather than capability_denied.
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body = assert_notify_error(&mut response, "schema_violation", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.contains("relay_username") || msg.contains("sensitive"),
+        "expected DID-literal rejection mention, got: {msg}"
     );
 }
 
@@ -565,11 +589,18 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
 
     // The principal is allowed to push, but its declared service_type is not in
     // the plaintext-eligible kind list, so the plaintext metadata in the
-    // payload (sender_display_name etc.) is rejected.
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
+    // payload (sender_display_name etc.) is rejected as a
+    // `failed_precondition` — the caller is on the default blind
+    // profile (`cx.profile.push_gateway.blind_wakeup.v1`) and the
+    // visible-notification profile is not in its supported set.
     assert_eq!(
-        body["error"]["message"],
-        json!("caller is not authorized to send sender_display_name or flow/space name metadata")
+        response.status_code.unwrap(),
+        StatusCode::PRECONDITION_FAILED
+    );
+    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.starts_with("plaintext_in_blind_profile"),
+        "expected plaintext_in_blind_profile reason code, got: {msg}"
     );
 }

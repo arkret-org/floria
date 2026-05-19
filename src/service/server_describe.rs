@@ -19,6 +19,59 @@ struct GatewayDescribeResponse {
     plaintext_visibility_class: &'static str,
     limits: GatewayDescribeLimits,
     auth_modes: Vec<&'static str>,
+    // T6.1 — claim-level partition (service-surface.md §3.0 /
+    // cx.schema.service_describe.v1). `supported_profiles` above is kept
+    // for backward compatibility with existing clients; the fields below
+    // partition feature implementation from profile claims and dev
+    // posture from cotest-verified claims.
+    /// feature_ids the service has implementation code for but does NOT
+    /// necessarily claim conformance for.
+    implemented_features: Vec<&'static str>,
+    /// Self-claimed profiles. `claim_kind` MUST be `self_claimed`.
+    claimed_profiles: Vec<ClaimedProfile>,
+    /// cotest-verified profiles. MUST be empty when
+    /// `development_mode=true` (floria has no dedicated dev toggle, so
+    /// this is always `[]` until a cotest verifier writes a real entry).
+    verified_profiles: Vec<VerifiedProfile>,
+    /// Features exposed but NOT promised stable interop.
+    experimental_features: Vec<&'static str>,
+    /// Legacy / external-interop surfaces; not part of v1 conformance.
+    compat_surfaces: Vec<CompatSurface>,
+    /// Mirror of the service's development-mode flag. floria has no
+    /// dedicated dev toggle today; if one is added later the
+    /// `verified_profiles=[]` invariant MUST be re-enforced.
+    development_mode: bool,
+}
+
+/// T6.1 — self-claimed profile entry; `claim_kind` is always
+/// `self_claimed`.
+#[derive(Debug, Serialize)]
+struct ClaimedProfile {
+    profile_id: &'static str,
+    claim_kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<&'static str>,
+}
+
+/// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
+/// `artifact_hash`, `timestamp`. Dev-mode posture MUST NOT advertise any
+/// such entry.
+#[derive(Debug, Serialize)]
+struct VerifiedProfile {
+    profile_id: String,
+    claim_kind: &'static str,
+    cotest_run_id: String,
+    artifact_hash: String,
+    timestamp: String,
+}
+
+/// T6.1 — compat / external-interop surface entry. `kind` ∈ schema enum.
+#[derive(Debug, Serialize)]
+struct CompatSurface {
+    name: &'static str,
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +118,18 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         .as_ref()
         .map(|limiter| describe_rate_limit_scopes(limiter.config()))
         .unwrap_or_default();
+    // T6.1 — claim-level partition fields. Today floria has no cotest
+    // verifier wired in, so `verified_profiles=[]` always; the push
+    // gateway profile is self-claimed only. The `development_mode=true
+    // => verified_profiles=[]` invariant is trivially upheld and
+    // debug_asserted below.
+    let development_mode = false;
+    let verified_profiles: Vec<VerifiedProfile> = Vec::new();
+    debug_assert!(
+        !(development_mode && !verified_profiles.is_empty()),
+        "development_mode=true requires verified_profiles=[] (service-surface.md §3.0)"
+    );
+
     let body = GatewayDescribeResponse {
         service_did: state.notify_auth.gateway_service_did.clone(),
         operation_id: NOTIFY_OPERATION_ID,
@@ -79,6 +144,27 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             rate_limit_scopes,
         },
         auth_modes: describe_auth_modes(&state.notify_auth),
+        implemented_features: vec![
+            "push.notify",
+            "push.bridge_describe",
+            "push.dedup",
+            "push.rate_limit",
+            "push.provider_matrix",
+        ],
+        claimed_profiles: vec![ClaimedProfile {
+            profile_id: "cx.profile.push_gateway.v1",
+            claim_kind: "self_claimed",
+            notes: Some(
+                "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)",
+            ),
+        }],
+        verified_profiles,
+        experimental_features: vec![
+            "push.bridge.failure_codes",
+            "push.notify.retry_queue",
+        ],
+        compat_surfaces: vec![],
+        development_mode,
     };
     res.status_code(StatusCode::OK);
     res.render(Json(body));

@@ -23,7 +23,7 @@ use crate::models::{Device, Notification, NotificationContext};
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, inflight_limit, max_connections,
-    truncate_str,
+    sanitized_provider_payload, truncate_str,
 };
 
 static FCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
@@ -323,48 +323,55 @@ impl FcmPushkin {
         notification: &Notification,
         default_payload: Map<String, Value>,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
+        // T4.3 — the FCM data dictionary used to auto-copy event_id /
+        // message_id / flow_id / space_id / sender / names / push_hint
+        // / content_*. None of those survive on the wire any more:
+        //
+        //   * The client decrypts a server-side e2ee envelope to learn
+        //     event/space/sender/body — the provider wire format only
+        //     needs to carry the opaque push_target_id + wakeup_kind
+        //     so the client knows it has work to pick up.
+        //   * `push_hint` survives ONLY when it's one of the SDK's
+        //     allow-listed literals (no l10n_key:* form that could
+        //     embed a stable token).
+        //   * Counts are clamped at SDK::MAX_COUNT_VALUE so a 4-byte
+        //     counter can't be smuggled through.
+        //
+        // The caller-supplied `default_payload` is still respected so
+        // operators can plug in static client-config keys
+        // (`client=android`, theme overrides, …) — but it goes through
+        // the same sanitizer and any forbidden key is stripped.
+        use contrix::blind_payload_sanitizer as sdk;
+
         let mut data = default_payload;
         let mut overflow_fields = 0usize;
 
-        for (attr, value) in [
-            ("event_id", notification.event_id.as_deref()),
-            ("message_id", notification.message_id()),
-            ("wakeup_kind", notification.wakeup_kind()),
-            ("sender", notification.sender.as_deref()),
-            ("flow_name", notification.flow_name()),
-            ("space_name", notification.space_name()),
-            ("membership", notification.membership.as_deref()),
-            (
-                "sender_display_name",
-                notification.sender_display_name.as_deref(),
-            ),
-            ("flow_id", notification.flow_id()),
-            ("space_id", notification.space_id()),
-            ("push_hint", notification.push_hint.as_deref()),
-        ] {
-            if let Some(value) = value {
-                let (value, truncated) = truncate_str(value, FCM_MAX_BYTES_PER_FIELD);
-                if truncated {
-                    overflow_fields += 1;
-                }
-                data.insert(attr.to_owned(), Value::String(value));
+        if let Some(push_target_id) = notification.push_target_id.as_deref()
+            && sdk::is_valid_push_target_id(push_target_id)
+        {
+            let (value, truncated) = truncate_str(push_target_id, FCM_MAX_BYTES_PER_FIELD);
+            if truncated {
+                overflow_fields += 1;
             }
+            data.insert("push_target_id".to_owned(), Value::String(value));
         }
-
-        if let Some(content) = &notification.content {
-            for (key, value) in content {
-                let string_value = if let Some(s) = value.as_str() {
-                    s.to_owned()
-                } else {
-                    serde_json::to_string(value).unwrap_or_default()
-                };
-                let (string_value, truncated) =
-                    truncate_str(&string_value, FCM_MAX_BYTES_PER_FIELD);
-                if truncated {
-                    overflow_fields += 1;
-                }
-                data.insert(format!("content_{key}"), Value::String(string_value));
+        if let Some(wakeup_kind) = notification.wakeup_kind()
+            && sdk::is_valid_wakeup_kind(wakeup_kind)
+        {
+            let (value, truncated) = truncate_str(wakeup_kind, FCM_MAX_BYTES_PER_FIELD);
+            if truncated {
+                overflow_fields += 1;
             }
+            data.insert("wakeup_kind".to_owned(), Value::String(value));
+        }
+        if let Some(push_hint) = notification.push_hint.as_deref()
+            && sdk::is_valid_push_hint(push_hint)
+        {
+            let (value, truncated) = truncate_str(push_hint, FCM_MAX_BYTES_PER_FIELD);
+            if truncated {
+                overflow_fields += 1;
+            }
+            data.insert("push_hint".to_owned(), Value::String(value));
         }
 
         data.insert(
@@ -376,41 +383,39 @@ impl FcmPushkin {
             }),
         );
 
-        let mut counts = Map::new();
+        let mut emitted_count = false;
         if self.send_badge_counts {
             if let Some(unread) = notification.counts.unread
                 && unread > 0
             {
-                counts.insert("unread".to_owned(), Value::String(unread.to_string()));
+                let clamped = unread.min(sdk::MAX_COUNT_VALUE);
+                data.insert(
+                    "unread_count".to_owned(),
+                    Value::String(clamped.to_string()),
+                );
+                emitted_count = true;
             }
             if let Some(missed_calls) = notification.counts.missed_calls
                 && missed_calls > 0
             {
-                counts.insert(
-                    "missed_calls".to_owned(),
-                    Value::String(missed_calls.to_string()),
-                );
-            }
-            if let Some(highlight_count) = notification.counts.highlight_count
-                && highlight_count > 0
-            {
-                counts.insert(
-                    "highlight_count".to_owned(),
-                    Value::String(highlight_count.to_string()),
-                );
+                let clamped = missed_calls.min(sdk::MAX_COUNT_VALUE);
+                data.insert("badge".to_owned(), Value::String(clamped.to_string()));
+                emitted_count = true;
             }
         }
 
-        let has_routable_context = data.contains_key("flow_id")
-            || data.contains_key("space_id")
-            || data.contains_key("event_id")
-            || data.contains_key("message_id")
-            || data.contains_key("push_hint");
-        if !has_routable_context && counts.is_empty() {
+        // We still want to drop the dispatch entirely when the caller
+        // gave us nothing routable: no push_target_id + wakeup_kind,
+        // no counts. The old "has_routable_context" check used
+        // flow_id/space_id/event_id/message_id — none of those are
+        // emitted any more, so the check is on the blind fields.
+        let has_routable_context = data.contains_key("push_target_id")
+            || data.contains_key("wakeup_kind")
+            || data.contains_key("push_hint")
+            || emitted_count;
+        if !has_routable_context {
             return Ok(None);
         }
-
-        data.extend(counts);
 
         if overflow_fields > FCM_MAX_OVERFLOW_FIELDS {
             tracing::warn!(
@@ -419,6 +424,17 @@ impl FcmPushkin {
                 "payload contains too many overflowing fields; notification likely to be rejected by Firebase"
             );
         }
+
+        // Final defence — even if some caller plugged a forbidden key
+        // into `default_payload`, this strips it before we hit FCM.
+        let data = sanitized_provider_payload(data).map_err(|rejection| {
+            tracing::warn!(
+                pushkin = self.name(),
+                rejection = %rejection,
+                "rejecting FCM dispatch due to provider sanitizer rejection"
+            );
+            DispatchError::remote(format!("FCM payload sanitizer rejected: {rejection}"))
+        })?;
 
         Ok(Some(data))
     }
@@ -664,6 +680,7 @@ mod tests {
             push_key: "spqr".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -689,6 +706,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -708,28 +727,51 @@ mod tests {
             .unwrap()
             .unwrap();
 
+        // T4.3 — provider payload now carries only allowed blind
+        // fields. event_id / message_id / flow_id / space_id /
+        // sender / flow_name / sender_display_name / content_* are
+        // all stripped at the gateway.
         assert_eq!(
-            payload,
-            json!({
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "wakeup_kind": "message",
-                "sender": "@major:example.com",
-                "flow_name": "Mission Control",
-                "sender_display_name": "Major Tom",
-                "space_id": "cx:space:01JS0SP000000000000000000",
-                "content_msgtype": "m.text",
-                "content_body": "I'm floating in a most peculiar way.",
-                "prio": "normal",
-                "unread": "2",
-                "missed_calls": "1",
-                "highlight_count": "1"
-            })
-            .as_object()
-            .unwrap()
-            .clone()
+            payload.get("push_target_id"),
+            Some(&Value::String(
+                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
+            ))
         );
+        assert_eq!(
+            payload.get("wakeup_kind"),
+            Some(&Value::String("message".to_owned()))
+        );
+        assert_eq!(
+            payload.get("prio"),
+            Some(&Value::String("normal".to_owned()))
+        );
+        assert_eq!(
+            payload.get("unread_count"),
+            Some(&Value::String("2".to_owned()))
+        );
+        assert_eq!(
+            payload.get("badge"),
+            Some(&Value::String("1".to_owned()))
+        );
+
+        for forbidden in [
+            "event_id",
+            "message_id",
+            "flow_id",
+            "space_id",
+            "sender",
+            "sender_display_name",
+            "flow_name",
+            "space_name",
+            "content_body",
+            "content_msgtype",
+            "highlight_count",
+        ] {
+            assert!(
+                payload.get(forbidden).is_none(),
+                "forbidden field `{forbidden}` should have been stripped, got: {payload:?}"
+            );
+        }
     }
 
     #[test]
@@ -741,6 +783,7 @@ mod tests {
             push_key: "spqr2".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
+            push_decision: None,
         };
         let mut notification = notification();
         notification.devices = vec![primary.clone(), secondary];
@@ -756,6 +799,10 @@ mod tests {
 
     #[test]
     fn zero_badge_counts_are_dropped() {
+        // T4.3 — "no routable context" now means none of the
+        // SDK-allowed blind fields (push_target_id, wakeup_kind,
+        // push_hint) AND no nonzero counts. Without push_target_id the
+        // dispatch is dropped entirely.
         let notification = Notification {
             flow_name: None,
             space_name: None,
@@ -768,7 +815,9 @@ mod tests {
             flow_id: None,
             space_id: None,
             user_is_target: None,
-            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: None,
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: None,
             sender: None,
             push_hint: None,

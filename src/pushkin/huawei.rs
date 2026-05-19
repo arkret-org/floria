@@ -428,6 +428,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -453,6 +454,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -527,11 +530,28 @@ mod tests {
             body.pointer("/message/android/urgency"),
             Some(&Value::String("NORMAL".to_owned()))
         );
-        assert_eq!(
-            body.pointer("/message/data")
-                .and_then(Value::as_str)
-                .map(|data| data.contains("\"flow_id\":\"cx:flow:01JS0FLOW000000000000000\"")),
-            Some(true)
+        // T4.3 — the freeform data dictionary must NOT carry stable
+        // correlation identifiers any more. push_target_id is the
+        // only opaque scope hook that survives.
+        let data_blob = body
+            .pointer("/message/data")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(
+            !data_blob.contains("\"flow_id\""),
+            "huawei data must not carry flow_id: {data_blob}"
+        );
+        assert!(
+            !data_blob.contains("\"event_id\""),
+            "huawei data must not carry event_id: {data_blob}"
+        );
+        assert!(
+            !data_blob.contains("\"sender\""),
+            "huawei data must not carry sender: {data_blob}"
+        );
+        assert!(
+            data_blob.contains("\"push_target_id\":\"cx:pseudonym:push:01HYZ8Z000000000000000\""),
+            "huawei data must carry push_target_id: {data_blob}"
         );
     }
 

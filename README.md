@@ -120,6 +120,23 @@ docker compose up -d
 
 See [examples/compose.yml](./examples/compose.yml) for full instructions.
 
+## Production Deployment Checklist
+
+Before exposing floria to the public internet, walk every item below.
+The same list will be computed at runtime and surfaced on
+`/health.hardening` so sodmin's `/hardening` dashboard can flag failing
+checks across the whole fleet (see T8.3 for the cross-service shape).
+
+- [ ] `FLORIA_DEVELOPMENT_MODE=false` (or unset in production builds)
+- [ ] TLS enabled at the reverse proxy (or `FLORIA_TLS_CERT` / `FLORIA_TLS_KEY` when terminated in-process)
+- [ ] CSP header configured at the reverse proxy
+- [ ] CORS limited to the allowed origins for principal-server callers
+- [ ] Secrets in a secret manager (APNs auth key, FCM service account, VAPID keys)
+- [ ] Log redaction enabled (default outside dev mode)
+- [ ] Admin auth in production mode (no dev bypass)
+- [ ] Rate limit enabled
+- [ ] Provider credential rotation scheduled for APNs / FCM / VAPID
+
 ## License
 
 Licensed under Apache 2.0. See `LICENSE`.

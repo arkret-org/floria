@@ -21,6 +21,17 @@ const SIGNATURE_HEADER: &str = "signature";
 #[derive(Debug, Clone)]
 pub struct AuthenticatedNotifyCaller {
     pub origin_service_did: String,
+    /// Whether this caller is gated for the visible-notification
+    /// profile (`cx.profile.push_gateway.visible_notification.v1`).
+    ///
+    /// Set ONLY when the principal has both `allow_plaintext_metadata`
+    /// flipped on AND a `service_type` that is on the plaintext-eligible
+    /// allow-list (see [`crate::config::is_plaintext_eligible_service_kind`]).
+    /// Anonymous callers (auth disabled) keep the legacy behaviour
+    /// (set to `true`) to avoid breaking existing development setups,
+    /// but the request still has to walk through the visible-profile
+    /// gate at the notify ingress before any plaintext metadata can
+    /// be propagated to a provider adapter.
     pub allow_plaintext_metadata: bool,
 }
 

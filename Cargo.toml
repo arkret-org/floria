@@ -42,3 +42,7 @@ sentry-tracing = "0.48.1"
 uuid = { version = "1.22.0", features = ["serde", "v4"] }
 web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"] }
 x509-parser = "0.18.1"
+
+[dev-dependencies]
+# T8.2 — property tests for the provider-payload sanitizer.
+proptest = { version = "1", default-features = false, features = ["std"] }

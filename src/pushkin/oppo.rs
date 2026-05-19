@@ -655,6 +655,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -680,6 +681,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,

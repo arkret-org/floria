@@ -22,6 +22,7 @@ mod auth;
 mod basics;
 mod dedup;
 mod delivery;
+mod push_decision;
 mod rate_limit;
 
 #[derive(Debug, Clone)]

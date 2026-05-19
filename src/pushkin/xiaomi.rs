@@ -441,6 +441,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -466,6 +467,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -523,10 +526,25 @@ mod tests {
         assert_eq!(map.get("title"), Some(&"Mission Control".to_owned()));
         assert_eq!(map.get("notify_type"), Some(&"2".to_owned()));
         assert_eq!(map.get("extra.channel_id"), Some(&"messages".to_owned()));
-        assert_eq!(
-            map.get("payload")
-                .map(|payload| payload.contains("\"flow_id\":\"cx:flow:01JS0FLOW000000000000000\"")),
-            Some(true)
+        // T4.3 — payload blob no longer carries flow_id / event_id /
+        // sender. Only push_target_id (opaque) survives as the routing
+        // hook the client uses to fetch the e2ee envelope.
+        let payload_blob = map.get("payload").cloned().unwrap_or_default();
+        assert!(
+            !payload_blob.contains("\"flow_id\""),
+            "xiaomi payload must not carry flow_id: {payload_blob}"
+        );
+        assert!(
+            !payload_blob.contains("\"event_id\""),
+            "xiaomi payload must not carry event_id: {payload_blob}"
+        );
+        assert!(
+            !payload_blob.contains("\"sender\""),
+            "xiaomi payload must not carry sender: {payload_blob}"
+        );
+        assert!(
+            payload_blob.contains("\"push_target_id\":\"cx:pseudonym:push:01HYZ8Z000000000000000\""),
+            "xiaomi payload must carry push_target_id: {payload_blob}"
         );
     }
 

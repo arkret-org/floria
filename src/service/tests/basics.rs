@@ -68,6 +68,83 @@ async fn describe_endpoint_advertises_gateway_profile() {
 }
 
 #[tokio::test]
+async fn describe_separates_claim_levels() {
+    // T6.1 — push gateway describe response MUST partition into
+    // wire-callable operations + claim-level arrays. floria has no
+    // dedicated dev toggle, so development_mode is `false` here; the
+    // spec invariant (development_mode=true => verified_profiles=[]) is
+    // still trivially exercised — an empty verified list means no
+    // cotest_verified entry can leak into a dev posture.
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response.take_json::<Value>().await.unwrap();
+
+    let verified = body["verified_profiles"]
+        .as_array()
+        .expect("verified_profiles present");
+    assert!(
+        verified.is_empty(),
+        "floria has no cotest verifier wired in; verified_profiles MUST stay empty"
+    );
+
+    let claimed = body["claimed_profiles"]
+        .as_array()
+        .expect("claimed_profiles present");
+    assert!(
+        !claimed.is_empty(),
+        "floria self-claims cx.profile.push_gateway.v1"
+    );
+    for entry in claimed {
+        assert_eq!(
+            entry["claim_kind"], "self_claimed",
+            "claimed_profiles entries MUST be self_claimed; cotest entries go to verified_profiles"
+        );
+    }
+
+    let implemented = body["implemented_features"]
+        .as_array()
+        .expect("implemented_features present");
+    assert!(!implemented.is_empty());
+
+    // experimental_features and verified_profiles MUST NOT intersect.
+    let experimental: std::collections::HashSet<&str> = body["experimental_features"]
+        .as_array()
+        .expect("experimental_features present")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    let verified_ids: std::collections::HashSet<&str> = verified
+        .iter()
+        .filter_map(|v| v["profile_id"].as_str())
+        .collect();
+    assert!(experimental.is_disjoint(&verified_ids));
+
+    for surface in body["compat_surfaces"]
+        .as_array()
+        .expect("compat_surfaces present")
+    {
+        let kind = surface["kind"].as_str().expect("compat surface kind");
+        assert!(matches!(
+            kind,
+            "matrix_passthrough"
+                | "mimi_passthrough"
+                | "legacy_alias"
+                | "external_interop"
+                | "deprecated_alias"
+        ));
+    }
+
+    assert!(body["development_mode"].is_boolean());
+}
+
+#[tokio::test]
 async fn server_describe_alias_matches_push_describe() {
     let service = test_service(vec![(
         "com.example.app",
@@ -316,4 +393,30 @@ async fn ready_endpoint_returns_ok() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_eq!(response.take_string().await.unwrap(), "ok");
+}
+
+/// T8.3 — `/health` MUST return a JSON body with a `hardening` block
+/// (production deployment checklist snapshot) so the sodmin
+/// `/hardening` dashboard can aggregate it.
+#[tokio::test]
+async fn healthz_exposes_hardening_status() {
+    let service = test_service(vec![]);
+
+    let mut response = TestClient::get("http://127.0.0.1/health")
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["service"], "floria");
+    assert_eq!(body["ok"], true);
+    let hardening = &body["hardening"];
+    assert!(hardening.is_object(), "hardening block must be present");
+    assert!(hardening["checklist_max"].as_u64().unwrap() >= 8);
+    let admin_auth_mode = hardening["admin_auth_mode"].as_str().unwrap();
+    assert!(
+        admin_auth_mode == "closed"
+            || admin_auth_mode == "development"
+            || admin_auth_mode == "production"
+    );
 }

@@ -319,6 +319,26 @@ fn validate_active_ref(
     Ok(())
 }
 
+// T4.3 — visible profile / blind profile gate.
+//
+// floria exposes two push-gateway capability profiles:
+//
+//   * `cx.profile.push_gateway.blind_wakeup.v1`  (default) — opaque
+//     `push_target_id` + `wakeup_kind`, no plaintext metadata. Maps to
+//     `caller.allow_plaintext_metadata = false`.
+//   * `cx.profile.push_gateway.visible_notification.v1` — the caller
+//     has been explicitly gated as a plaintext-eligible service kind
+//     (sync / principal) AND the per-principal
+//     `allow_plaintext_metadata` flag is set. Maps to
+//     `caller.allow_plaintext_metadata = true`.
+//
+// A caller on the blind profile that submits plaintext metadata is
+// rejected with `plaintext_in_blind_profile`. A caller on the visible
+// profile can still be rejected if the wire payload contains keys that
+// would let an observer correlate pushes across users (forbidden
+// payload keys, sensitive `did:` / `cx:` literals).
+pub(super) const BLIND_PROFILE_PLAINTEXT_REASON: &str = "plaintext_in_blind_profile";
+
 fn validate_notification_contract(
     notification: &Notification,
     caller: &AuthenticatedNotifyCaller,
@@ -328,10 +348,11 @@ fn validate_notification_contract(
             || notification.flow_name.is_some()
             || notification.space_name.is_some())
     {
-        return Err(
-            "caller is not authorized to send sender_display_name or flow/space name metadata"
-                .to_owned(),
-        );
+        return Err(format!(
+            "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
+             sender_display_name or flow/space name metadata under the default \
+             `cx.profile.push_gateway.blind_wakeup.v1` profile"
+        ));
     }
 
     if let Some(push_hint) = notification.push_hint.as_deref() {
@@ -341,6 +362,23 @@ fn validate_notification_contract(
     let Some(content) = notification.content.as_ref() else {
         return Ok(());
     };
+
+    // Blind profile callers must not embed plaintext title/body in
+    // `content` either. The SDK sanitizer would reject these as
+    // forbidden keys via the `validate_blind_content` path below, but
+    // we surface a more specific reason code first so operators can
+    // tell the two failure classes apart.
+    if !caller.allow_plaintext_metadata {
+        for forbidden in ["title", "body", "subtitle", "alert", "preview", "summary"] {
+            if content.contains_key(forbidden) {
+                return Err(format!(
+                    "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
+                     plaintext `content.{forbidden}` under the default \
+                     `cx.profile.push_gateway.blind_wakeup.v1` profile"
+                ));
+            }
+        }
+    }
 
     validate_blind_content("content", &Value::Object(content.clone()))?;
 
@@ -363,7 +401,9 @@ fn validate_plaintext_identity_metadata(
         }
         if is_identity_metadata_key(key) && has_visible_identity_value(value) {
             return Err(format!(
-                "caller is not authorized to send plaintext identity metadata in `{path}`"
+                "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
+                 plaintext identity metadata in `{path}` under the default \
+                 `cx.profile.push_gateway.blind_wakeup.v1` profile"
             ));
         }
         validate_plaintext_identity_tree(&path, value)?;
@@ -403,7 +443,9 @@ fn validate_plaintext_identity_tree(path: &str, value: &Value) -> Result<(), Str
                 let next_path = format!("{path}.{key}");
                 if is_identity_metadata_key(key) && has_visible_identity_value(value) {
                     return Err(format!(
-                        "caller is not authorized to send plaintext identity metadata in `{next_path}`"
+                        "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
+                         plaintext identity metadata in `{next_path}` under the default \
+                         `cx.profile.push_gateway.blind_wakeup.v1` profile"
                     ));
                 }
                 validate_plaintext_identity_tree(&next_path, value)?;
@@ -448,39 +490,53 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
     }
 }
 
+// T1.1 — thin wrapper over the SDK's shared `is_valid_push_hint` so the
+// allowed `push_hint` vocabulary cannot drift between chime / floria.
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
-    if matches!(push_hint, "new_message" | "incoming_call" | "mention_self") {
-        return Ok(());
-    }
-    if let Some(key) = push_hint.strip_prefix("l10n_key:")
-        && !key.is_empty()
-        && key.len() <= 64
-        && key
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
-    {
+    if contrix::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
         return Ok(());
     }
     Err("Contrix blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
 }
 
+// T1.1 — thin wrapper over the SDK's `sanitize_blind_payload` recursive
+// scan. We still keep the `validate_blind_string` call setup detection
+// (TURN/ICE/SDP literal pattern) because that's a floria-specific
+// content rule, not part of the cross-impl key allow/block list.
 fn validate_blind_content(path: &str, value: &Value) -> Result<(), String> {
+    // Run the SDK sanitizer over the subtree by wrapping it in a synthetic
+    // notification envelope so the wrapper-scan path (forbidden keys +
+    // sensitive did:/cx: literals) walks the whole tree without needing
+    // top-level `push_target_id` / `wakeup_kind` to be present.
+    let envelope = serde_json::json!({
+        "notification": {
+            "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+            "wakeup_kind": "message",
+        },
+        path: value,
+    });
+    if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
+        return Err(format!(
+            "Contrix blind wakeup payloads must not include sensitive field `{}` ({})",
+            err.field_path,
+            err.reason_code.as_str(),
+        ));
+    }
+    // Recurse only to apply the floria-specific call-setup string check.
+    walk_blind_strings(path, value)
+}
+
+fn walk_blind_strings(path: &str, value: &Value) -> Result<(), String> {
     match value {
         Value::Object(map) => {
             for (key, value) in map {
-                let path = format!("{path}.{key}");
-                if is_sensitive_payload_key(key) {
-                    return Err(format!(
-                        "Contrix blind wakeup payloads must not include sensitive field `{path}`"
-                    ));
-                }
-                validate_blind_content(&path, value)?;
+                walk_blind_strings(&format!("{path}.{key}"), value)?;
             }
             Ok(())
         }
         Value::Array(values) => {
             for (index, value) in values.iter().enumerate() {
-                validate_blind_content(&format!("{path}[{index}]"), value)?;
+                walk_blind_strings(&format!("{path}[{index}]"), value)?;
             }
             Ok(())
         }
@@ -507,63 +563,10 @@ fn validate_blind_string(path: &str, value: &str) -> Result<(), String> {
     }
 }
 
-fn is_sensitive_payload_key(key: &str) -> bool {
-    matches!(
-        key.to_ascii_lowercase().as_str(),
-        "body"
-            | "message_body"
-            | "formatted_body"
-            | "notification_body"
-            | "message"
-            | "message_text"
-            | "text"
-            | "plaintext"
-            | "content"
-            | "title"
-            | "subtitle"
-            | "notification_title"
-            | "alert"
-            | "preview"
-            | "summary"
-            | "filename"
-            | "file_name"
-            | "attachment_name"
-            | "attachment_filename"
-            | "attachment_preview"
-            | "flow_name"
-            | "space_name"
-            | "room_name"
-            | "room_display_name"
-            | "sender_name"
-            | "sender_display_name"
-            | "provider_payload"
-            | "provider_data"
-            | "notification_payload"
-            | "payload"
-            | "aps"
-            | "android"
-            | "webpush"
-            | "facet"
-            | "facets"
-            | "entity_facet"
-            | "entity_facets"
-            | "view_renderer"
-            | "view_renderers"
-            | "rendered_view"
-            | "renderer"
-            | "template"
-            | "template_vars"
-            | "encrypted_payload"
-            | "ciphertext"
-            | "offer"
-            | "sdp"
-            | "ice_candidate"
-            | "ice_candidates"
-            | "turn"
-            | "turn_credential"
-            | "turn_credentials"
-    )
-}
+// T1.1 — the legacy `is_sensitive_payload_key` floria-local allow-list
+// has moved into `contrix::blind_payload_sanitizer::is_forbidden_payload_key`
+// so the chime/floria rule cannot drift. Callers now go through the SDK
+// helper via `validate_blind_content`.
 
 fn dedup_provider_retries(provider_retries: &mut Vec<ProviderRetry>) {
     provider_retries.sort_by(|left, right| {
@@ -880,8 +883,69 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
 
+    // T1.1 — for blind-only callers, additionally run the SDK
+    // sanitizer over each device's `data.default_payload` subtree so
+    // that any forbidden field or did:/cx: literal that survived the
+    // wire-model allow-list gets stopped before fan-out.
+    if !caller.allow_plaintext_metadata
+        && let Some(devices) = notification_object
+            .as_ref()
+            .and_then(|obj| obj.get("devices"))
+            .and_then(Value::as_array)
+    {
+        for (index, device) in devices.iter().enumerate() {
+            let Some(default_payload) = device
+                .get("data")
+                .and_then(Value::as_object)
+                .and_then(|data| data.get("default_payload"))
+            else {
+                continue;
+            };
+            let envelope = serde_json::json!({
+                "notification": {
+                    "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+                    "wakeup_kind": "message",
+                },
+                "default_payload": default_payload,
+            });
+            if let Err(err) =
+                contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope)
+            {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "schema_violation",
+                    &format!(
+                        "blind wakeup sanitizer rejected `notification.devices[{index}].data.default_payload.{}`: {}",
+                        err.field_path, err.reason_code,
+                    ),
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        }
+    }
+
     match validate_notification_contract(&notification, &caller) {
         Ok(()) => {}
+        // T4.3 — blind profile + plaintext metadata is a precondition
+        // violation, not an authorization failure: the caller could
+        // still have the right credentials, the request just can't
+        // be carried by the blind profile they're scoped to.
+        Err(message) if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) => {
+            finish_error(
+                res,
+                StatusCode::PRECONDITION_FAILED,
+                "failed_precondition",
+                &message,
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
         Err(message) if message.starts_with("caller is not authorized") => {
             finish_error(
                 res,
@@ -911,10 +975,18 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     if let Some(notification) = notification_object.as_ref()
         && let Err(message) = validate_plaintext_identity_metadata(notification, &caller)
     {
+        // T4.3 — same reasoning: surface `failed_precondition` when
+        // the failure is "wrong profile", and `capability_denied`
+        // when the caller lacks the credential entirely.
+        let (status, code) = if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) {
+            (StatusCode::PRECONDITION_FAILED, "failed_precondition")
+        } else {
+            (StatusCode::FORBIDDEN, "capability_denied")
+        };
         finish_error(
             res,
-            StatusCode::FORBIDDEN,
-            "capability_denied",
+            status,
+            code,
             &message,
             None,
             Some(&request_id),
@@ -1046,6 +1118,36 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 push_key_hash = %device.redacted_push_key(),
                 "skipping duplicate device entry"
             );
+            continue;
+        }
+
+        // T4.4 — Caller (Sync Service / soland) may have already
+        // evaluated the v1 core push rule and decided `dont_notify`.
+        // Honor that decision verbatim: record the rejection with the
+        // caller-supplied wire-safe reason code and skip dispatch.
+        // floria itself does not re-evaluate watch levels — that's the
+        // Sync Service's job.
+        if let Some(hint) = device.push_decision.as_ref()
+            && !hint.deliver
+        {
+            tracing::debug!(
+                request_id = %context.request_id,
+                app_id,
+                push_key_hash = %device.redacted_push_key(),
+                reason_code = hint.reason_code.as_deref().unwrap_or(""),
+                "skipping device per caller-supplied push_decision"
+            );
+            rejected.push(
+                rejected_device(device, Some(&device.push_key))
+                    .with_reason(hint.reason_code.as_deref()),
+            );
+            delivery_receipts.push(delivery_receipt(
+                None,
+                &device.push_key,
+                "rejected",
+                None,
+                &context.request_id,
+            ));
             continue;
         }
 

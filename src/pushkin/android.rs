@@ -2,12 +2,11 @@ use serde_json::{Map, Value};
 
 use crate::models::Notification;
 
-use super::truncate_str;
+use super::{sanitized_provider_payload, truncate_str};
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;
 const CONTENT_BODY_MAX_BYTES: usize = 1024;
-const CONTENT_CIPHERTEXT_MAX_CHARS: usize = 2000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AndroidNotificationPayload {
@@ -30,6 +29,20 @@ pub(super) fn build_android_notification_payload(
 ) -> Option<AndroidNotificationPayload> {
     merge_notification_data(&mut default_payload, notification, send_badge_counts);
 
+    // T4.3 — last-line-of-defence sanitization. Even if a caller went
+    // around the notify ingress (e.g. retry queue re-dispatch with
+    // stale payload) we MUST NOT ship a forbidden field on the wire.
+    let default_payload = match sanitized_provider_payload(default_payload) {
+        Ok(payload) => payload,
+        Err(rejection) => {
+            tracing::warn!(
+                rejection = %rejection,
+                "dropping android push payload due to provider sanitizer rejection"
+            );
+            return None;
+        }
+    };
+
     let (title, body) = derive_alert(notification)?;
     Some(AndroidNotificationPayload {
         title,
@@ -48,30 +61,31 @@ fn merge_notification_data(
     notification: &Notification,
     send_badge_counts: bool,
 ) {
-    for (key, value) in [
-        ("flow_id", notification.flow_id()),
-        ("space_id", notification.space_id()),
-        ("message_id", notification.message_id()),
-        ("flow_name", notification.flow_name()),
-        ("space_name", notification.space_name()),
-        ("membership", notification.membership.as_deref()),
-        ("event_id", notification.event_id.as_deref()),
-        ("sender", notification.sender.as_deref()),
-        (
-            "sender_display_name",
-            notification.sender_display_name.as_deref(),
-        ),
-        ("wakeup_kind", notification.wakeup_kind()),
-        ("push_hint", notification.push_hint.as_deref()),
-    ] {
-        if let Some(value) = value.filter(|value| !value.is_empty()) {
-            let (value, _) = truncate_str(value, CONTENT_BODY_MAX_BYTES);
-            payload.insert(key.to_owned(), Value::String(value));
-        }
-    }
+    // T4.3 — only emit fields that the SDK blind-wakeup contract allows.
+    // `event_id` / `message_id` / `flow_id` / `space_id` / sender / names
+    // are stable correlation identifiers; the client now derives them
+    // from the e2ee wakeup payload it pulls server-side, never from the
+    // provider wire format. `push_hint` survives only when it matches
+    // the SDK's closed enum (validated via `sanitized_provider_payload`).
+    use contrix::blind_payload_sanitizer as sdk;
 
-    if notification.user_is_target == Some(true) {
-        payload.insert("user_is_target".to_owned(), Value::Bool(true));
+    if let Some(push_target_id) = notification.push_target_id.as_deref()
+        && sdk::is_valid_push_target_id(push_target_id)
+    {
+        let (value, _) = truncate_str(push_target_id, CONTENT_BODY_MAX_BYTES);
+        payload.insert("push_target_id".to_owned(), Value::String(value));
+    }
+    if let Some(wakeup_kind) = notification.wakeup_kind()
+        && sdk::is_valid_wakeup_kind(wakeup_kind)
+    {
+        let (value, _) = truncate_str(wakeup_kind, CONTENT_BODY_MAX_BYTES);
+        payload.insert("wakeup_kind".to_owned(), Value::String(value));
+    }
+    if let Some(push_hint) = notification.push_hint.as_deref()
+        && sdk::is_valid_push_hint(push_hint)
+    {
+        let (value, _) = truncate_str(push_hint, CONTENT_BODY_MAX_BYTES);
+        payload.insert("push_hint".to_owned(), Value::String(value));
     }
 
     payload.insert(
@@ -87,51 +101,29 @@ fn merge_notification_data(
     );
 
     if send_badge_counts {
+        // Clamp counts to SDK MAX_COUNT_VALUE so a 4-byte stable
+        // counter can't be smuggled through as a correlation tag.
         if let Some(unread) = notification.counts.unread {
-            payload.insert("unread".to_owned(), Value::Number(unread.into()));
+            payload.insert(
+                "unread_count".to_owned(),
+                Value::Number(unread.min(sdk::MAX_COUNT_VALUE).into()),
+            );
         }
         if let Some(missed_calls) = notification.counts.missed_calls {
             payload.insert(
-                "missed_calls".to_owned(),
-                Value::Number(missed_calls.into()),
-            );
-        }
-        if let Some(highlight_count) = notification.counts.highlight_count {
-            payload.insert(
-                "highlight_count".to_owned(),
-                Value::Number(highlight_count.into()),
+                "badge".to_owned(),
+                Value::Number(missed_calls.min(sdk::MAX_COUNT_VALUE).into()),
             );
         }
     }
 
-    if let Some(content) = &notification.content {
-        payload.insert(
-            "content".to_owned(),
-            Value::Object(sanitized_content(content)),
-        );
-    }
-}
-
-fn sanitized_content(content: &Map<String, Value>) -> Map<String, Value> {
-    let mut content = content.clone();
-    content.remove("formatted_body");
-
-    if let Some(body) = content.get_mut("body")
-        && let Some(text) = body.as_str()
-    {
-        let (truncated, _) = truncate_str(text, CONTENT_BODY_MAX_BYTES);
-        *body = Value::String(truncated);
-    }
-
-    let drop_ciphertext = content
-        .get("ciphertext")
-        .and_then(Value::as_str)
-        .is_some_and(|ciphertext| ciphertext.chars().count() > CONTENT_CIPHERTEXT_MAX_CHARS);
-    if drop_ciphertext {
-        content.remove("ciphertext");
-    }
-
-    content
+    // `content`, `flow_name`, `sender_display_name` etc. are no longer
+    // copied here. Even under the visible profile, the visible
+    // title/body is rendered by `derive_alert` and ends up in the
+    // provider's notification block (e.g. `aps.alert`,
+    // `android.notification`) where the gateway can shape it per
+    // provider, NOT in the freeform data dictionary that the
+    // sanitizer guards.
 }
 
 fn derive_alert(notification: &Notification) -> Option<(String, String)> {
@@ -264,6 +256,7 @@ mod tests {
             push_key: "push_key".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -290,6 +283,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -307,29 +302,43 @@ mod tests {
         let payload =
             build_android_notification_payload(&message_notification(), Map::new(), true).unwrap();
 
+        // Title/body are derived from the (visible-profile) caller's
+        // metadata. They go into the provider's notification block,
+        // not the freeform `data` dict — so they're rendered here.
         assert_eq!(payload.title, "Mission Control");
         assert_eq!(payload.body, "Major Tom: Ground control to Major Tom");
         assert_eq!(payload.priority, AndroidPriority::High);
+
+        // T4.3 — the freeform `data` dict MUST NOT carry stable
+        // correlation identifiers any more. The client now derives
+        // those from the e2ee wakeup material it pulls server-side.
+        assert!(payload.data.get("flow_id").is_none());
+        assert!(payload.data.get("space_id").is_none());
+        assert!(payload.data.get("event_id").is_none());
+        assert!(payload.data.get("message_id").is_none());
+        assert!(payload.data.get("sender").is_none());
+        assert!(payload.data.get("sender_display_name").is_none());
+        assert!(payload.data.get("flow_name").is_none());
+        assert!(payload.data.get("space_name").is_none());
+        assert!(payload.data.get("content").is_none());
+
+        // Allowed blind-wakeup fields survive.
         assert_eq!(
-            payload.data.get("flow_id"),
+            payload.data.get("push_target_id"),
             Some(&Value::String(
-                "cx:flow:01JS0FLOW000000000000000".to_owned()
+                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
             ))
         );
-        assert_eq!(payload.data.get("unread"), Some(&Value::Number(2.into())));
         assert_eq!(
-            payload.data.get("highlight_count"),
-            Some(&Value::Number(1.into()))
+            payload.data.get("wakeup_kind"),
+            Some(&Value::String("message".to_owned()))
         );
         assert_eq!(
-            payload
-                .data
-                .get("content")
-                .and_then(Value::as_object)
-                .unwrap()
-                .get("formatted_body"),
-            None
+            payload.data.get("unread_count"),
+            Some(&Value::Number(2.into()))
         );
+        // missed_calls → badge (clamped at MAX_COUNT_VALUE)
+        assert_eq!(payload.data.get("badge"), Some(&Value::Number(1.into())));
     }
 
     #[test]
@@ -361,6 +370,8 @@ mod tests {
                 space_id: None,
                 user_is_target: Some(true),
                 push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+                recipient_service_did: None,
+                delivery_binding_frontier: None,
                 wakeup_kind: Some("member".to_owned()),
                 sender: Some("@major:example.com".to_owned()),
                 push_hint: None,

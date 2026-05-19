@@ -703,6 +703,7 @@ mod tests {
                 .clone(),
             ),
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -728,6 +729,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -831,11 +834,18 @@ mod tests {
             body.pointer("/clientCustomMap/client"),
             Some(&Value::String("android".to_owned()))
         );
+        // T4.3 — `content` (m.text body) is no longer mirrored into the
+        // freeform clientCustomMap. The opaque push_target_id is what
+        // the client uses to fetch the e2ee envelope server-side.
+        assert!(
+            body.pointer("/clientCustomMap/content").is_none(),
+            "vivo clientCustomMap must not carry plaintext content"
+        );
         assert_eq!(
-            body.pointer("/clientCustomMap/content")
-                .and_then(Value::as_str)
-                .map(|value| value.contains("Ground control")),
-            Some(true)
+            body.pointer("/clientCustomMap/push_target_id"),
+            Some(&Value::String(
+                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
+            ))
         );
         assert!(body.pointer("/requestId").and_then(Value::as_str).is_some());
     }

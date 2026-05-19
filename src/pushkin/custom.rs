@@ -28,7 +28,10 @@ use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
 
 use super::reqwest_support::{header_value, parse_retry_after};
-use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
+use super::{
+    AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections,
+    sanitized_provider_payload,
+};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -148,7 +151,23 @@ impl CustomPushkin {
         Ok(self.url_template.replace(PUSH_KEY_PLACEHOLDER, &escaped))
     }
 
-    fn build_body(&self, notification: &Notification, device: &Device) -> Map<String, Value> {
+    fn build_body(
+        &self,
+        notification: &Notification,
+        device: &Device,
+    ) -> Result<Map<String, Value>, DispatchError> {
+        // T4.3 — the custom-URL pushkin used to forward `event_id` /
+        // `message_id` to the operator's webhook. Both are stable
+        // correlation identifiers and must not leave the gateway.
+        // What survives:
+        //   * `delivered_at`     — wall-clock for the operator's logs
+        //   * `app_id`           — routing key the webhook keys on
+        //   * `push_key_hash`    — already a blake2 truncation
+        //   * `wakeup_kind`      — closed enum, validated by the SDK
+        //   * `push_hint`        — only when SDK-validated literal
+        //   * `push_target_id`   — opaque pseudonym
+        use contrix::blind_payload_sanitizer as sdk;
+
         let mut payload = Map::new();
         payload.insert(
             "delivered_at".to_owned(),
@@ -159,24 +178,35 @@ impl CustomPushkin {
                     .as_secs()
             ),
         );
-        if let Some(value) = notification.event_id.as_deref() {
-            payload.insert("event_id".to_owned(), Value::String(value.to_owned()));
-        }
-        if let Some(value) = notification.message_id() {
-            payload.insert("message_id".to_owned(), Value::String(value.to_owned()));
-        }
-        if let Some(value) = notification.wakeup_kind.as_deref() {
-            payload.insert("type".to_owned(), Value::String(value.to_owned()));
-        }
         payload.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
         payload.insert(
             "push_key_hash".to_owned(),
             Value::String(device.redacted_push_key()),
         );
-        if let Some(value) = notification.push_hint.as_deref() {
-            payload.insert("push_hint".to_owned(), Value::String(value.to_owned()));
+        if let Some(push_target_id) = notification.push_target_id.as_deref()
+            && sdk::is_valid_push_target_id(push_target_id)
+        {
+            payload.insert(
+                "push_target_id".to_owned(),
+                Value::String(push_target_id.to_owned()),
+            );
         }
-        payload
+        if let Some(wakeup_kind) = notification.wakeup_kind()
+            && sdk::is_valid_wakeup_kind(wakeup_kind)
+        {
+            payload.insert(
+                "wakeup_kind".to_owned(),
+                Value::String(wakeup_kind.to_owned()),
+            );
+        }
+        if let Some(push_hint) = notification.push_hint.as_deref()
+            && sdk::is_valid_push_hint(push_hint)
+        {
+            payload.insert("push_hint".to_owned(), Value::String(push_hint.to_owned()));
+        }
+        sanitized_provider_payload(payload).map_err(|rejection| {
+            DispatchError::remote(format!("custom pushkin payload rejected: {rejection}"))
+        })
     }
 
     async fn send_once(
@@ -185,7 +215,7 @@ impl CustomPushkin {
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let url = self.resolve_url(device)?;
-        let body = self.build_body(notification, device);
+        let body = self.build_body(notification, device)?;
         let body_bytes = serde_json::to_vec(&body)
             .map_err(|error| DispatchError::internal(format!("failed to encode body: {error}")))?;
 

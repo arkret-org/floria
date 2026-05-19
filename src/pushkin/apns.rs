@@ -23,7 +23,7 @@ use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
 
 use super::reqwest_support::header_value;
-use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit};
+use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, sanitized_provider_payload};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -522,33 +522,57 @@ impl ApnsPushkin {
             aps_object.insert("badge".to_owned(), Value::Number(badge.into()));
         }
 
-        if loc_key.is_some() {
-            if let Some(flow_id) = notification.flow_id() {
-                default_payload.insert("flow_id".to_owned(), Value::String(flow_id.to_owned()));
-            }
-            if let Some(space_id) = notification.space_id() {
-                default_payload.insert("space_id".to_owned(), Value::String(space_id.to_owned()));
-            }
-            if let Some(message_id) = notification.message_id() {
-                default_payload.insert(
-                    "message_id".to_owned(),
-                    Value::String(message_id.to_owned()),
-                );
-            }
-            if let Some(event_id) = &notification.event_id {
-                default_payload.insert("event_id".to_owned(), Value::String(event_id.clone()));
-            }
-        }
-        if self.send_badge_counts
-            && let Some(highlight_count) = notification.counts.highlight_count
+        // T4.3 — the legacy gateway used to copy event_id / message_id
+        // / flow_id / space_id / highlight_count onto the APNS payload
+        // alongside the `aps` notification block. Those are stable
+        // correlation identifiers and must NOT survive on the wire any
+        // more: the client decrypts an e2ee envelope keyed on
+        // `push_target_id` to recover them.
+        //
+        // Allowed blind-wakeup fields are emitted alongside `aps` so
+        // service extensions can still detect the wakeup kind and pull
+        // the matching server-side record.
+        use contrix::blind_payload_sanitizer as sdk;
+        if let Some(push_target_id) = notification.push_target_id.as_deref()
+            && sdk::is_valid_push_target_id(push_target_id)
         {
             default_payload.insert(
-                "highlight_count".to_owned(),
-                Value::Number(highlight_count.into()),
+                "push_target_id".to_owned(),
+                Value::String(push_target_id.to_owned()),
+            );
+        }
+        if let Some(wakeup_kind) = notification.wakeup_kind()
+            && sdk::is_valid_wakeup_kind(wakeup_kind)
+        {
+            default_payload.insert(
+                "wakeup_kind".to_owned(),
+                Value::String(wakeup_kind.to_owned()),
             );
         }
 
-        let mut payload = Value::Object(default_payload);
+        // Final defence — strip anything forbidden that snuck in via
+        // the device default_payload or future builder bugs. Note
+        // `aps` IS on the SDK forbidden list because it's a provider
+        // escape hatch — for APNS we explicitly extract it, run the
+        // sanitizer on the rest, then put `aps` back. This keeps the
+        // allow-list strict for the freeform extension keys while
+        // still letting the gateway emit a legitimate `aps` block.
+        let aps_block = default_payload.remove("aps");
+        let mut payload_map = match sanitized_provider_payload(default_payload) {
+            Ok(map) => map,
+            Err(rejection) => {
+                tracing::warn!(
+                    rejection = %rejection,
+                    "dropping APNS payload because the provider sanitizer rejected a forbidden field"
+                );
+                return None;
+            }
+        };
+        if let Some(aps) = aps_block {
+            payload_map.insert("aps".to_owned(), aps);
+        }
+
+        let mut payload = Value::Object(payload_map);
         trim_apns_payload(&mut payload, APNS_MAX_JSON_BODY_SIZE);
         Some(payload)
     }
@@ -891,6 +915,7 @@ mod tests {
             push_key: "spqr".to_owned(),
             data: None,
             tweaks: Tweaks::default(),
+            push_decision: None,
         }
     }
 
@@ -931,6 +956,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
@@ -947,13 +974,15 @@ mod tests {
             .unwrap()
             .unwrap();
 
+        // T4.3 — stable correlation identifiers are stripped. The
+        // visible alert still renders in `aps.alert` because the
+        // visible profile is in effect, but the freeform extension
+        // keys only carry the SDK-allowed blind fields.
         assert_eq!(
             payload,
             json!({
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "space_id": "cx:space:01JS0SP000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "event_id": "cx:event:01JS0EV000000000000000000",
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
                 "aps": {
                     "alert": {
                         "loc-key": "MSG_FROM_USER_IN_ROOM_WITH_CONTENT",
@@ -964,8 +993,7 @@ mod tests {
                         ]
                     },
                     "badge": 3
-                },
-                "highlight_count": 1
+                }
             })
         );
     }
@@ -1003,6 +1031,8 @@ mod tests {
             space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
             wakeup_kind: None,
             sender: None,
             push_hint: None,
@@ -1022,6 +1052,7 @@ mod tests {
         assert_eq!(
             payload,
             json!({
+                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
                 "aps": {
                     "mutable-content": 1,
                     "alert": {

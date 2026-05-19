@@ -472,3 +472,238 @@ pub fn truncate_str(input: &str, max_bytes: usize) -> (String, bool) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// T4.3 — provider-side sanitization
+//
+// Final builder for the blind-wakeup payload that goes on the wire to a
+// downstream push provider (APNS, FCM, WebPush, Chinese OEM, custom).
+// Adapters must call [`sanitized_provider_payload`] *just before* they
+// hand the JSON off to the provider so that any forbidden key that
+// slipped past the notify ingress validators (stale call sites, future
+// builder bugs, …) is stripped before fan-out.
+//
+// `sanitize_blind_payload_strict` from the SDK is the last line of
+// defence; if it rejects, the dispatcher must drop the device rather
+// than send a leaky payload.
+// ---------------------------------------------------------------------------
+
+use serde_json::Map;
+
+/// Sanitize a fully-built provider payload tree just before it leaves
+/// the gateway. Removes any forbidden top-level key, recursively scans
+/// nested objects for the same, then runs the SDK
+/// `sanitize_blind_payload_strict` validator wrapped in a synthetic
+/// envelope so we don't have to require `push_target_id` / `wakeup_kind`
+/// at the top level of provider-shaped data.
+///
+/// On success returns the sanitized payload. On rejection the caller
+/// must treat this as a hard drop (rejected token) rather than fall
+/// through to a leaky send.
+pub fn sanitized_provider_payload(
+    mut payload: Map<String, serde_json::Value>,
+) -> Result<Map<String, serde_json::Value>, ProviderPayloadRejection> {
+    strip_forbidden_recursive(&mut payload);
+    let envelope = serde_json::json!({
+        "notification": {
+            "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+            "wakeup_kind": "message",
+        },
+        "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
+    });
+    if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
+        return Err(ProviderPayloadRejection {
+            field_path: err.field_path,
+            reason_code: err.reason_code.as_str().to_owned(),
+        });
+    }
+    Ok(payload)
+}
+
+/// Rejection emitted by [`sanitized_provider_payload`] when the SDK
+/// sanitizer refuses the payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderPayloadRejection {
+    pub field_path: String,
+    pub reason_code: String,
+}
+
+impl std::fmt::Display for ProviderPayloadRejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "provider payload sanitizer rejected `{}` ({})",
+            self.field_path, self.reason_code,
+        )
+    }
+}
+
+fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
+    // Drop forbidden top-level keys. We do *not* touch keys that are
+    // provider-defined wrappers like `aps`, `android`, `notification`,
+    // `payload` — those are themselves on the SDK forbidden list when
+    // they appear in the blind-wakeup contract, so anything that gets
+    // here with one of those keys gets stripped.
+    map.retain(|key, _| !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key));
+    for value in map.values_mut() {
+        strip_value_recursive(value);
+    }
+}
+
+fn strip_value_recursive(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => strip_forbidden_recursive(map),
+        serde_json::Value::Array(values) => {
+            for nested in values {
+                strip_value_recursive(nested);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Build a base data map from a [`Notification`] using only the
+/// SDK-allowed blind-wakeup fields. Adapters that want a blind-only
+/// payload (FCM, WebPush blind path, Chinese OEM blind path) can start
+/// from this and append their own provider-specific wrappers — they
+/// still MUST run [`sanitized_provider_payload`] before sending.
+///
+/// This intentionally drops every potentially-correlating identifier
+/// (`event_id`, `message_id`, `flow_id`, `space_id`, sender, names,
+/// body, push_hint when it carries an l10n token, etc.). The only
+/// fields that survive are:
+///   * `push_target_id` (opaque pseudonym)
+///   * `wakeup_kind` (closed enum)
+///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
+///   * `badge` / `unread_count` (clamped at SDK MAX_COUNT_VALUE)
+pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
+    use contrix::blind_payload_sanitizer as sdk;
+
+    let mut data = Map::new();
+    if let Some(push_target_id) = notification.push_target_id.as_deref()
+        && sdk::is_valid_push_target_id(push_target_id)
+    {
+        data.insert(
+            "push_target_id".to_owned(),
+            serde_json::Value::String(push_target_id.to_owned()),
+        );
+    }
+    if let Some(wakeup_kind) = notification.wakeup_kind()
+        && sdk::is_valid_wakeup_kind(wakeup_kind)
+    {
+        data.insert(
+            "wakeup_kind".to_owned(),
+            serde_json::Value::String(wakeup_kind.to_owned()),
+        );
+    }
+    if let Some(push_hint) = notification.push_hint.as_deref()
+        && sdk::is_valid_push_hint(push_hint)
+    {
+        data.insert(
+            "push_hint".to_owned(),
+            serde_json::Value::String(push_hint.to_owned()),
+        );
+    }
+    if let Some(unread) = notification
+        .counts
+        .unread
+        .filter(|value| *value <= sdk::MAX_COUNT_VALUE)
+    {
+        data.insert(
+            "unread_count".to_owned(),
+            serde_json::Value::Number(unread.into()),
+        );
+    }
+    data
+}
+
+/// Generate a fresh random base64url collapse_key. Used by WebPush /
+/// any provider that previously derived its collapse / topic from a
+/// stable `space_id` / `flow_id`. The blake2-of-scope-id form was
+/// non-reversible but still acted as a stable per-conversation tag
+/// that an observer could correlate across pushes; a per-message
+/// random key removes that.
+pub fn random_collapse_key() -> String {
+    use base64::Engine;
+    let bytes: [u8; 16] = uuid::Uuid::new_v4().into_bytes();
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn sanitized_provider_payload_strips_event_id() {
+        let payload = json!({
+            "client": "android",
+            "event_id": "cx:event:01JS0EV000000000000000000",
+            "wakeup_kind": "message",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let out = sanitized_provider_payload(payload).unwrap();
+        assert!(!out.contains_key("event_id"));
+        assert_eq!(out.get("client"), Some(&json!("android")));
+    }
+
+    #[test]
+    fn sanitized_provider_payload_rejects_did_literal() {
+        let payload = json!({
+            "client": "did:web:alice.example.com",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let err = sanitized_provider_payload(payload).unwrap_err();
+        assert_eq!(err.reason_code, "sensitive_literal");
+    }
+
+    #[test]
+    fn build_blind_provider_data_keeps_only_allowed_fields() {
+        let notification = Notification {
+            flow_name: Some("Mission Control".to_owned()),
+            space_name: None,
+            prio: None,
+            membership: None,
+            sender_display_name: Some("Major Tom".to_owned()),
+            content: None,
+            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+            space_id: Some("cx:space:01JS0SP000000000000000000".to_owned()),
+            recipient_service_did: None,
+            delivery_binding_frontier: None,
+            user_is_target: None,
+            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            wakeup_kind: Some("message".to_owned()),
+            sender: Some("@major:example.com".to_owned()),
+            push_hint: Some("new_message".to_owned()),
+            devices: vec![],
+            counts: crate::models::Counts {
+                unread: Some(3),
+                missed_calls: None,
+                highlight_count: None,
+            },
+        };
+        let data = build_blind_provider_data(&notification);
+        assert!(data.contains_key("push_target_id"));
+        assert!(data.contains_key("wakeup_kind"));
+        assert!(data.contains_key("push_hint"));
+        assert!(data.contains_key("unread_count"));
+        assert!(!data.contains_key("event_id"));
+        assert!(!data.contains_key("sender"));
+        assert!(!data.contains_key("flow_name"));
+        assert!(!data.contains_key("flow_id"));
+    }
+
+    #[test]
+    fn random_collapse_key_does_not_leak_scope() {
+        let a = random_collapse_key();
+        let b = random_collapse_key();
+        assert_ne!(a, b);
+        assert!(!a.contains("cx:"));
+    }
+}
