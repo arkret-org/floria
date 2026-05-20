@@ -15,6 +15,26 @@ inversion:
 The push payloads carry the new `realm_id` field while keeping the old
 `space_id` alias on the wire for back-compat clients.
 
+## Round R4 (protocol review closures)
+
+Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds
+three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
+`[Unreleased]` and [`../_todos.md`](../_todos.md) for the canonical
+wire-breaking list.
+
+- **`mention_redirect_target_actor_ids` plaintext routing** —
+  message / system-message payloads now carry an explicit
+  redirect-target actor list. If the recipient device's actor is not in
+  the list, floria runs fail-closed: a blind wakeup goes out, the
+  content is not decrypted.
+- **`historical_only` is push-quiet** — when an upstream service
+  attaches `reason_code=historical_only` to a federation idempotency
+  replay, floria does not run a fresh push fanout. The event is
+  diagnostic only.
+- **`e2ee_late_recovery` audit path** —
+  `cx.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+  through the audit pipeline and never produces a push wakeup.
+
 ## Round R2/R3 notes
 
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's

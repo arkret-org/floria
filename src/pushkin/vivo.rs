@@ -704,6 +704,7 @@ mod tests {
             ),
             tweaks: Tweaks::default(),
             push_decision: None,
+            target_actor_id: None,
         }
     }
 
@@ -735,6 +736,7 @@ mod tests {
             sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
+            mention_redirect_target_actor_ids: Vec::new(),
             counts: Counts {
                 unread: Some(2),
                 missed_calls: Some(1),

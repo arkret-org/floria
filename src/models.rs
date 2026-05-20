@@ -25,7 +25,42 @@ pub struct NotifyRequest {
     pub ttl_seconds: Option<u64>,
     #[serde(default)]
     pub collapse_key: Option<String>,
+    /// Round 4 (spec a77b995) — caller-supplied wire-safe `reason_code`
+    /// on the inbound request. When set to
+    /// [`contrix::ERROR_CODE_HISTORICAL_ONLY`] the request is a soland
+    /// diagnostic replay and MUST NOT trigger a fresh push fanout — the
+    /// gateway answers a 200 idempotency-style ack instead. Other values
+    /// are rejected with `schema_violation` (floria only honors the
+    /// `historical_only` no-op shape).
+    #[serde(default)]
+    pub reason_code: Option<String>,
+    /// Round 4 — `cx.audit.policy_access` envelope routing fragment.
+    /// When present, the request is an audit-pipeline event (e.g. an
+    /// `e2ee_late_recovery` access notice), NOT a push notify. The
+    /// gateway acks with 200 and skips the push pipeline entirely.
+    #[serde(default)]
+    pub audit_envelope: Option<AuditEnvelopeMetadata>,
     pub notification: Notification,
+}
+
+/// Round 4 — typed `cx.audit.policy_access` envelope routing fragment
+/// carried alongside a `cx.push.notify` request. Receiving the
+/// `e2ee_late_recovery` access_kind here means soland routed an audit
+/// event through the gateway's HTTP surface; the gateway MUST forward
+/// it to the audit pipeline (a TODO — see below) and MUST NOT do any
+/// push fanout. Mirrors [`contrix::AuditPolicyAccessPayload`] but with
+/// only the wire fields floria needs to make the routing decision.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AuditEnvelopeMetadata {
+    /// `cx.audit.policy_access.access_kind`. The round-4 enum widens
+    /// to include `e2ee_late_recovery`; floria specifically branches
+    /// on that value to skip the push pipeline.
+    pub access_kind: String,
+    /// REQUIRED when `access_kind == e2ee_late_recovery`. References
+    /// the original event the late recovery targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub late_recovery_original_event_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -171,6 +206,18 @@ pub struct Notification {
     pub sender: Option<String>,
     #[serde(default)]
     pub push_hint: Option<String>,
+    /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
+    /// fragment that mirrors the SDK's
+    /// [`contrix::MentionRedirectRouting`]. When the list is non-empty
+    /// each device's [`Device::target_actor_id`] MUST appear in this
+    /// allow-list or the device is failed-closed (rejected without
+    /// fanout, no provider call, no body decryption). An empty / missing
+    /// list means "no mention-redirect scope is in effect" — every
+    /// device passes the routing gate. The receiver gets to verify its
+    /// inclusion via this plaintext field WITHOUT needing to decrypt
+    /// the message blob.
+    #[serde(default)]
+    pub mention_redirect_target_actor_ids: Vec<String>,
     #[serde(default)]
     pub devices: Vec<Device>,
     #[serde(default)]
@@ -255,6 +302,14 @@ pub struct Device {
     /// matching the `cx.push.notify` privacy descriptor.
     #[serde(default)]
     pub push_decision: Option<PushDecisionHint>,
+    /// Round 4 (spec a77b995) — actor DID this device's user is
+    /// registered as on the recipient principal server. Used as the
+    /// lookup key for the plaintext
+    /// [`Notification::mention_redirect_target_actor_ids`] allow-list.
+    /// MUST be a DID (the SDK enforces the round-4 tightened DID regex
+    /// upstream); floria treats it as an opaque token.
+    #[serde(default)]
+    pub target_actor_id: Option<String>,
 }
 
 /// T4.4 — Caller-supplied wire-safe push-rule decision hint.

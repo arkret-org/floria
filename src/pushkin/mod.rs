@@ -800,6 +800,7 @@ mod sanitize_tests {
             sender: Some("@major:example.com".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
+            mention_redirect_target_actor_ids: Vec::new(),
             counts: crate::models::Counts {
                 unread: Some(3),
                 missed_calls: None,

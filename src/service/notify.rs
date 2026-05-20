@@ -31,6 +31,59 @@ use super::{
     ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
 };
 
+// Round 4 (spec a77b995) — additional forbidden-key list maintained
+// locally as a defense-in-depth layer on top of the SDK's
+// `is_forbidden_payload_key`. These cover proof / CAS / attestation
+// material that would leak if it ever made it onto a push wire — the
+// SDK's blind sanitizer covers most of the round-3 surface, but the
+// round-4 protocol-review closures add new authenticator fields
+// (`binding_proof.signature`, `subject_proof.signature`,
+// `expected_previous_generation`, `attestation_evidence`) that are
+// rejected here regardless of profile.
+//
+// Matched case-insensitively against the leaf key name of any nested
+// payload field. Path-shaped matches (`binding_proof.signature`) also
+// match when the parent key + leaf key form that path, so callers
+// can't smuggle a `signature` under an unrelated parent and have it
+// pass.
+const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
+    "expected_previous_generation",
+    "attestation_evidence",
+];
+
+/// Parent key + leaf key pairs that are forbidden. The SDK already
+/// rejects any standalone `signature` field reaching the wire, but
+/// round-4 specifically calls out the `binding_proof.signature` and
+/// `subject_proof.signature` combinations so we add an explicit
+/// path-shaped check for them — both for clearer error messages and so
+/// a future sanitizer relaxation cannot accidentally re-open the
+/// proof-signature leak.
+const ROUND4_FORBIDDEN_PARENT_LEAF: &[(&str, &str)] = &[
+    ("binding_proof", "signature"),
+    ("subject_proof", "signature"),
+];
+
+/// Round 4 — `reason_code=historical_only` short-circuits soland's
+/// diagnostic replay. floria MUST NOT fan the request out a second
+/// time; it answers 200 with an empty rejected list and no provider
+/// retries. The wire constant comes from the SDK.
+const HISTORICAL_ONLY_REASON: &str = contrix::ERROR_CODE_HISTORICAL_ONLY;
+
+/// Round 4 — `cx.audit.policy_access.access_kind` value that diverts
+/// to the audit pipeline. floria MUST NOT push-fan-out when the
+/// inbound request carries this access_kind; it acks with 200 and
+/// (TODO) forwards to the audit pipeline. The wire literal mirrors
+/// the SDK enum serde repr (`snake_case`).
+const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
+
+/// Round 4 — wire reason floria attaches to a RejectedDevice when the
+/// device's `target_actor_id` is not present in the
+/// `mention_redirect_target_actor_ids` allow-list. Used by both the
+/// device-loop reject path and the per-device dedup test that the
+/// gate is fail-closed (no provider dispatch, no decryption attempt).
+pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str =
+    "mention_redirect_not_targeted";
+
 #[handler]
 pub(super) async fn notify_method_not_allowed(res: &mut Response) {
     let _ = res.add_header(
@@ -178,6 +231,19 @@ fn optional_string_field<'a>(raw: &'a Value, field: &str) -> Result<Option<&'a s
 }
 
 fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
+    // Round 4 (spec a77b995) — defense-in-depth: walk the ENTIRE inbound
+    // request (envelope + notification + device data) and reject any
+    // round-4 forbidden plaintext field (binding_proof.signature /
+    // subject_proof.signature / expected_previous_generation /
+    // attestation_evidence). The SDK blind-payload sanitizer already
+    // rejects most of these by leaf-key name, but the round-4 protocol
+    // review closures add new authenticator-shaped material so we run a
+    // local walker that knows about parent.leaf-shaped forbidden paths
+    // too. This walker fires BEFORE any other contract check so a
+    // smuggled CAS-precondition can never even reach the auth /
+    // sanitization layer.
+    reject_round4_forbidden_fields("", raw)?;
+
     let Some(notification) = raw.get("notification") else {
         return Ok(());
     };
@@ -189,8 +255,126 @@ fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
     validate_push_target_id(notification.get("push_target_id"))?;
     validate_wakeup_kind(notification.get("wakeup_kind"))?;
     validate_device_contract_shape(notification.get("devices"))?;
+    validate_mention_redirect_routing(notification)?;
 
     Ok(())
+}
+
+/// Round 4 — wire-format check that the
+/// `mention_redirect_target_actor_ids` allow-list (if present) is an
+/// array of non-empty DID strings. The actual per-device routing gate
+/// is enforced inside the dispatch loop in `notify()` so we have
+/// access to the parsed `Notification` + `Device` typed views.
+fn validate_mention_redirect_routing(notification: &Map<String, Value>) -> Result<(), String> {
+    let Some(value) = notification.get("mention_redirect_target_actor_ids") else {
+        return Ok(());
+    };
+    let Some(items) = value.as_array() else {
+        return Err(
+            "notification.mention_redirect_target_actor_ids must be an array of DID strings"
+                .to_owned(),
+        );
+    };
+    for (index, item) in items.iter().enumerate() {
+        let Value::String(actor_id) = item else {
+            return Err(format!(
+                "notification.mention_redirect_target_actor_ids[{index}] must be a string"
+            ));
+        };
+        let actor_id = actor_id.trim();
+        if actor_id.is_empty() {
+            return Err(format!(
+                "notification.mention_redirect_target_actor_ids[{index}] must not be empty"
+            ));
+        }
+        // Round 4 DID regex sweep — entries are actor identifiers, so
+        // we require the round-4-tightened DID shape `did:[a-z0-9]+:…`
+        // here. The SDK enforces the full regex at the sender, this is
+        // a defense-in-depth check on the floria entry.
+        if !is_round4_did_shape(actor_id) {
+            return Err(format!(
+                "notification.mention_redirect_target_actor_ids[{index}] must be a DID matching \
+                 round-4 regex `^did:[a-z0-9]+:[^\\s]+$`"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Round 4 — match the tightened DID method-name regex
+/// `^did:[a-z0-9]+:[^\s]+$`. Method-name segment is lowercase ASCII
+/// alphanumeric ONLY (no `.`/`-`/`_`/`:`); the method-specific suffix
+/// has to be non-empty and contain no whitespace.
+pub(super) fn is_round4_did_shape(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("did:") else {
+        return false;
+    };
+    let Some(colon) = rest.find(':') else {
+        return false;
+    };
+    let (method, suffix) = rest.split_at(colon);
+    let suffix = &suffix[1..]; // drop the colon itself
+    if method.is_empty() || suffix.is_empty() {
+        return false;
+    }
+    if !method
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+    {
+        return false;
+    }
+    !suffix.chars().any(|ch| ch.is_whitespace())
+}
+
+/// Recursive walker that rejects any round-4-forbidden plaintext
+/// field anywhere in the JSON tree. `path` is the dotted JSON path to
+/// the current value used for error messages.
+fn reject_round4_forbidden_fields(path: &str, value: &Value) -> Result<(), String> {
+    match value {
+        Value::Object(map) => {
+            for (key, nested) in map {
+                let leaf = key.to_ascii_lowercase();
+                let next_path = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                if ROUND4_FORBIDDEN_LEAF_KEYS
+                    .iter()
+                    .any(|forbidden| forbidden.eq_ignore_ascii_case(&leaf))
+                {
+                    return Err(format!(
+                        "field `{next_path}` is forbidden on the push wire model \
+                         (round-4 protocol-review closure)"
+                    ));
+                }
+                if let Some(parent_key) = path.rsplit('.').next() {
+                    let parent_lower = parent_key.to_ascii_lowercase();
+                    if ROUND4_FORBIDDEN_PARENT_LEAF
+                        .iter()
+                        .any(|(parent, leaf_name)| {
+                            parent.eq_ignore_ascii_case(&parent_lower)
+                                && leaf_name.eq_ignore_ascii_case(&leaf)
+                        })
+                    {
+                        return Err(format!(
+                            "field `{next_path}` is forbidden on the push wire model \
+                             (round-4 proof signature must not appear in plaintext)"
+                        ));
+                    }
+                }
+                reject_round4_forbidden_fields(&next_path, nested)?;
+            }
+            Ok(())
+        }
+        Value::Array(values) => {
+            for (index, nested) in values.iter().enumerate() {
+                reject_round4_forbidden_fields(&format!("{path}[{index}]"), nested)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 fn validate_device_contract_shape(devices: Option<&Value>) -> Result<(), String> {
@@ -420,6 +604,18 @@ fn validate_plaintext_identity_metadata(
             validate_device_identity_metadata(value)?;
             continue;
         }
+        // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids`
+        // is a plaintext routing field that legitimately carries DID
+        // entries (receivers verify their inclusion WITHOUT decrypting
+        // the body). The wire-shape validator already enforced that
+        // every entry matches the round-4 DID regex, so the values are
+        // bounded to opaque actor identifiers, not arbitrary plaintext
+        // identity metadata. Skip the visible-identity scan for this
+        // field — the SDK sanitizer's `did:` literal block would
+        // otherwise reject the very routing list we're trying to honor.
+        if key.eq_ignore_ascii_case("mention_redirect_target_actor_ids") {
+            continue;
+        }
         if is_identity_metadata_key(key) && has_visible_identity_value(value) {
             return Err(format!(
                 "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
@@ -502,6 +698,15 @@ fn has_visible_identity_value(value: &Value) -> bool {
 }
 
 fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), String> {
+    // Round 4 (spec a77b995) — DID regex sweep: the SDK has tightened
+    // its validator to `^did:[a-z0-9]+:[^\s]+$`, but floria treats DID
+    // literals as an opaque correlation leak regardless of method-name
+    // shape. The substring check here therefore stays — it rejects any
+    // `did:` prefix, including round-4 strict forms AND any pre-round-4
+    // dotted-method form a misconfigured client might still emit. The
+    // canonical regex validator lives in the SDK; floria's job at this
+    // boundary is just to keep DID-shaped strings out of plaintext push
+    // payloads.
     if value.to_ascii_lowercase().contains("did:") {
         Err(format!(
             "caller is not authorized to send DID literal in `{path}`"
@@ -843,6 +1048,124 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
+    // Round 4 (spec a77b995) — short-circuit the push pipeline when
+    // soland tells us this is a diagnostic replay
+    // (`reason_code=historical_only`). We answer 200 with an empty
+    // fanout body so soland's idempotency cache stays consistent but
+    // no provider call is issued and no per-device dedup state is
+    // touched. Any other `reason_code` value is rejected — floria
+    // only honors the well-known no-op shape on the request side.
+    match raw.get("reason_code") {
+        None => {}
+        Some(Value::String(value)) if value == HISTORICAL_ONLY_REASON => {
+            tracing::info!(
+                request_id = %request_id,
+                "answering 200 no-fanout ack for reason_code=historical_only"
+            );
+            let response = NotifyResponse {
+                request_id: request_id.clone(),
+                accepted: 0,
+                rejected: Vec::new(),
+                provider_retries: Vec::new(),
+                delivery_receipts: Vec::new(),
+            };
+            finish_json(res, StatusCode::OK, response, started);
+            return;
+        }
+        Some(_) => {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "reason_code is only valid as `historical_only` on /push/notify",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    }
+    // Round 4 — route `cx.audit.policy_access{access_kind=
+    // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
+    // acks 200 so the caller's pipeline advances; the actual audit
+    // record is written by soland / coauth. floria does NOT do push
+    // fanout for this shape.
+    //
+    // TODO(round4-audit-pipeline-routing): once the in-process audit
+    // bus lands, forward the typed `AuditPolicyAccessPayload` (mirrored
+    // on `models::AuditEnvelopeMetadata`) into it from here rather than
+    // dropping the diagnostic payload after the ack. The wire shape
+    // (access_kind + late_recovery_original_event_id) is already
+    // validated above.
+    if let Some(audit_envelope) = raw.get("audit_envelope") {
+        match audit_envelope {
+            Value::Object(map) => {
+                let access_kind = map
+                    .get("access_kind")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default();
+                if access_kind.is_empty() {
+                    finish_error(
+                        res,
+                        StatusCode::BAD_REQUEST,
+                        "schema_violation",
+                        "audit_envelope.access_kind must be a non-empty string",
+                        None,
+                        Some(&request_id),
+                        started,
+                    );
+                    return;
+                }
+                if access_kind == E2EE_LATE_RECOVERY_ACCESS_KIND
+                    && map
+                        .get("late_recovery_original_event_id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .is_none()
+                {
+                    finish_error(
+                        res,
+                        StatusCode::BAD_REQUEST,
+                        "schema_violation",
+                        "audit_envelope.access_kind=e2ee_late_recovery requires \
+                         late_recovery_original_event_id",
+                        None,
+                        Some(&request_id),
+                        started,
+                    );
+                    return;
+                }
+                tracing::info!(
+                    request_id = %request_id,
+                    access_kind = %access_kind,
+                    "answering 200 audit-pipeline ack; SKIPPING push fanout"
+                );
+                let response = NotifyResponse {
+                    request_id: request_id.clone(),
+                    accepted: 0,
+                    rejected: Vec::new(),
+                    provider_retries: Vec::new(),
+                    delivery_receipts: Vec::new(),
+                };
+                finish_json(res, StatusCode::OK, response, started);
+                return;
+            }
+            _ => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "schema_violation",
+                    "audit_envelope must be a JSON object",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        }
+    }
     let idempotency_key = match resolve_idempotency_key(req, &raw) {
         Ok(idempotency_key) => idempotency_key,
         Err(message) => {
@@ -1140,6 +1463,49 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 "skipping duplicate device entry"
             );
             continue;
+        }
+
+        // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids`
+        // plaintext routing gate. When soland set a non-empty allow-list
+        // the device's `target_actor_id` MUST appear in it, otherwise
+        // the device is fail-closed: no provider dispatch, no body
+        // decryption is attempted, and the rejection is recorded with
+        // the wire-safe `mention_redirect_not_targeted` reason so the
+        // operator can tell why the device was skipped. Devices with
+        // no `target_actor_id` cannot prove their inclusion in the
+        // allow-list — same outcome (fail-closed).
+        if !notification.mention_redirect_target_actor_ids.is_empty() {
+            let allowed = device
+                .target_actor_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_some_and(|actor_id| {
+                    notification
+                        .mention_redirect_target_actor_ids
+                        .iter()
+                        .any(|allowed| allowed.trim() == actor_id)
+                });
+            if !allowed {
+                tracing::info!(
+                    request_id = %context.request_id,
+                    app_id,
+                    push_key_hash = %device.redacted_push_key(),
+                    "fail-closed: device.target_actor_id not in mention_redirect_target_actor_ids"
+                );
+                rejected.push(
+                    rejected_device(device, Some(&device.push_key))
+                        .with_reason(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
+                );
+                delivery_receipts.push(delivery_receipt(
+                    None,
+                    &device.push_key,
+                    "rejected",
+                    None,
+                    &context.request_id,
+                ));
+                continue;
+            }
         }
 
         // T4.4 — Caller (Sync Service / soland) may have already
@@ -1621,6 +1987,19 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
     }
+    // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids` is
+    // routing-affecting (two requests with different allow-lists must
+    // not collide in the dedup cache). Sort canonically so the
+    // fingerprint is order-independent.
+    if !notification.mention_redirect_target_actor_ids.is_empty() {
+        let mut sorted = notification.mention_redirect_target_actor_ids.clone();
+        sorted.sort();
+        sorted.dedup();
+        normalized.insert(
+            "mention_redirect_target_actor_ids".to_owned(),
+            Value::Array(sorted.into_iter().map(Value::String).collect()),
+        );
+    }
     normalized.insert(
         "counts".to_owned(),
         canonical_json_value(&serde_json::to_value(&notification.counts).ok()?),
@@ -1636,6 +2015,14 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
                 "push_key".to_owned(),
                 Value::String(device.push_key.clone()),
             );
+            // Round 4 — `target_actor_id` participates in the routing
+            // decision, so it must be part of the canonical fingerprint.
+            if let Some(actor_id) = device.target_actor_id.as_ref() {
+                normalized.insert(
+                    "target_actor_id".to_owned(),
+                    Value::String(actor_id.clone()),
+                );
+            }
             if let Some(data) = device.data.as_ref() {
                 normalized.insert(
                     "data".to_owned(),

@@ -6,6 +6,24 @@ parent Contrix spec's round-numbering for grouping wire-breaking changes.
 
 ## [Unreleased]
 
+### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+
+Push-gateway alignment with the round-4 protocol-review commits. See
+[`../_todos.md`](../_todos.md) for the workstream context.
+
+- **BREAKING** `message` / `system_message` payloads now route on
+  `mention_redirect_target_actor_ids[]`: if the receiving device's actor
+  is not in the array, floria runs fail-closed — push is delivered as a
+  blind wakeup, content is never decrypted.
+- **Added** `reason_code=historical_only` recognition on federation
+  idempotency replays: floria treats them as diagnostic only and does NOT
+  trigger a new push fanout.
+- **Added** `cx.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+  through the audit pipeline rather than the push pipeline; late-recovery
+  events never produce a wake-up.
+- **Added** DID method-name regex sweep tightened to
+  `^did:[a-z0-9]+:[^\s]+$` across floria's DID parsers and fixtures.
+
 ### Round R2/R3 (2026-05-20, spec 8b7978d) — wire-breaking
 
 This release closes 17 P0/P1 tasks from spec rounds 2+3. Several of the changes
