@@ -1,11 +1,13 @@
 pub mod auth;
 pub mod config;
+pub mod deactivation;
 pub mod dedup;
 pub mod error;
 pub mod metrics;
 pub mod models;
 pub mod nonce_store;
 pub mod observability;
+pub mod push_contact_cache;
 pub mod pushkin;
 pub mod rate_limit;
 pub mod retry_queue;
@@ -14,12 +16,30 @@ pub mod service;
 use std::sync::Arc;
 
 use config::NotifyAuthConfig;
+use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
 use nonce_store::NonceStore;
+use push_contact_cache::PushContactCache;
 use pushkin::PushkinRegistry;
 use rate_limit::NotifyRateLimiter;
 use retry_queue::RetryQueue;
 
+// Round R2/R3 (T07/T17) — broadcast-channel surfaces:
+//
+//   * `deactivation_ledger` accepts `account_deactivate_fanout` events
+//     from soland, performs per-actor + per-device unbinds, and tracks
+//     whether the fanout completed fully or partially. Sealed channels
+//     still count as drained so soland's fanout state isn't blocked on
+//     a dead push provider.
+//   * `push_contact_cache` accepts `consent_revoke{scope=any}` events
+//     and drops every cached PSI verdict for the affected principal so
+//     the next push goes through a fresh consent check.
+//
+// Both are `Option<Arc<…>>` so deployments that do not subscribe to
+// the soland broadcast bus can leave them unset; the matching internal
+// routes then answer `503 service_unavailable` so misconfigurations
+// surface in operator dashboards rather than silently swallowing
+// broadcasts.
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
@@ -28,6 +48,8 @@ pub struct AppState {
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
     pub notify_nonce_store: Option<Arc<NonceStore>>,
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
+    pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
+    pub push_contact_cache: Option<Arc<PushContactCache>>,
 }
 
 impl AppState {
@@ -39,6 +61,8 @@ impl AppState {
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,
+            deactivation_ledger: None,
+            push_contact_cache: None,
         }
     }
 
@@ -53,6 +77,8 @@ impl AppState {
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,
+            deactivation_ledger: None,
+            push_contact_cache: None,
         }
     }
 }

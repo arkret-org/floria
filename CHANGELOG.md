@@ -1,0 +1,69 @@
+# Changelog
+
+All notable changes to floria (Contrix push gateway) will be documented in this
+file. The format is loosely based on [Keep a Changelog]; floria follows the
+parent Contrix spec's round-numbering for grouping wire-breaking changes.
+
+## [Unreleased]
+
+### Round R2/R3 (2026-05-20, spec 8b7978d) — wire-breaking
+
+This release closes 17 P0/P1 tasks from spec rounds 2+3. Several of the changes
+are intentionally **wire-breaking**: aggressive mode is on, there is no
+backward-compatibility shim. Operators upgrading from a pre-round-2 floria
+MUST upgrade soland and the principal-server fanout to a matching version.
+
+#### Added
+
+- **`/api/v1/internal/account_deactivate_fanout`** (T07) — POST endpoint that
+  consumes soland's `account_deactivate_fanout` broadcast. Performs per-actor
+  and per-device unbind, tracks the outcome in a small idempotent ledger
+  (`deactivation::DeactivationLedger`), and returns an honest
+  `outcome=completed|partially_completed|no_op` ack so soland's fanout state
+  machine can advance. Sealed push channels (provider rejected the token) are
+  counted as drained and **do not** block soland's fanout — per the round-2
+  spec contract.
+- **`/api/v1/internal/consent_revoke`** (T17) — POST endpoint that consumes
+  soland's `consent_revoke{scope=any}` broadcast. Invalidates every cached
+  push-contact PSI verdict for the affected principal in the new
+  `push_contact_cache::PushContactCache` (in-memory + optional disk-overlay
+  tombstone). Scoped (per-realm) revocations are rejected with
+  `unsupported_feature` because floria does not learn realm content.
+- New `AppState` fields `deactivation_ledger` and `push_contact_cache` so a
+  deployment can opt in to the broadcast surfaces. When unset, the internal
+  endpoints answer `503 service_unavailable` so misconfigurations surface in
+  operator dashboards rather than silently swallowing soland broadcasts.
+
+#### Changed
+
+- **Blind sanitizer forbidden-field list** (T07/T10/T06) extended with the
+  round R2/R3 names: `appeal_id`, `attestation_evidence`, `audit_purpose`,
+  `attestation_chain`, `audit_policy_version_hash`, `policy_frontier_hash`,
+  `trust_domain`, `reset_event_id`. These are all stable correlation
+  identifiers introduced by the moderation-appeal,
+  attestation-evidence-for-audit-agents, cross-signing-reset, and
+  policy-frontier-hash wire additions; any of them on the blind-wakeup wire
+  would let an observer link a push to a specific governance event. The local
+  strip list runs ahead of the SDK's `is_forbidden_payload_key` until the SDK
+  catches up (tracked under `TODO(round23-T07)`).
+
+#### Internal
+
+- Documented that **ephemeral kinds bypass floria** (T04 cross-check) — the
+  four broadcast ephemeral signals (`cx.presence`, `cx.typing`,
+  `cx.receipt.read`, `cx.call.signal`) travel on dedicated
+  `ephemeral_envelope` / device-message channels in the Sync Service, are
+  dropped at TTL, and MUST NOT enter floria's durable Event path. The
+  `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects
+  `cx:` / `did:`) and the ID-prefix gate on
+  `event_id` / `message_id` / `flow_id` / `realm_id` together act as
+  defence-in-depth — no `cx:presence:` typed-id exists, so the prefix check
+  rejects any future caller that tries to smuggle an ephemeral as a durable
+  Event. See the comment in `src/service/mod.rs`.
+- New test module `service::tests::internal` exercising both broadcast
+  endpoints (idempotency, sealed-channel handling, wire-shape rejection,
+  503 path when unwired).
+- Property test `tests/property_provider_payload.rs` extended with the new
+  round R2/R3 forbidden field names so the proptest harness covers them too.
+
+[Keep a Changelog]: https://keepachangelog.com/en/1.1.0/

@@ -15,6 +15,26 @@ inversion:
 The push payloads carry the new `realm_id` field while keeping the old
 `space_id` alias on the wire for back-compat clients.
 
+## Round R2/R3 notes
+
+Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
+forbidden-field list (`appeal_id`, `attestation_evidence`,
+`audit_purpose`, `attestation_chain`, `audit_policy_version_hash`,
+`policy_frontier_hash`, `trust_domain`, `reset_event_id`) and added two
+new internal broadcast endpoints — `POST /api/v1/internal/
+account_deactivate_fanout` (T07) and `POST /api/v1/internal/
+consent_revoke` (T17) — consumed from soland. See
+[`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
+[`../contrix-spec/CHANGELOG.md`](../contrix-spec/CHANGELOG.md) for the
+normative source. Ephemeral kinds (`cx.presence`, `cx.typing`,
+`cx.receipt.read`, `cx.call.signal`) are confirmed to bypass floria
+entirely; they ride dedicated ephemeral channels in the Sync Service.
+
+## Cross-project task tracking
+
+Per-project task lists are consolidated upstream — see
+[`../_todos.md`](../_todos.md) for the active cross-project task plan.
+
 ## Stack
 
 - `salvo` for HTTP API

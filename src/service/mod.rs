@@ -12,6 +12,7 @@ use crate::config::AccessLogConfig;
 mod bridge_describe;
 mod health;
 mod integration_describe;
+mod internal;
 mod metrics;
 mod notify;
 mod server_describe;
@@ -25,6 +26,23 @@ const ACTIVE_FLOW_ID_PREFIX: &str = "cx:flow:";
 // prefix `cx:realm:`. The push wire model carries `realm_id`, never the
 // container-level `space_id` (which is on the forbidden-key list).
 const ACTIVE_REALM_ID_PREFIX: &str = "cx:realm:";
+
+// Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
+// floria entirely. The four broadcast ephemeral signal kinds
+// (`cx.presence`, `cx.typing`, `cx.receipt.read`, `cx.call.signal`)
+// travel on dedicated `ephemeral_envelope` / device-message channels
+// in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
+// durable Event-kind path. There is intentionally no code here that
+// branches on those kind strings — `wakeup_kind` on a `cx.push.notify`
+// is a closed enum (`message` / `incoming_call` / `mention` / …) plus
+// a snake_case custom token form, and the validator in `notify.rs`
+// rejects anything containing `did:` / `cx:` substrings, so an
+// ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
+// future caller ever pipes an ephemeral as a durable Event, the
+// `validate_active_notification_refs` ID-prefix gate (`cx:event:` /
+// `cx:message:` / `cx:flow:` / `cx:realm:`) is the second line of
+// defence — there is no `cx:presence:` or `cx:typing:` typed-id, so
+// the prefix check rejects it.
 
 fn notify_route(path: &'static str) -> Router {
     Router::with_path(path)
@@ -46,6 +64,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
         .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
+        // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
+        .push(
+            Router::with_path("api/v1/internal/account_deactivate_fanout")
+                .post(internal::account_deactivate_fanout),
+        )
+        .push(
+            Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
+        )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
 }
@@ -64,6 +90,14 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
         )
         .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
         .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
+        // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
+        .push(
+            Router::with_path("api/v1/internal/account_deactivate_fanout")
+                .post(internal::account_deactivate_fanout),
+        )
+        .push(
+            Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
+        )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
 }
