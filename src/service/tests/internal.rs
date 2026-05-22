@@ -142,7 +142,10 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
             .send(&service)
             .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
     let body: Value = response.take_json().await.unwrap();
     assert_eq!(body["error"]["code"], json!("service_unavailable"));
 }
@@ -210,7 +213,10 @@ async fn consent_revoke_returns_503_when_cache_unwired() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code.unwrap(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
     let body: Value = response.take_json().await.unwrap();
     assert_eq!(body["error"]["code"], json!("service_unavailable"));
 }

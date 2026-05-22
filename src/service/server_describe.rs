@@ -54,15 +54,20 @@ struct ClaimedProfile {
 }
 
 /// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_hash`, `timestamp`. Dev-mode posture MUST NOT advertise any
-/// such entry.
+/// `artifact_hash`, `artifact_ref`, `cotest_issuer_did`, `signature`,
+/// `timestamp`. Dev-mode posture MUST NOT advertise any such entry.
 #[derive(Debug, Serialize)]
 struct VerifiedProfile {
     profile_id: String,
     claim_kind: &'static str,
     cotest_run_id: String,
     artifact_hash: String,
+    artifact_ref: String,
+    cotest_issuer_did: String,
+    signature: String,
     timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until: Option<String>,
 }
 
 /// T6.1 — compat / external-interop surface entry. `kind` ∈ schema enum.
@@ -159,10 +164,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             ),
         }],
         verified_profiles,
-        experimental_features: vec![
-            "push.bridge.failure_codes",
-            "push.notify.retry_queue",
-        ],
+        experimental_features: vec!["push.bridge.failure_codes", "push.notify.retry_queue"],
         compat_surfaces: vec![],
         development_mode,
     };

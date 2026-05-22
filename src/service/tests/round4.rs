@@ -41,10 +41,8 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
         "alice-token",
         "did:web:alice.example",
     )]);
-    body["notification"]["mention_redirect_target_actor_ids"] = json!([
-        "did:web:alice.example",
-        "did:web:bob.example",
-    ]);
+    body["notification"]["mention_redirect_target_actor_ids"] =
+        json!(["did:web:alice.example", "did:web:bob.example",]);
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
         .json(&body)
@@ -72,10 +70,8 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
         "carol-token",
         "did:web:carol.example",
     )]);
-    body["notification"]["mention_redirect_target_actor_ids"] = json!([
-        "did:web:alice.example",
-        "did:web:bob.example",
-    ]);
+    body["notification"]["mention_redirect_target_actor_ids"] =
+        json!(["did:web:alice.example", "did:web:bob.example",]);
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
         .json(&body)
@@ -104,8 +100,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
     // Device has no target_actor_id at all — the allow-list cannot
     // confirm inclusion, so the same fail-closed path fires.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["notification"]["mention_redirect_target_actor_ids"] =
-        json!(["did:web:alice.example"]);
+    body["notification"]["mention_redirect_target_actor_ids"] = json!(["did:web:alice.example"]);
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
         .json(&body)
@@ -156,9 +151,8 @@ async fn mention_redirect_rejects_malformed_did_in_allow_list() {
     // Pre-round-4 DID with a dotted method segment — wire-broken.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
     // ROUND4-ALLOW: negative test asserts the gateway rejects a legacy DID method segment.
-    body["notification"]["mention_redirect_target_actor_ids"] = json!([
-        "did:web.legacy:alice.example",
-    ]);
+    body["notification"]["mention_redirect_target_actor_ids"] =
+        json!(["did:web.legacy:alice.example",]);
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
         .json(&body)

@@ -46,10 +46,8 @@ use super::{
 // match when the parent key + leaf key form that path, so callers
 // can't smuggle a `signature` under an unrelated parent and have it
 // pass.
-const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
-    "expected_previous_generation",
-    "attestation_evidence",
-];
+const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] =
+    &["expected_previous_generation", "attestation_evidence"];
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -81,8 +79,7 @@ const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
 /// `mention_redirect_target_actor_ids` allow-list. Used by both the
 /// device-loop reject path and the per-device dedup test that the
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
-pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str =
-    "mention_redirect_not_targeted";
+pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
 
 #[handler]
 pub(super) async fn notify_method_not_allowed(res: &mut Response) {
@@ -1252,9 +1249,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 },
                 "default_payload": default_payload,
             });
-            if let Err(err) =
-                contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope)
-            {
+            if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,

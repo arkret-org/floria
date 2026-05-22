@@ -751,10 +751,7 @@ mod tests {
             payload.get("unread_count"),
             Some(&Value::String("2".to_owned()))
         );
-        assert_eq!(
-            payload.get("badge"),
-            Some(&Value::String("1".to_owned()))
-        );
+        assert_eq!(payload.get("badge"), Some(&Value::String("1".to_owned())));
 
         for forbidden in [
             "event_id",

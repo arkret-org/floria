@@ -256,7 +256,11 @@ impl DeactivationLedger {
 mod tests {
     use super::*;
 
-    fn broadcast(fanout_id: &str, actor: &str, devices: &[&str]) -> AccountDeactivateFanoutBroadcast {
+    fn broadcast(
+        fanout_id: &str,
+        actor: &str,
+        devices: &[&str],
+    ) -> AccountDeactivateFanoutBroadcast {
         AccountDeactivateFanoutBroadcast {
             fanout_id: fanout_id.to_owned(),
             actor_did: actor.to_owned(),
@@ -313,11 +317,7 @@ mod tests {
     fn ledger_reports_no_op_when_actor_already_unbound_and_no_devices() {
         let ledger = DeactivationLedger::new();
         let _ = ledger.record_fanout(&broadcast("fanout-1", "did:web:alice.example", &[]));
-        let result = ledger.record_fanout(&broadcast(
-            "fanout-2",
-            "did:web:alice.example",
-            &[],
-        ));
+        let result = ledger.record_fanout(&broadcast("fanout-2", "did:web:alice.example", &[]));
         // Same actor, different fanout id, no devices, prior actor
         // already unbound -> we observed nothing actionable.
         assert_eq!(result.outcome, DeactivateFanoutOutcome::NoOp);

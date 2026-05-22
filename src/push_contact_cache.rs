@@ -106,9 +106,10 @@ impl PushContactCache {
 
     pub fn insert(&self, principal_did: &str, peer_psi_token: &str, verdict: PsiVerdict) {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
-        inner
-            .entries
-            .insert((principal_did.to_owned(), peer_psi_token.to_owned()), verdict);
+        inner.entries.insert(
+            (principal_did.to_owned(), peer_psi_token.to_owned()),
+            verdict,
+        );
     }
 
     pub fn get(&self, principal_did: &str, peer_psi_token: &str) -> Option<PsiVerdict> {
@@ -202,11 +203,7 @@ mod tests {
 
         let evicted = cache.invalidate_principal("did:web:alice.example");
         assert_eq!(evicted, 2);
-        assert!(
-            cache
-                .get("did:web:alice.example", "psi-1")
-                .is_none()
-        );
+        assert!(cache.get("did:web:alice.example", "psi-1").is_none());
         assert_eq!(
             cache.get("did:web:bob.example", "psi-1"),
             Some(PsiVerdict::Allowed)
@@ -239,10 +236,7 @@ mod tests {
         // Pick a deterministic tempdir under target/ so cleanup is
         // implicit. We deliberately do NOT use the `tempfile` crate —
         // floria's existing tests don't pull it in.
-        let tempdir = std::env::temp_dir().join(format!(
-            "floria-psi-cache-{}",
-            std::process::id()
-        ));
+        let tempdir = std::env::temp_dir().join(format!("floria-psi-cache-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tempdir);
         let path = tempdir.join("psi-overlay.tomb");
         let _ = std::fs::remove_file(&path);

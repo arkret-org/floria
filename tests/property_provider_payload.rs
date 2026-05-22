@@ -98,10 +98,7 @@ fn arb_leaf() -> impl Strategy<Value = Value> {
 fn contains_forbidden_key(value: &Value) -> bool {
     match value {
         Value::Object(map) => map.iter().any(|(k, v)| {
-            FORBIDDEN_NAMES
-                .iter()
-                .any(|f| f.eq_ignore_ascii_case(k))
-                || contains_forbidden_key(v)
+            FORBIDDEN_NAMES.iter().any(|f| f.eq_ignore_ascii_case(k)) || contains_forbidden_key(v)
         }),
         Value::Array(arr) => arr.iter().any(contains_forbidden_key),
         _ => false,

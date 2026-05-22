@@ -545,7 +545,8 @@ mod tests {
             "xiaomi payload must not carry sender: {payload_blob}"
         );
         assert!(
-            payload_blob.contains("\"push_target_id\":\"cx:pseudonym:push:01HYZ8Z000000000000000\""),
+            payload_blob
+                .contains("\"push_target_id\":\"cx:pseudonym:push:01HYZ8Z000000000000000\""),
             "xiaomi payload must carry push_target_id: {payload_blob}"
         );
     }
