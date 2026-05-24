@@ -31,7 +31,7 @@
 - [x] §7 `src/push_contact_cache.rs:23` — implement a postgres-backed overlay so consent revoke cache survives restart.
 
 ### SDK-sync drift markers
-- [ ] §8 `src/pushkin/android.rs:318`, `src/pushkin/fcm.rs:761`, `src/pushkin/mod.rs:554,582`, `src/pushkin/webpush.rs:698`, `src/service/notify.rs:431,547` — once SDK §1-§3 (this and `_contrix-rust-sdk_todos.md`) finish exporting `is_forbidden_payload_key` for round-4, replace floria's local sweep with SDK calls.
+- [x] §8 `src/pushkin/android.rs:318`, `src/pushkin/fcm.rs:761`, `src/pushkin/mod.rs:554,582`, `src/pushkin/webpush.rs:698`, `src/service/notify.rs:431,547` — once SDK §1-§3 (this and `_contrix-rust-sdk_todos.md`) finish exporting `is_forbidden_payload_key` for round-4, replace floria's local sweep with SDK calls.
 
 ### Configuration & secrets
 - [x] §9 Document the env-var substitution semantics in `docs/en/configuration.md` (KDL `${ENV_VAR}` patterns).
@@ -52,19 +52,19 @@
 - [x] §20 Document the recommended Grafana dashboard JSON under `docs/en/grafana-dashboard.json`.
 
 ### Tests
-- [ ] §21 Add a soak/chaos test: 10k notifications/min for 30 min, assert rate-limit cleanup doesn't OOM.
-- [ ] §22 Add a load test verifying Redis dedup TTL math.
-- [ ] §23 Add an integration test that simulates a deactivation broadcast and asserts §5 actually drains.
+- [x] §21 Add a soak/chaos test: 10k notifications/min for 30 min, assert rate-limit cleanup doesn't OOM.
+- [x] §22 Add a load test verifying Redis dedup TTL math.
+- [x] §23 Add an integration test that simulates a deactivation broadcast and asserts §5 actually drains.
 
 ### Docs
-- [ ] §24 Add a server-side integration guide (`docs/en/server-integration.md`) for soland calling `/api/v1/push/notify`.
-- [ ] §25 Add a mobile-dev integration guide (`docs/en/mobile-integration.md`) referencing chime.
-- [ ] §26 Publish an OpenAPI spec for `/notify`, `/bridge/describe`, `/integration/describe`.
+- [x] §24 Add a server-side integration guide (`docs/en/server-integration.md`) for soland calling `/api/v1/push/notify`.
+- [x] §25 Add a mobile-dev integration guide (`docs/en/mobile-integration.md`) referencing chime.
+- [x] §26 Publish an OpenAPI spec for `/notify`, `/bridge/describe`, `/integration/describe`.
 
 ## Phase 5
 
-- [ ] §27 External security review focusing on auth + replay-protection + multi-tenant isolation.
-- [ ] §28 Record local `v1.0.0` milestone.
+- [x] §27 External security review focusing on auth + replay-protection + multi-tenant isolation.
+- [x] §28 Record local `v1.0.0` milestone.
 
 ## Exit gate (phase 2)
 
