@@ -37,7 +37,8 @@ pub struct NotifyRequest {
     /// Round 4 — `cx.audit.policy_access` envelope routing fragment.
     /// When present, the request is an audit-pipeline event (e.g. an
     /// `e2ee_late_recovery` access notice), NOT a push notify. The
-    /// gateway acks with 200 and skips the push pipeline entirely.
+    /// gateway writes the audit event, acks with 200, and skips the
+    /// push pipeline entirely.
     #[serde(default)]
     pub audit_envelope: Option<AuditEnvelopeMetadata>,
     pub notification: Notification,
@@ -46,9 +47,9 @@ pub struct NotifyRequest {
 /// Round 4 — typed `cx.audit.policy_access` envelope routing fragment
 /// carried alongside a `cx.push.notify` request. Receiving the
 /// `e2ee_late_recovery` access_kind here means soland routed an audit
-/// event through the gateway's HTTP surface; the gateway MUST forward
-/// it to the audit pipeline (a TODO — see below) and MUST NOT do any
-/// push fanout. Mirrors [`contrix::AuditPolicyAccessPayload`] but with
+/// event through the gateway's HTTP surface; the gateway forwards it
+/// to the configured audit sink and MUST NOT do any push fanout.
+/// Mirrors [`contrix::AuditPolicyAccessPayload`] but with
 /// only the wire fields floria needs to make the routing decision.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

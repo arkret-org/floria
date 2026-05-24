@@ -18,10 +18,10 @@
 ## Phase 2 tasks (critical-path)
 
 ### Audit pipeline closure (highest priority — currently swallows events)
-- [ ] §1 `src/service/notify.rs:73` — wire `e2ee_late_recovery` audit divert to a real audit pipeline (currently returns 200 without forwarding).
-- [ ] §2 `src/service/notify.rs:1091` — same audit-pipeline routing for the other path.
-- [ ] §3 `src/models.rs:50` — wire audit-pipeline forwarding for `RejectedDevice`.
-- [ ] §4 Define an `AuditSink` trait + an in-process variant (file-based JSONL) + an HTTP variant (POST to soland audit endpoint).
+- [x] §1 `src/service/notify.rs:73` — wire `e2ee_late_recovery` audit divert to a real audit pipeline (currently returns 200 without forwarding).
+- [x] §2 `src/service/notify.rs:1091` — same audit-pipeline routing for the other path.
+- [x] §3 `src/models.rs:50` — wire audit-pipeline forwarding for `RejectedDevice`.
+- [x] §4 Define an `AuditSink` trait + an in-process variant (file-based JSONL) + an HTTP variant (POST to soland audit endpoint).
 
 ### Deactivation queue drain (broadcast received but not processed)
 - [ ] §5 `src/deactivation.rs:24,208,244` — replace stub queue-drain logic with a real implementation reading from `cx.push.delivery_queue` or analogous postgres table.

@@ -1,9 +1,11 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use floria::AppState;
+use floria::audit::{AuditSink, HttpAuditSink, JsonlAuditSink};
 use floria::auth::redact_url_credentials;
-use floria::config::Config;
+use floria::config::{Config, resolve_path};
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
 use floria::nonce_store::NonceStore;
@@ -67,6 +69,7 @@ async fn main() -> Result<()> {
     } else {
         AppState::new(registry)
     };
+    state.audit_sink = build_audit_sink(&config, path.parent().unwrap_or_else(|| Path::new(".")))?;
     state.notify_auth = config.http.notify_auth.clone();
     if config.http.notify_auth.replay_window_seconds() > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_auth.replay_window_seconds());
@@ -219,4 +222,35 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn build_audit_sink(config: &Config, config_dir: &Path) -> Result<Option<Arc<dyn AuditSink>>> {
+    match config.audit.backend_kind() {
+        "disabled" => Ok(None),
+        "file" => {
+            let path = resolve_path(
+                config_dir,
+                config.audit.file_path().expect("validated audit.file_path"),
+            );
+            tracing::info!(path = %path.display(), "enabling JSONL audit sink");
+            Ok(Some(Arc::new(JsonlAuditSink::new(path))))
+        }
+        "http" => {
+            let endpoint = config
+                .audit
+                .endpoint()
+                .expect("validated audit.endpoint")
+                .to_owned();
+            tracing::info!(
+                endpoint = %endpoint,
+                bearer_auth = config.audit.bearer_token().is_some(),
+                "enabling HTTP audit sink"
+            );
+            Ok(Some(Arc::new(HttpAuditSink::new(
+                endpoint,
+                config.audit.bearer_token().map(ToOwned::to_owned),
+            ))))
+        }
+        backend => bail!("unsupported audit backend `{backend}`"),
+    }
 }

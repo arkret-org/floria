@@ -14,6 +14,7 @@ use tracing::warn;
 #[serde(default)]
 pub struct Config {
     pub http: HttpConfig,
+    pub audit: AuditConfig,
     pub log: LogConfig,
     pub metrics: MetricsConfig,
     pub proxy: Option<String>,
@@ -26,6 +27,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             http: HttpConfig::default(),
+            audit: AuditConfig::default(),
             log: LogConfig::default(),
             metrics: MetricsConfig::default(),
             proxy: None,
@@ -67,6 +69,7 @@ impl Config {
             self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
         );
         self.http.emit_startup_warnings();
+        self.audit.emit_startup_warnings();
         self.log.emit_startup_warnings();
         self.metrics.emit_startup_warnings();
     }
@@ -79,6 +82,7 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         self.http.validate()?;
+        self.audit.validate()?;
         self.metrics.opentracing.validate()?;
         self.metrics.sentry.validate()?;
         Ok(())
@@ -188,6 +192,93 @@ impl HttpConfig {
         self.notify_rate_limits.validate()?;
         self.notify_retry_queue.validate()?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct AuditConfig {
+    pub backend: String,
+    pub file_path: Option<String>,
+    pub endpoint: Option<String>,
+    pub bearer_token: Option<String>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            backend: "disabled".to_owned(),
+            file_path: None,
+            endpoint: None,
+            bearer_token: None,
+            extra: Map::new(),
+        }
+    }
+}
+
+impl AuditConfig {
+    pub fn backend_kind(&self) -> &str {
+        let backend = self.backend.trim();
+        if backend.is_empty() {
+            "disabled"
+        } else {
+            backend
+        }
+    }
+
+    pub fn file_path(&self) -> Option<&str> {
+        self.file_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn endpoint(&self) -> Option<&str> {
+        self.endpoint
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.bearer_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "audit",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match self.backend_kind() {
+            "disabled" => Ok(()),
+            "file" => {
+                if self.file_path().is_none() {
+                    bail!("audit.file_path is required when audit.backend=file");
+                }
+                Ok(())
+            }
+            "http" => {
+                let endpoint = self
+                    .endpoint()
+                    .ok_or_else(|| anyhow!("audit.endpoint is required when audit.backend=http"))?;
+                let parsed = endpoint
+                    .parse::<reqwest::Url>()
+                    .with_context(|| "audit.endpoint must be an absolute HTTP(S) URL")?;
+                match parsed.scheme() {
+                    "http" | "https" => Ok(()),
+                    scheme => bail!("audit.endpoint must use http or https, got `{scheme}`"),
+                }
+            }
+            backend => bail!("audit.backend must be one of: disabled, file, http; got `{backend}`"),
+        }
     }
 }
 
@@ -1379,7 +1470,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-10/soflare.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-25/soflare.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1387,6 +1478,7 @@ pub fn config_json_schema() -> Value {
         "additionalProperties": false,
         "properties": {
             "http": http_schema(),
+            "audit": audit_schema(),
             "log": log_schema(),
             "metrics": metrics_schema(),
             "proxy": {"type": ["string", "null"], "description": "Outbound proxy URL for APNs/FCM/WebPush. Falls back to HTTPS_PROXY env."},
@@ -1394,6 +1486,30 @@ pub fn config_json_schema() -> Value {
                 "type": "object",
                 "additionalProperties": app_config_schema(),
                 "description": "Map of app identifiers to provider configuration."
+            }
+        }
+    })
+}
+
+fn audit_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the soland audit endpoint.",
+        "properties": {
+            "backend": {"type": "string", "enum": ["disabled", "file", "http"], "default": "disabled"},
+            "file_path": {
+                "type": ["string", "null"],
+                "description": "JSONL file path used when backend=file. Relative paths resolve against the config file directory."
+            },
+            "endpoint": {
+                "type": ["string", "null"],
+                "format": "uri",
+                "description": "HTTP(S) endpoint used when backend=http. floria POSTs the audit event JSON body to this URL."
+            },
+            "bearer_token": {
+                "type": ["string", "null"],
+                "description": "Optional bearer token for backend=http."
             }
         }
     })
@@ -1657,7 +1773,7 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-10";
+    pub const SCHEMA_VERSION: &'static str = "2026-05-25";
 }
 
 // --- KDL support ---
@@ -1771,6 +1887,7 @@ apps: {}
         assert_eq!(config.http.bind_addresses, vec!["127.0.0.1"]);
         assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
         assert_eq!(config.http.notify_dedup.backend_kind(), "memory");
+        assert_eq!(config.audit.backend_kind(), "disabled");
         assert!(!config.http.notify_rate_limits.enabled());
         assert!(!config.metrics.prometheus.enabled);
         assert_eq!(config.metrics.prometheus.address, "127.0.0.1");
@@ -1948,6 +2065,25 @@ apps {
 
         let error = config.validate().unwrap_err().to_string();
         assert!(error.contains("http.notify_dedup.redis_url is required"));
+    }
+
+    #[test]
+    fn validate_requires_file_path_for_file_audit_backend() {
+        let mut config = Config::default();
+        config.audit.backend = "file".to_owned();
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("audit.file_path is required"));
+    }
+
+    #[test]
+    fn validate_requires_http_url_for_http_audit_backend() {
+        let mut config = Config::default();
+        config.audit.backend = "http".to_owned();
+        config.audit.endpoint = Some("mailto:audit@example.com".to_owned());
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("audit.endpoint must use http or https"));
     }
 
     #[test]

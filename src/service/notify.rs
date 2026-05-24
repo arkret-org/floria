@@ -10,6 +10,7 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::audit::AuditEvent;
 use crate::auth::{
     AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER,
     ORIGIN_SERVICE_DID_HEADER, authenticate_notify_request,
@@ -69,9 +70,9 @@ const HISTORICAL_ONLY_REASON: &str = contrix::ERROR_CODE_HISTORICAL_ONLY;
 
 /// Round 4 — `cx.audit.policy_access.access_kind` value that diverts
 /// to the audit pipeline. floria MUST NOT push-fan-out when the
-/// inbound request carries this access_kind; it acks with 200 and
-/// (TODO) forwards to the audit pipeline. The wire literal mirrors
-/// the SDK enum serde repr (`snake_case`).
+/// inbound request carries this access_kind; it forwards to the audit
+/// sink and only then acks with 200. The wire literal mirrors the SDK
+/// enum serde repr (`snake_case`).
 const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
 
 /// Round 4 — wire reason floria attaches to a RejectedDevice when the
@@ -890,6 +891,97 @@ fn notify_rate_limit_checks(
     checks
 }
 
+fn optional_json_string(raw: &Value, pointer: &str) -> Option<String> {
+    raw.pointer(pointer)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn optional_owned_string(value: Option<&String>) -> Option<String> {
+    value
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn request_destination_service_did(req: &Request, raw: &Value) -> Option<String> {
+    optional_json_string(raw, "/destination_service_did").or_else(|| {
+        req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+async fn record_required_audit_event(
+    state: &Arc<AppState>,
+    event: &AuditEvent,
+) -> Result<(), String> {
+    let sink = state
+        .audit_sink
+        .as_ref()
+        .ok_or_else(|| "audit sink is not configured".to_owned())?;
+    sink.record(event).await.map_err(|error| error.to_string())
+}
+
+async fn record_rejected_devices_audit(
+    state: &Arc<AppState>,
+    request_id: &str,
+    caller: &AuthenticatedNotifyCaller,
+    notification: &Notification,
+    rejected: &[RejectedDevice],
+) -> Result<(), String> {
+    if rejected.is_empty() {
+        return Ok(());
+    }
+    let Some(sink) = state.audit_sink.as_ref() else {
+        return Ok(());
+    };
+    let event = AuditEvent::RejectedDevices {
+        request_id: request_id.to_owned(),
+        origin_service_did: caller.origin_service_did.clone(),
+        notification_event_id: optional_owned_string(notification.event_id.as_ref()),
+        notification_flow_id: notification.flow_id().map(ToOwned::to_owned),
+        notification_realm_id: notification.realm_id().map(ToOwned::to_owned),
+        devices: rejected.to_vec(),
+    };
+    sink.record(&event).await.map_err(|error| error.to_string())
+}
+
+async fn record_rejected_devices_audit_or_finish(
+    state: &Arc<AppState>,
+    request_id: &str,
+    caller: &AuthenticatedNotifyCaller,
+    notification: &Notification,
+    rejected: &[RejectedDevice],
+    res: &mut Response,
+    started: Instant,
+) -> bool {
+    if let Err(message) =
+        record_rejected_devices_audit(state, request_id, caller, notification, rejected).await
+    {
+        tracing::error!(
+            request_id = %request_id,
+            error = %message,
+            rejected = rejected.len(),
+            "failed to write rejected-device audit event"
+        );
+        finish_error(
+            res,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            &message,
+            None,
+            Some(request_id),
+            started,
+        );
+        return false;
+    }
+    true
+}
+
 #[handler]
 pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();
@@ -1084,16 +1176,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
     // Round 4 — route `cx.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
-    // acks 200 so the caller's pipeline advances; the actual audit
-    // record is written by soland / coauth. floria does NOT do push
-    // fanout for this shape.
-    //
-    // TODO(round4-audit-pipeline-routing): once the in-process audit
-    // bus lands, forward the typed `AuditPolicyAccessPayload` (mirrored
-    // on `models::AuditEnvelopeMetadata`) into it from here rather than
-    // dropping the diagnostic payload after the ack. The wire shape
-    // (access_kind + late_recovery_original_event_id) is already
-    // validated above.
+    // writes the audit event first, then acks 200 so the caller's
+    // pipeline advances. It does not do push fanout for this shape.
     if let Some(audit_envelope) = raw.get("audit_envelope") {
         match audit_envelope {
             Value::Object(map) => {
@@ -1134,10 +1218,43 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     );
                     return;
                 }
+                let late_recovery_original_event_id = map
+                    .get("late_recovery_original_event_id")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned);
+                let audit_event = AuditEvent::PolicyAccess {
+                    request_id: request_id.clone(),
+                    origin_service_did: caller.origin_service_did.clone(),
+                    destination_service_did: request_destination_service_did(req, &raw),
+                    access_kind: access_kind.to_owned(),
+                    late_recovery_original_event_id,
+                    notification_event_id: optional_json_string(&raw, "/notification/event_id"),
+                    notification_flow_id: optional_json_string(&raw, "/notification/flow_id"),
+                    notification_realm_id: optional_json_string(&raw, "/notification/realm_id"),
+                };
+                if let Err(message) = record_required_audit_event(&state, &audit_event).await {
+                    tracing::error!(
+                        request_id = %request_id,
+                        error = %message,
+                        "failed to write policy_access audit event"
+                    );
+                    finish_error(
+                        res,
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "temporarily_unavailable",
+                        &message,
+                        None,
+                        Some(&request_id),
+                        started,
+                    );
+                    return;
+                }
                 tracing::info!(
                     request_id = %request_id,
                     access_kind = %access_kind,
-                    "answering 200 audit-pipeline ack; SKIPPING push fanout"
+                    "answering 200 audit-pipeline ack after audit sink write; SKIPPING push fanout"
                 );
                 let response = NotifyResponse {
                     request_id: request_id.clone(),
@@ -1776,6 +1893,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             provider_retries,
             delivery_receipts,
         };
+        if !record_rejected_devices_audit_or_finish(
+            &state,
+            &context.request_id,
+            &caller,
+            &notification,
+            &response.rejected,
+            res,
+            started,
+        )
+        .await
+        {
+            return;
+        }
         if fully_settled {
             cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
         }
@@ -1804,6 +1934,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
 
     if let Some(message) = first_internal_error {
+        if !record_rejected_devices_audit_or_finish(
+            &state,
+            &context.request_id,
+            &caller,
+            &notification,
+            &rejected,
+            res,
+            started,
+        )
+        .await
+        {
+            return;
+        }
         record_delivery_receipt_outcomes(
             &delivery_receipts,
             delivered_now + skipped_delivered,
@@ -1822,6 +1965,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
 
     if let Some((message, retry_after)) = first_temporary_error {
+        if !record_rejected_devices_audit_or_finish(
+            &state,
+            &context.request_id,
+            &caller,
+            &notification,
+            &rejected,
+            res,
+            started,
+        )
+        .await
+        {
+            return;
+        }
         record_delivery_receipt_outcomes(
             &delivery_receipts,
             delivered_now + skipped_delivered,
@@ -1840,6 +1996,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
 
     if let Some(message) = first_remote_error {
+        if !record_rejected_devices_audit_or_finish(
+            &state,
+            &context.request_id,
+            &caller,
+            &notification,
+            &rejected,
+            res,
+            started,
+        )
+        .await
+        {
+            return;
+        }
         record_delivery_receipt_outcomes(
             &delivery_receipts,
             delivered_now + skipped_delivered,
@@ -1864,6 +2033,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         provider_retries,
         delivery_receipts,
     };
+    if !record_rejected_devices_audit_or_finish(
+        &state,
+        &context.request_id,
+        &caller,
+        &notification,
+        &response.rejected,
+        res,
+        started,
+    )
+    .await
+    {
+        return;
+    }
     if fully_settled {
         cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
     }

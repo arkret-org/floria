@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod deactivation;
@@ -15,6 +16,7 @@ pub mod service;
 
 use std::sync::Arc;
 
+use audit::AuditSink;
 use config::NotifyAuthConfig;
 use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
@@ -36,13 +38,14 @@ use retry_queue::RetryQueue;
 //     the next push goes through a fresh consent check.
 //
 // Both are `Option<Arc<…>>` so deployments that do not subscribe to
-// the soland broadcast bus can leave them unset; the matching internal
-// routes then answer `503 service_unavailable` so misconfigurations
-// surface in operator dashboards rather than silently swallowing
-// broadcasts.
+// the soland broadcast bus / audit endpoint can leave them unset; the
+// matching required routes then answer `503 service_unavailable` so
+// misconfigurations surface in operator dashboards rather than silently
+// swallowing broadcasts or audit events.
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
+    pub audit_sink: Option<Arc<dyn AuditSink>>,
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
     pub notify_auth: NotifyAuthConfig,
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
@@ -56,6 +59,7 @@ impl AppState {
     pub fn new(registry: Arc<PushkinRegistry>) -> Self {
         Self {
             registry,
+            audit_sink: None,
             notify_deduplicator: None,
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limiter: None,
@@ -72,6 +76,7 @@ impl AppState {
     ) -> Self {
         Self {
             registry,
+            audit_sink: None,
             notify_deduplicator: Some(notify_deduplicator),
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limiter: None,

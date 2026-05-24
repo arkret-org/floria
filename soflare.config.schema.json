@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-10/soflare.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-05-25/soflare.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -42,6 +42,44 @@
         "type": "object"
       },
       "description": "Map of app identifiers to provider configuration.",
+      "type": "object"
+    },
+    "audit": {
+      "additionalProperties": false,
+      "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the soland audit endpoint.",
+      "properties": {
+        "backend": {
+          "default": "disabled",
+          "enum": [
+            "disabled",
+            "file",
+            "http"
+          ],
+          "type": "string"
+        },
+        "bearer_token": {
+          "description": "Optional bearer token for backend=http.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "HTTP(S) endpoint used when backend=http. floria POSTs the audit event JSON body to this URL.",
+          "format": "uri",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_path": {
+          "description": "JSONL file path used when backend=file. Relative paths resolve against the config file directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "http": {
@@ -616,5 +654,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-10"
+  "x-floria-schema-version": "2026-05-25"
 }

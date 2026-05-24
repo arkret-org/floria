@@ -23,6 +23,7 @@ use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::audit::AuditEvent;
 
 fn device_with_target(app_id: &str, push_key: &str, target_actor_id: &str) -> Value {
     let mut entry = device(app_id, push_key);
@@ -60,7 +61,8 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
 async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
     let calls = pushkin.calls.clone();
-    let service = test_service(vec![("com.example.app", pushkin)]);
+    let (events, audit_sink) = recording_audit_sink();
+    let service = test_service_with_audit_sink(vec![("com.example.app", pushkin)], audit_sink);
 
     // Device's target_actor_id (carol) is NOT in the routing allow-list
     // (alice / bob). Fail-closed: no provider call, rejected with the
@@ -89,6 +91,33 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     // Critical: the pushkin MUST NOT see the device — fail-closed means
     // no body decryption can occur at the gateway layer.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let events = events.lock().await;
+    assert_eq!(events.len(), 1);
+    let AuditEvent::RejectedDevices {
+        origin_service_did,
+        notification_event_id,
+        notification_flow_id,
+        notification_realm_id,
+        devices,
+        ..
+    } = &events[0]
+    else {
+        panic!("expected rejected_devices audit event");
+    };
+    assert_eq!(origin_service_did, "<anonymous>");
+    assert_eq!(
+        notification_event_id.as_deref(),
+        Some("cx:event:01JS0EV000000000000000000")
+    );
+    assert_eq!(
+        notification_flow_id.as_deref(),
+        Some("cx:flow:01JS0FLOW000000000000000")
+    );
+    assert_eq!(
+        notification_realm_id.as_deref(),
+        Some("cx:realm:01JS0SP000000000000000000")
+    );
+    assert_eq!(devices, &resp.rejected);
 }
 
 #[tokio::test]
@@ -211,7 +240,8 @@ async fn unknown_reason_code_is_rejected_as_schema_violation() {
 async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
     let calls = pushkin.calls.clone();
-    let service = test_service(vec![("com.example.app", pushkin)]);
+    let (events, audit_sink) = recording_audit_sink();
+    let service = test_service_with_audit_sink(vec![("com.example.app", pushkin)], audit_sink);
 
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["audit_envelope"] = json!({
@@ -230,6 +260,64 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     assert!(resp.rejected.is_empty());
     // Push pipeline MUST be skipped — the request is an audit
     // policy_access notice, routed elsewhere.
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let events = events.lock().await;
+    assert_eq!(events.len(), 1);
+    let AuditEvent::PolicyAccess {
+        origin_service_did,
+        access_kind,
+        late_recovery_original_event_id,
+        notification_event_id,
+        notification_flow_id,
+        notification_realm_id,
+        ..
+    } = &events[0]
+    else {
+        panic!("expected policy_access audit event");
+    };
+    assert_eq!(origin_service_did, "<anonymous>");
+    assert_eq!(access_kind, "e2ee_late_recovery");
+    assert_eq!(
+        late_recovery_original_event_id.as_deref(),
+        Some("cx:event:01JS0EV000000000000000000")
+    );
+    assert_eq!(
+        notification_event_id.as_deref(),
+        Some("cx:event:01JS0EV000000000000000000")
+    );
+    assert_eq!(
+        notification_flow_id.as_deref(),
+        Some("cx:flow:01JS0FLOW000000000000000")
+    );
+    assert_eq!(
+        notification_realm_id.as_deref(),
+        Some("cx:realm:01JS0SP000000000000000000")
+    );
+}
+
+#[tokio::test]
+async fn audit_envelope_without_sink_is_temporarily_unavailable() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+
+    let mut body = payload(vec![device("com.example.app", "x-token")]);
+    body["audit_envelope"] = json!({
+        "access_kind": "e2ee_late_recovery",
+        "late_recovery_original_event_id": "cx:event:01JS0EV000000000000000000",
+    });
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .json(&body)
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let body = response.take_json::<Value>().await.unwrap();
+    assert_eq!(body["error"]["code"], json!("temporarily_unavailable"));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
