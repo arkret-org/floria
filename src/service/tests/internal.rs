@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::AppState;
+use crate::broadcast::InProcessBroadcastBus;
 use crate::deactivation::DeactivationLedger;
 use crate::push_contact_cache::{PsiVerdict, PushContactCache};
 use crate::pushkin::PushkinRegistry;
@@ -22,7 +23,16 @@ fn test_service_with_internal_state(
     let mut state = AppState::new(Arc::new(registry));
     state.deactivation_ledger = deactivation_ledger;
     state.push_contact_cache = push_contact_cache;
+    state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(
+        state.deactivation_ledger.clone(),
+        state.push_contact_cache.clone(),
+    )));
     Service::new(build_router(Arc::new(state)))
+}
+
+fn test_service_without_broadcast_bus() -> Service {
+    let registry = PushkinRegistry::new(HashMap::new());
+    Service::new(build_router(Arc::new(AppState::new(Arc::new(registry)))))
 }
 
 #[tokio::test]
@@ -130,7 +140,7 @@ async fn account_deactivate_fanout_rejects_missing_actor_did() {
 
 #[tokio::test]
 async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
-    let service = test_service_with_internal_state(None, None);
+    let service = test_service_without_broadcast_bus();
 
     let mut response =
         TestClient::post("http://127.0.0.1/api/v1/internal/account_deactivate_fanout")
@@ -202,7 +212,7 @@ async fn consent_revoke_rejects_scoped_revocation() {
 
 #[tokio::test]
 async fn consent_revoke_returns_503_when_cache_unwired() {
-    let service = test_service_with_internal_state(None, None);
+    let service = test_service_without_broadcast_bus();
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/internal/consent_revoke")
         .json(&json!({

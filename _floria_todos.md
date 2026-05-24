@@ -24,11 +24,11 @@
 - [x] §4 Define an `AuditSink` trait + an in-process variant (file-based JSONL) + an HTTP variant (POST to soland audit endpoint).
 
 ### Deactivation queue drain (broadcast received but not processed)
-- [ ] §5 `src/deactivation.rs:24,208,244` — replace stub queue-drain logic with a real implementation reading from `cx.push.delivery_queue` or analogous postgres table.
-- [ ] §6 `src/service/internal.rs:10,119` — replace HTTP-only broadcast assumption with a real in-process broadcast bus once soland signature is pinned (R2/R3 closure).
+- [x] §5 `src/deactivation.rs:24,208,244` — replace stub queue-drain logic with a real implementation reading from `cx.push.delivery_queue` or analogous postgres table.
+- [x] §6 `src/service/internal.rs:10,119` — replace HTTP-only broadcast assumption with a real in-process broadcast bus once soland signature is pinned (R2/R3 closure).
 
 ### Push contact cache (in-memory only — won't survive restart)
-- [ ] §7 `src/push_contact_cache.rs:23` — implement a postgres-backed overlay so consent revoke cache survives restart.
+- [x] §7 `src/push_contact_cache.rs:23` — implement a postgres-backed overlay so consent revoke cache survives restart.
 
 ### SDK-sync drift markers
 - [ ] §8 `src/pushkin/android.rs:318`, `src/pushkin/fcm.rs:761`, `src/pushkin/mod.rs:554,582`, `src/pushkin/webpush.rs:698`, `src/service/notify.rs:431,547` — once SDK §1-§3 (this and `_contrix-rust-sdk_todos.md`) finish exporting `is_forbidden_payload_key` for round-4, replace floria's local sweep with SDK calls.

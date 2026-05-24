@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod auth;
+pub mod broadcast;
 pub mod config;
 pub mod deactivation;
 pub mod dedup;
@@ -18,6 +19,7 @@ pub mod service;
 use std::sync::Arc;
 
 use audit::AuditSink;
+use broadcast::InProcessBroadcastBus;
 use config::NotifyAuthConfig;
 use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
@@ -54,6 +56,7 @@ pub struct AppState {
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
     pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
     pub push_contact_cache: Option<Arc<PushContactCache>>,
+    pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
 }
 
 impl AppState {
@@ -68,6 +71,7 @@ impl AppState {
             notify_retry_queue: None,
             deactivation_ledger: None,
             push_contact_cache: None,
+            broadcast_bus: None,
         }
     }
 
@@ -85,6 +89,7 @@ impl AppState {
             notify_retry_queue: None,
             deactivation_ledger: None,
             push_contact_cache: None,
+            broadcast_bus: None,
         }
     }
 }

@@ -6,31 +6,18 @@
 //! `/api/v1/push/notify` request shape. Auth is delegated to the
 //! deployment (typically a private listener + service mesh mTLS); the
 //! handlers themselves only validate wire shape.
-//
-// TODO(round23-T07): once the in-process broadcast bus lands, swap the
-// HTTP shim for a direct channel subscriber. The handler bodies stay
-// the same — they take the deserialized broadcast envelope and return
-// a typed ack — only the transport changes.
 
 use std::sync::Arc;
 use std::time::Instant;
 
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde::Serialize;
 
 use crate::AppState;
-use crate::deactivation::{AccountDeactivateFanoutAck, AccountDeactivateFanoutBroadcast};
+use crate::deactivation::AccountDeactivateFanoutBroadcast;
 use crate::push_contact_cache::ConsentRevokeBroadcast;
 
 use super::metrics::{finish_error, finish_json};
-
-#[derive(Debug, Serialize)]
-struct ConsentRevokeAck {
-    broadcast_id: String,
-    scope: &'static str,
-    entries_evicted: usize,
-}
 
 #[handler]
 pub(super) async fn account_deactivate_fanout(
@@ -97,7 +84,7 @@ pub(super) async fn account_deactivate_fanout(
         return;
     }
 
-    let Some(ledger) = state.deactivation_ledger.as_ref() else {
+    let Some(bus) = state.broadcast_bus.as_ref() else {
         // The endpoint exists even when the ledger isn't wired up so
         // soland can detect misconfigurations early. We answer 503 so
         // soland retries rather than reporting fanout_complete on a
@@ -106,7 +93,7 @@ pub(super) async fn account_deactivate_fanout(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
-            "deactivation ledger is not configured on this push gateway",
+            "in-process broadcast bus is not configured on this push gateway",
             None,
             None,
             started,
@@ -114,19 +101,20 @@ pub(super) async fn account_deactivate_fanout(
         return;
     };
 
-    let result = ledger.record_fanout(&body);
-
-    // TODO(round23-T07): drain queued to-device messages for the
-    // unbound (actor, device) cells here, then set messages_drained
-    // honestly. For now the count is whatever the ledger reported
-    // (currently 0 — see deactivation.rs).
-    let ack = AccountDeactivateFanoutAck {
-        fanout_id: body.fanout_id.clone(),
-        outcome: result.outcome,
-        actor_bindings_unbound: result.actor_bindings_unbound,
-        device_bindings_unbound: result.device_bindings_unbound,
-        sealed_channels: result.sealed_channels,
-        messages_drained: result.messages_drained,
+    let ack = match bus.account_deactivate_fanout(&body) {
+        Ok(ack) => ack,
+        Err(error) => {
+            finish_error(
+                res,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                error.message(),
+                None,
+                None,
+                started,
+            );
+            return;
+        }
     };
 
     tracing::info!(
@@ -200,7 +188,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         return;
     }
 
-    let Some(cache) = state.push_contact_cache.as_ref() else {
+    let Some(bus) = state.broadcast_bus.as_ref() else {
         // No cache wired up → nothing to invalidate. soland's broadcast
         // is still a success, but we answer 503 so it's obvious in
         // operator dashboards that the listener saw the broadcast but
@@ -209,7 +197,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
             res,
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
-            "push contact cache is not configured on this push gateway",
+            "in-process broadcast bus is not configured on this push gateway",
             None,
             None,
             started,
@@ -217,11 +205,20 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         return;
     };
 
-    let evicted = cache.invalidate_principal(&body.principal_did);
-    let ack = ConsentRevokeAck {
-        broadcast_id: body.broadcast_id.clone(),
-        scope: ConsentRevokeBroadcast::SUPPORTED_SCOPE,
-        entries_evicted: evicted,
+    let ack = match bus.consent_revoke(&body) {
+        Ok(ack) => ack,
+        Err(error) => {
+            finish_error(
+                res,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                error.message(),
+                None,
+                None,
+                started,
+            );
+            return;
+        }
     };
     tracing::info!(
         broadcast_id = %ack.broadcast_id,

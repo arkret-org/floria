@@ -5,11 +5,14 @@ use anyhow::{Context, Result, bail};
 use floria::AppState;
 use floria::audit::{AuditSink, HttpAuditSink, JsonlAuditSink};
 use floria::auth::redact_url_credentials;
+use floria::broadcast::InProcessBroadcastBus;
 use floria::config::{Config, resolve_path};
+use floria::deactivation::{DeactivationLedger, PostgresDeactivationQueueDrain};
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
 use floria::nonce_store::NonceStore;
 use floria::observability::{self, TelemetryGuard};
+use floria::push_contact_cache::PushContactCache;
 use floria::pushkin::PushkinRegistry;
 use floria::rate_limit::NotifyRateLimiter;
 use floria::retry_queue::{RetryQueue, RetryQueueConfig};
@@ -70,6 +73,13 @@ async fn main() -> Result<()> {
         AppState::new(registry)
     };
     state.audit_sink = build_audit_sink(&config, path.parent().unwrap_or_else(|| Path::new(".")))?;
+    let (deactivation_ledger, push_contact_cache) = build_broadcast_components(&config)?;
+    state.deactivation_ledger = Some(deactivation_ledger.clone());
+    state.push_contact_cache = Some(push_contact_cache.clone());
+    state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(
+        Some(deactivation_ledger),
+        Some(push_contact_cache),
+    )));
     state.notify_auth = config.http.notify_auth.clone();
     if config.http.notify_auth.replay_window_seconds() > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_auth.replay_window_seconds());
@@ -252,5 +262,34 @@ fn build_audit_sink(config: &Config, config_dir: &Path) -> Result<Option<Arc<dyn
             ))))
         }
         backend => bail!("unsupported audit backend `{backend}`"),
+    }
+}
+
+fn build_broadcast_components(
+    config: &Config,
+) -> Result<(Arc<DeactivationLedger>, Arc<PushContactCache>)> {
+    if let Some(postgres_url) = config.storage.postgres_url() {
+        tracing::info!(
+            postgres = %redact_url_credentials(postgres_url),
+            deactivation_queue_table = config.storage.deactivation_queue_table(),
+            push_contact_cache_table = config.storage.push_contact_cache_table(),
+            "enabling PostgreSQL-backed broadcast state"
+        );
+        let drain = Arc::new(PostgresDeactivationQueueDrain::new(
+            postgres_url.to_owned(),
+            config.storage.deactivation_queue_table(),
+        )?);
+        let ledger = Arc::new(DeactivationLedger::with_queue_drain(drain));
+        let cache = Arc::new(PushContactCache::with_postgres_overlay(
+            postgres_url.to_owned(),
+            config.storage.push_contact_cache_table(),
+        )?);
+        Ok((ledger, cache))
+    } else {
+        tracing::info!("enabling in-memory broadcast state");
+        Ok((
+            Arc::new(DeactivationLedger::new()),
+            Arc::new(PushContactCache::in_memory()),
+        ))
     }
 }
