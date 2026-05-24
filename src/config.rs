@@ -15,6 +15,7 @@ use tracing::warn;
 pub struct Config {
     pub http: HttpConfig,
     pub audit: AuditConfig,
+    pub storage: StorageConfig,
     pub log: LogConfig,
     pub metrics: MetricsConfig,
     pub proxy: Option<String>,
@@ -28,6 +29,7 @@ impl Default for Config {
         Self {
             http: HttpConfig::default(),
             audit: AuditConfig::default(),
+            storage: StorageConfig::default(),
             log: LogConfig::default(),
             metrics: MetricsConfig::default(),
             proxy: None,
@@ -70,6 +72,7 @@ impl Config {
         );
         self.http.emit_startup_warnings();
         self.audit.emit_startup_warnings();
+        self.storage.emit_startup_warnings();
         self.log.emit_startup_warnings();
         self.metrics.emit_startup_warnings();
     }
@@ -83,6 +86,7 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         self.http.validate()?;
         self.audit.validate()?;
+        self.storage.validate()?;
         self.metrics.opentracing.validate()?;
         self.metrics.sentry.validate()?;
         Ok(())
@@ -279,6 +283,80 @@ impl AuditConfig {
             }
             backend => bail!("audit.backend must be one of: disabled, file, http; got `{backend}`"),
         }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct StorageConfig {
+    pub postgres_url: Option<String>,
+    pub deactivation_queue_table: String,
+    pub push_contact_cache_table: String,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            postgres_url: None,
+            deactivation_queue_table: "floria_push_delivery_queue".to_owned(),
+            push_contact_cache_table: "floria_push_contact_cache".to_owned(),
+            extra: Map::new(),
+        }
+    }
+}
+
+impl StorageConfig {
+    pub fn postgres_url(&self) -> Option<&str> {
+        self.postgres_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn postgres_enabled(&self) -> bool {
+        self.postgres_url().is_some()
+    }
+
+    pub fn deactivation_queue_table(&self) -> &str {
+        let value = self.deactivation_queue_table.trim();
+        if value.is_empty() {
+            "floria_push_delivery_queue"
+        } else {
+            value
+        }
+    }
+
+    pub fn push_contact_cache_table(&self) -> &str {
+        let value = self.push_contact_cache_table.trim();
+        if value.is_empty() {
+            "floria_push_contact_cache"
+        } else {
+            value
+        }
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "storage",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if let Some(url) = self.postgres_url() {
+            crate::postgres_support::validate_postgres_url(url, "storage.postgres_url")?;
+        }
+        crate::postgres_support::SqlTableName::parse(
+            self.deactivation_queue_table(),
+            "storage.deactivation_queue_table",
+        )?;
+        crate::postgres_support::SqlTableName::parse(
+            self.push_contact_cache_table(),
+            "storage.push_contact_cache_table",
+        )?;
+        Ok(())
     }
 }
 
@@ -1470,7 +1548,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-25/soflare.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-25.1/soflare.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1479,6 +1557,7 @@ pub fn config_json_schema() -> Value {
         "properties": {
             "http": http_schema(),
             "audit": audit_schema(),
+            "storage": storage_schema(),
             "log": log_schema(),
             "metrics": metrics_schema(),
             "proxy": {"type": ["string", "null"], "description": "Outbound proxy URL for APNs/FCM/WebPush. Falls back to HTTPS_PROXY env."},
@@ -1486,6 +1565,30 @@ pub fn config_json_schema() -> Value {
                 "type": "object",
                 "additionalProperties": app_config_schema(),
                 "description": "Map of app identifiers to provider configuration."
+            }
+        }
+    })
+}
+
+fn storage_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Optional PostgreSQL storage for deactivation queue draining and push-contact PSI cache persistence.",
+        "properties": {
+            "postgres_url": {
+                "type": ["string", "null"],
+                "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping and push-contact cache are in-memory only."
+            },
+            "deactivation_queue_table": {
+                "type": "string",
+                "default": "floria_push_delivery_queue",
+                "description": "Table drained by account_deactivate_fanout. Must be `table` or `schema.table` with simple SQL identifiers."
+            },
+            "push_contact_cache_table": {
+                "type": "string",
+                "default": "floria_push_contact_cache",
+                "description": "Table used by the PostgreSQL push-contact PSI cache overlay. Must be `table` or `schema.table` with simple SQL identifiers."
             }
         }
     })
@@ -1773,7 +1876,7 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-25";
+    pub const SCHEMA_VERSION: &'static str = "2026-05-25.1";
 }
 
 // --- KDL support ---
@@ -1888,6 +1991,11 @@ apps: {}
         assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
         assert_eq!(config.http.notify_dedup.backend_kind(), "memory");
         assert_eq!(config.audit.backend_kind(), "disabled");
+        assert!(!config.storage.postgres_enabled());
+        assert_eq!(
+            config.storage.deactivation_queue_table(),
+            "floria_push_delivery_queue"
+        );
         assert!(!config.http.notify_rate_limits.enabled());
         assert!(!config.metrics.prometheus.enabled);
         assert_eq!(config.metrics.prometheus.address, "127.0.0.1");
@@ -2084,6 +2192,15 @@ apps {
 
         let error = config.validate().unwrap_err().to_string();
         assert!(error.contains("audit.endpoint must use http or https"));
+    }
+
+    #[test]
+    fn validate_rejects_unsafe_storage_table_names() {
+        let mut config = Config::default();
+        config.storage.push_contact_cache_table = "floria.cache;drop".to_owned();
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("storage.push_contact_cache_table"));
     }
 
     #[test]

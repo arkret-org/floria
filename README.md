@@ -62,7 +62,7 @@ Per-project task lists are consolidated upstream — see
 - `kdl` for KDL config (default)
 - `serde-saphyr` for YAML config (also supported)
 
-`diesel` / PostgreSQL are intentionally not included because the service does not use a database.
+PostgreSQL is optional and used only for deactivation queue draining and the push-contact PSI cache overlay.
 
 ## Supported features
 
@@ -111,6 +111,7 @@ Quick notes:
 - 1.0 deployments should use an external secret manager, sidecar, or init step to mount/render APNs, FCM, VAPID, custom push, and service-auth secrets before floria starts
 - `metrics.prometheus` starts a separate listener, defaulting to `127.0.0.1:8000`
 - import `docs/en/grafana-dashboard.json` for the recommended Prometheus dashboard
+- `storage.postgres_url` enables durable deactivation queue drain and push-contact PSI cache state
 - unknown config sections / fields emit startup warnings
 - the `memory` dedup backend is single-instance only; use Redis-backed dedup for HA deployments
 - `push_hint` is a body-free wakeup hint and must not contain plaintext message content

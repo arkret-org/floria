@@ -61,6 +61,7 @@ directory.
 ```kdl
 log { ... }
 http { ... }
+storage { ... }
 metrics { ... }
 proxy "http://user:pass@proxy:8080"
 apps { ... }
@@ -195,6 +196,33 @@ http {
 In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
 For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
+
+### `storage`
+
+```kdl
+storage {
+  // Omit postgres_url for in-memory broadcast state.
+  // postgres_url "postgres://floria:secret@postgres.internal:5432/floria"
+  deactivation_queue_table "floria_push_delivery_queue"
+  push_contact_cache_table "floria_push_contact_cache"
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `postgres_url` | string | - | Optional PostgreSQL URL. Enables deactivation queue drain and persistent push-contact PSI cache overlay |
+| `deactivation_queue_table` | string | `"floria_push_delivery_queue"` | Queue table drained by `account_deactivate_fanout`; accepts `table` or `schema.table` |
+| `push_contact_cache_table` | string | `"floria_push_contact_cache"` | Persistent PSI cache table used by `consent_revoke`; accepts `table` or `schema.table` |
+
+The deactivation queue table is expected to contain `actor_did`, `device_id`,
+and `push_key_hash` text columns. floria drains it with `DELETE` statements for
+the broadcast actor and, when present, the listed device ids / push-key hashes.
+
+The push-contact cache table is expected to contain `principal_did`,
+`peer_psi_token`, `verdict`, and `updated_at` columns, with a unique constraint
+on `(principal_did, peer_psi_token)`. `verdict` stores `allowed` or `denied`.
+When `postgres_url` is unset, the same broadcast bus runs with process-local
+state only.
 
 ### Secrets and operator workflow
 

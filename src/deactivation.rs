@@ -19,18 +19,25 @@
 //! still report the fanout as complete locally so soland's fanout state
 //! is not blocked on a dead channel; the partial-vs-complete signal is
 //! reserved for cases where floria's own bookkeeping is incomplete
-//! (e.g. an actor cell with a device the broadcast didn't enumerate).
-//
-// TODO(round23-T07): wire `drain_to_device_queue` into the real retry
-// queue + provider state once the inbound broadcast signature and ack
-// shape are pinned by soland. For now we record the requested unbinds
-// in an in-memory ledger so the ack response is honest about what was
-// observed.
+//! (e.g. the queue subsystem is unreachable during the drain).
+//!
+//! When configured with PostgreSQL, floria drains the local
+//! `storage.deactivation_queue_table` by deleting queued rows for the
+//! actor, optionally narrowed to the broadcast's device ids /
+//! push-key hashes. The expected table columns are:
+//! `actor_did text`, `device_id text`, and `push_key_hash text`.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::sync::Mutex;
 
+use anyhow::{Context, Result};
+use postgres::NoTls;
+use postgres::types::ToSql;
 use serde::{Deserialize, Serialize};
+
+use crate::auth::redact_url_credentials;
+use crate::postgres_support::SqlTableName;
 
 /// Round R2/R3 (T07) — broadcast envelope soland sends to every push
 /// gateway when a deactivation fanout starts.
@@ -126,13 +133,103 @@ pub struct DeactivationFanoutResult {
     pub messages_drained: usize,
 }
 
+pub trait DeactivationQueueDrain: std::fmt::Debug + Send + Sync {
+    fn drain(&self, broadcast: &AccountDeactivateFanoutBroadcast) -> Result<usize>;
+}
+
+#[derive(Debug, Clone)]
+pub struct PostgresDeactivationQueueDrain {
+    postgres_url: String,
+    table: SqlTableName,
+    target_label: String,
+}
+
+impl PostgresDeactivationQueueDrain {
+    pub fn new(postgres_url: impl Into<String>, table: impl AsRef<str>) -> Result<Self> {
+        let postgres_url = postgres_url.into();
+        let table = SqlTableName::parse(table.as_ref(), "storage.deactivation_queue_table")?;
+        Ok(Self {
+            target_label: redact_url_credentials(&postgres_url),
+            postgres_url,
+            table,
+        })
+    }
+
+    fn connect(&self) -> Result<postgres::Client> {
+        postgres::Client::connect(&self.postgres_url, NoTls).with_context(|| {
+            format!(
+                "failed to connect to PostgreSQL deactivation queue {}",
+                self.target_label
+            )
+        })
+    }
+}
+
+impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
+    fn drain(&self, broadcast: &AccountDeactivateFanoutBroadcast) -> Result<usize> {
+        let mut client = self.connect()?;
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&broadcast.actor_did];
+        let sql = if broadcast.devices.is_empty() {
+            format!("DELETE FROM {} WHERE actor_did = $1", self.table.as_sql())
+        } else {
+            let mut clauses = Vec::new();
+            for device in &broadcast.devices {
+                let index = params.len() + 1;
+                clauses.push(format!("device_id = ${index}"));
+                params.push(&device.device_id);
+                if let Some(push_key_hash) = device
+                    .push_key_hash
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                {
+                    let index = params.len() + 1;
+                    clauses.push(format!("push_key_hash = ${index}"));
+                    params.push(push_key_hash);
+                }
+            }
+            format!(
+                "DELETE FROM {} WHERE actor_did = $1 AND ({})",
+                self.table.as_sql(),
+                clauses.join(" OR ")
+            )
+        };
+        client
+            .execute(&sql, &params)
+            .with_context(|| {
+                format!(
+                    "failed to drain deactivation queue table {}",
+                    self.table.as_sql()
+                )
+            })
+            .map(|count| count as usize)
+    }
+}
+
 /// Idempotent in-memory ledger of which fanouts we've already handled.
 ///
 /// Keyed by `(fanout_id)` since soland guarantees that id is stable
 /// across retries.
-#[derive(Debug, Default)]
 pub struct DeactivationLedger {
     inner: Mutex<DeactivationLedgerInner>,
+    queue_drain: Option<Arc<dyn DeactivationQueueDrain>>,
+}
+
+impl std::fmt::Debug for DeactivationLedger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeactivationLedger")
+            .field("inner", &self.inner)
+            .field("queue_drain", &self.queue_drain.is_some())
+            .finish()
+    }
+}
+
+impl Default for DeactivationLedger {
+    fn default() -> Self {
+        Self {
+            inner: Mutex::new(DeactivationLedgerInner::default()),
+            queue_drain: None,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -157,6 +254,13 @@ impl DeactivationLedger {
         Self::default()
     }
 
+    pub fn with_queue_drain(queue_drain: Arc<dyn DeactivationQueueDrain>) -> Self {
+        Self {
+            inner: Mutex::new(DeactivationLedgerInner::default()),
+            queue_drain: Some(queue_drain),
+        }
+    }
+
     /// Mark a channel as sealed so a subsequent fanout for the same
     /// `(actor, device)` reports the cell as drained-via-sealed rather
     /// than partially completed.
@@ -173,6 +277,17 @@ impl DeactivationLedger {
         &self,
         broadcast: &AccountDeactivateFanoutBroadcast,
     ) -> DeactivationFanoutResult {
+        {
+            let inner = self.inner.lock().expect("deactivation ledger poisoned");
+            if let Some(prior) = inner.seen.get(&broadcast.fanout_id) {
+                return prior.clone();
+            }
+        }
+
+        let drain_result = self
+            .queue_drain
+            .as_ref()
+            .map(|drain| drain.drain(broadcast));
         let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
 
         if let Some(prior) = inner.seen.get(&broadcast.fanout_id) {
@@ -205,13 +320,23 @@ impl DeactivationLedger {
             0
         };
 
-        // TODO(round23-T07): replace this `0` with the real drained
-        // message count once we wire the retry_queue / nonce_store /
-        // dedup tables into this entrypoint. The ack shape is stable;
-        // the value is what's pending.
-        let messages_drained: usize = 0;
+        let (messages_drained, drain_failed) = match drain_result {
+            Some(Ok(count)) => (count, false),
+            Some(Err(error)) => {
+                tracing::warn!(
+                    error = %error,
+                    fanout_id = %broadcast.fanout_id,
+                    actor_did = %broadcast.actor_did,
+                    "deactivation queue drain failed"
+                );
+                (0, true)
+            }
+            None => (0, false),
+        };
 
-        let outcome = if !observed_at_least_one_cell && actor_bindings_unbound == 0 {
+        let outcome = if drain_failed {
+            DeactivateFanoutOutcome::PartiallyCompleted
+        } else if !observed_at_least_one_cell && actor_bindings_unbound == 0 {
             DeactivateFanoutOutcome::NoOp
         } else {
             // Sealed channels DO count toward "drained" for the
@@ -233,28 +358,25 @@ impl DeactivationLedger {
             .insert(broadcast.fanout_id.clone(), result.clone());
         result
     }
-
-    /// Force the next [`record_fanout`] call to report
-    /// `partially_completed`. Used by the queue-drain entry point when
-    /// it sees an internal subsystem error AFTER the unbind list was
-    /// recorded but BEFORE the queue drain finished. Reset on every
-    /// fanout that completes cleanly.
-    #[doc(hidden)]
-    pub fn force_partial_for_test(&self, broadcast: &AccountDeactivateFanoutBroadcast) {
-        // TODO(round23-T07): replace with a real "queue subsystem
-        // unhealthy" gating signal. This method exists so the unit
-        // test can assert the partial code path is reachable without
-        // having to mount a fake queue subsystem.
-        let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
-        if let Some(entry) = inner.seen.get_mut(&broadcast.fanout_id) {
-            entry.outcome = DeactivateFanoutOutcome::PartiallyCompleted;
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug)]
+    struct TestDrain {
+        result: Result<usize>,
+    }
+
+    impl DeactivationQueueDrain for TestDrain {
+        fn drain(&self, _broadcast: &AccountDeactivateFanoutBroadcast) -> Result<usize> {
+            match &self.result {
+                Ok(count) => Ok(*count),
+                Err(error) => Err(anyhow::anyhow!(error.to_string())),
+            }
+        }
+    }
 
     fn broadcast(
         fanout_id: &str,
@@ -287,6 +409,32 @@ mod tests {
         assert_eq!(result.actor_bindings_unbound, 1);
         assert_eq!(result.device_bindings_unbound, 2);
         assert_eq!(result.sealed_channels, 0);
+    }
+
+    #[test]
+    fn ledger_reports_drained_message_count_from_queue_drain() {
+        let ledger = DeactivationLedger::with_queue_drain(Arc::new(TestDrain { result: Ok(3) }));
+        let result = ledger.record_fanout(&broadcast(
+            "fanout-1",
+            "did:web:alice.example",
+            &["device-a"],
+        ));
+        assert_eq!(result.outcome, DeactivateFanoutOutcome::Completed);
+        assert_eq!(result.messages_drained, 3);
+    }
+
+    #[test]
+    fn ledger_reports_partial_when_queue_drain_fails() {
+        let ledger = DeactivationLedger::with_queue_drain(Arc::new(TestDrain {
+            result: Err(anyhow::anyhow!("queue unavailable")),
+        }));
+        let result = ledger.record_fanout(&broadcast(
+            "fanout-1",
+            "did:web:alice.example",
+            &["device-a"],
+        ));
+        assert_eq!(result.outcome, DeactivateFanoutOutcome::PartiallyCompleted);
+        assert_eq!(result.messages_drained, 0);
     }
 
     #[test]
@@ -323,15 +471,5 @@ mod tests {
         assert_eq!(result.outcome, DeactivateFanoutOutcome::NoOp);
         assert_eq!(result.actor_bindings_unbound, 0);
         assert_eq!(result.device_bindings_unbound, 0);
-    }
-
-    #[test]
-    fn force_partial_for_test_flips_outcome() {
-        let ledger = DeactivationLedger::new();
-        let payload = broadcast("fanout-1", "did:web:alice.example", &["device-a"]);
-        let _ = ledger.record_fanout(&payload);
-        ledger.force_partial_for_test(&payload);
-        let again = ledger.record_fanout(&payload);
-        assert_eq!(again.outcome, DeactivateFanoutOutcome::PartiallyCompleted);
     }
 }

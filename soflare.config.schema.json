@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-25/soflare.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-05-25.1/soflare.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -650,9 +650,33 @@
         "string",
         "null"
       ]
+    },
+    "storage": {
+      "additionalProperties": false,
+      "description": "Optional PostgreSQL storage for deactivation queue draining and push-contact PSI cache persistence.",
+      "properties": {
+        "deactivation_queue_table": {
+          "default": "floria_push_delivery_queue",
+          "description": "Table drained by account_deactivate_fanout. Must be `table` or `schema.table` with simple SQL identifiers.",
+          "type": "string"
+        },
+        "postgres_url": {
+          "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping and push-contact cache are in-memory only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "push_contact_cache_table": {
+          "default": "floria_push_contact_cache",
+          "description": "Table used by the PostgreSQL push-contact PSI cache overlay. Must be `table` or `schema.table` with simple SQL identifiers.",
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-25"
+  "x-floria-schema-version": "2026-05-25.1"
 }

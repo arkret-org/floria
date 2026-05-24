@@ -37,6 +37,7 @@ tracing-opentelemetry = { version = "0.32.1", default-features = false, features
 opentelemetry = { version = "0.31.0", default-features = false, features = ["trace"] }
 opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["trace", "grpc-tonic"] }
+postgres = "0.19.12"
 sentry = { version = "0.48.1", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 sentry-tracing = "0.48.1"
 uuid = { version = "1.22.0", features = ["serde", "v4"] }

@@ -8,6 +8,7 @@ pub mod metrics;
 pub mod models;
 pub mod nonce_store;
 pub mod observability;
+pub mod postgres_support;
 pub mod push_contact_cache;
 pub mod pushkin;
 pub mod rate_limit;
