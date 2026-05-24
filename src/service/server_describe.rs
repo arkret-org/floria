@@ -54,14 +54,14 @@ struct ClaimedProfile {
 }
 
 /// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_hash`, `artifact_ref`, `cotest_issuer_did`, `signature`,
+/// `artifact_digest`, `artifact_ref`, `cotest_issuer_did`, `signature`,
 /// `timestamp`. Dev-mode posture MUST NOT advertise any such entry.
 #[derive(Debug, Serialize)]
 struct VerifiedProfile {
     profile_id: String,
     claim_kind: &'static str,
     cotest_run_id: String,
-    artifact_hash: String,
+    artifact_digest: String,
     artifact_ref: String,
     cotest_issuer_did: String,
     signature: String,

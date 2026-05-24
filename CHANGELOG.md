@@ -56,7 +56,7 @@ MUST upgrade soland and the principal-server fanout to a matching version.
 
 - **Blind sanitizer forbidden-field list** (T07/T10/T06) extended with the
   round R2/R3 names: `appeal_id`, `attestation_evidence`, `audit_purpose`,
-  `attestation_chain`, `audit_policy_version_hash`, `policy_frontier_hash`,
+  `attestation_chain`, `audit_policy_version_digest`, `policy_frontier_digest`,
   `trust_domain`, `reset_event_id`. These are all stable correlation
   identifiers introduced by the moderation-appeal,
   attestation-evidence-for-audit-agents, cross-signing-reset, and

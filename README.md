@@ -39,8 +39,8 @@ wire-breaking list.
 
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`appeal_id`, `attestation_evidence`,
-`audit_purpose`, `attestation_chain`, `audit_policy_version_hash`,
-`policy_frontier_hash`, `trust_domain`, `reset_event_id`) and added two
+`audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
+`policy_frontier_digest`, `trust_domain`, `reset_event_id`) and added two
 new internal broadcast endpoints — `POST /api/v1/internal/
 account_deactivate_fanout` (T07) and `POST /api/v1/internal/
 consent_revoke` (T17) — consumed from soland. See

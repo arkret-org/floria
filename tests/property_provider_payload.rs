@@ -73,8 +73,8 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "attestation_evidence",
     "audit_purpose",
     "attestation_chain",
-    "audit_policy_version_hash",
-    "policy_frontier_hash",
+    "audit_policy_version_digest",
+    "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
 ];

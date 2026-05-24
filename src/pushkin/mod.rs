@@ -547,8 +547,8 @@ impl std::fmt::Display for ProviderPayloadRejection {
 /// defence-in-depth. Any of these on the blind-wakeup wire is a hard
 /// correlation leak — `appeal_id` links a push back to a specific
 /// moderation appeal thread; `attestation_evidence` / `attestation_chain`
-/// / `audit_purpose` / `audit_policy_version_hash` reveal audit-agent
-/// posture; `policy_frontier_hash` is a stable per-policy correlator;
+/// / `audit_purpose` / `audit_policy_version_digest` reveal audit-agent
+/// posture; `policy_frontier_digest` is a stable per-policy correlator;
 /// `trust_domain` discloses deployment scope; `reset_event_id` links
 /// pushes back to a cross-signing reset event.
 // TODO(round23-T07): once the SDK ships `is_forbidden_payload_key`
@@ -559,8 +559,8 @@ const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
     "attestation_evidence",
     "audit_purpose",
     "attestation_chain",
-    "audit_policy_version_hash",
-    "policy_frontier_hash",
+    "audit_policy_version_digest",
+    "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
 ];
@@ -709,8 +709,8 @@ mod sanitize_tests {
             "attestation_evidence": "evidence-blob-ref",
             "audit_purpose": "compliance_lawful_access",
             "attestation_chain": ["chain-item-0", "chain-item-1"],
-            "audit_policy_version_hash": "a".repeat(64),
-            "policy_frontier_hash": "b".repeat(64),
+            "audit_policy_version_digest": "a".repeat(64),
+            "policy_frontier_digest": "b".repeat(64),
             "trust_domain": "example.net",
             "reset_event_id": "01904100-0000-7000-8000-000000000002",
         })
@@ -723,8 +723,8 @@ mod sanitize_tests {
             "attestation_evidence",
             "audit_purpose",
             "attestation_chain",
-            "audit_policy_version_hash",
-            "policy_frontier_hash",
+            "audit_policy_version_digest",
+            "policy_frontier_digest",
             "trust_domain",
             "reset_event_id",
         ] {
