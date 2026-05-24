@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
         let response = NotifyResponse {
-            request_id: "cx:req:123".to_owned(),
+            request_id: "cx:request:123".to_owned(),
             accepted: 1,
             rejected: vec![super::RejectedDevice::new(
                 Some("app.example.android"),
@@ -510,7 +510,7 @@ mod tests {
                 status: Some("accepted".to_owned()),
                 retry_after_ms: None,
                 timestamp: Some("2026-05-02T00:00:00Z".to_owned()),
-                request_id: Some("cx:req:123".to_owned()),
+                request_id: Some("cx:request:123".to_owned()),
             }],
         };
 
