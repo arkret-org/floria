@@ -113,6 +113,14 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 todo: "GET /ready verifies auth and dedup dependencies before returning plain-text `ok`.",
             },
             IntegrationSurfaceDescriptor {
+                name: "readyz",
+                method: "GET",
+                path: "/readyz",
+                contract: "json_strict_readiness_probe.v1",
+                stability: "active",
+                todo: "GET /readyz verifies the provider registry is populated and enabled Redis-backed dependencies answer PING.",
+            },
+            IntegrationSurfaceDescriptor {
                 name: "metrics",
                 method: "GET",
                 path: "/metrics",

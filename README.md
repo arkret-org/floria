@@ -70,6 +70,7 @@ Per-project task lists are consolidated upstream — see
 - `GET /api/v1/push/describe` gateway profile discovery (`/api/v1/server/describe` is an identical alias)
 - `GET /health`
 - `GET /ready`
+- `GET /readyz`
 - Prometheus metrics on a dedicated `/metrics` listener
 - app id exact match and glob match
 - per-pushkin in-flight concurrency limit
@@ -109,6 +110,7 @@ Quick notes:
 - floria does not hot reload config or secrets; use a process restart or rolling restart for every config change
 - 1.0 deployments should use an external secret manager, sidecar, or init step to mount/render APNs, FCM, VAPID, custom push, and service-auth secrets before floria starts
 - `metrics.prometheus` starts a separate listener, defaulting to `127.0.0.1:8000`
+- import `docs/en/grafana-dashboard.json` for the recommended Prometheus dashboard
 - unknown config sections / fields emit startup warnings
 - the `memory` dedup backend is single-instance only; use Redis-backed dedup for HA deployments
 - `push_hint` is a body-free wakeup hint and must not contain plaintext message content
@@ -126,7 +128,7 @@ Quick notes:
 - response delivery receipt refs contain provider/status/token hash metadata only, never plaintext payloads
 - bearer fallback is header-only; query string auth material is rejected
 - WebPush endpoints must match the configured allowlist and must not include query strings
-- readiness probes hit `GET /ready`; Docker health checks use the same endpoint
+- lightweight readiness probes hit `GET /ready`; strict readiness probes can use `GET /readyz` to require a populated provider registry and reachable Redis-backed dependencies
 
 Sample files:
 - `soflare.sample.kdl` — KDL config with all providers commented out

@@ -56,13 +56,13 @@ Reference samples are in
   require_and_verify`, using the `{tls_client_*}` placeholders to
   populate the headers.
 
-Both samples treat `/health` and `/ready` as unauthenticated probes
+Both samples treat `/health`, `/ready`, and `/readyz` as unauthenticated probes
 and strip any client-supplied copies of the mTLS headers so an
 upstream caller cannot forge their own context.
 
 ## Operational notes
 
-- **Health probes**: keep `/health` and `/ready` reachable without a
+- **Health probes**: keep `/health`, `/ready`, and `/readyz` reachable without a
   client cert. floria does not consult `notify_auth` on these
   endpoints, so the proxy should accept them without forwarding the
   mTLS headers.

@@ -915,15 +915,32 @@ fn request_destination_service_did(req: &Request, raw: &Value) -> Option<String>
     })
 }
 
+fn audit_event_type(event: &AuditEvent) -> &'static str {
+    match event {
+        AuditEvent::PolicyAccess { .. } => "policy_access",
+        AuditEvent::RejectedDevices { .. } => "rejected_devices",
+    }
+}
+
 async fn record_required_audit_event(
     state: &Arc<AppState>,
     event: &AuditEvent,
 ) -> Result<(), String> {
-    let sink = state
-        .audit_sink
-        .as_ref()
-        .ok_or_else(|| "audit sink is not configured".to_owned())?;
-    sink.record(event).await.map_err(|error| error.to_string())
+    let event_type = audit_event_type(event);
+    let Some(sink) = state.audit_sink.as_ref() else {
+        app_metrics::audit_divert(event_type, "unconfigured");
+        return Err("audit sink is not configured".to_owned());
+    };
+    match sink.record(event).await {
+        Ok(()) => {
+            app_metrics::audit_divert(event_type, "success");
+            Ok(())
+        }
+        Err(error) => {
+            app_metrics::audit_divert(event_type, "failure");
+            Err(error.to_string())
+        }
+    }
 }
 
 async fn record_rejected_devices_audit(
@@ -937,6 +954,7 @@ async fn record_rejected_devices_audit(
         return Ok(());
     }
     let Some(sink) = state.audit_sink.as_ref() else {
+        app_metrics::audit_divert("rejected_devices", "unconfigured");
         return Ok(());
     };
     let event = AuditEvent::RejectedDevices {
@@ -947,7 +965,19 @@ async fn record_rejected_devices_audit(
         notification_realm_id: notification.realm_id().map(ToOwned::to_owned),
         devices: rejected.to_vec(),
     };
-    sink.record(&event).await.map_err(|error| error.to_string())
+    match sink.record(&event).await {
+        Ok(()) => {
+            app_metrics::audit_divert("rejected_devices", "success");
+            for device in rejected {
+                app_metrics::audit_rejected_devices(device.reason.as_deref(), 1);
+            }
+            Ok(())
+        }
+        Err(error) => {
+            app_metrics::audit_divert("rejected_devices", "failure");
+            Err(error.to_string())
+        }
+    }
 }
 
 async fn record_rejected_devices_audit_or_finish(

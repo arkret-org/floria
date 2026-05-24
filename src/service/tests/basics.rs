@@ -188,6 +188,7 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"server_describe_alias"));
     assert!(surface_names.contains(&"health"));
     assert!(surface_names.contains(&"ready"));
+    assert!(surface_names.contains(&"readyz"));
     assert!(surface_names.contains(&"metrics"));
 
     let metrics_surface = surfaces
@@ -393,6 +394,52 @@ async fn ready_endpoint_returns_ok() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_eq!(response.take_string().await.unwrap(), "ok");
+}
+
+#[tokio::test]
+async fn readyz_endpoint_returns_ok_for_configured_registry() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut response = TestClient::get("http://127.0.0.1/readyz")
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["service"], "floria");
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["checks"]["provider_registry"]["ok"], true);
+    assert_eq!(body["checks"]["provider_registry"]["count"], json!(1));
+    assert_eq!(
+        body["checks"]["provider_registry"]["providers"],
+        json!(["com.example.app"])
+    );
+    let dependencies = body["checks"]["dependencies"]
+        .as_array()
+        .expect("dependency checks");
+    assert!(dependencies.iter().all(|check| check["ok"] == json!(true)));
+}
+
+#[tokio::test]
+async fn readyz_endpoint_fails_when_registry_is_empty() {
+    let service = test_service(vec![]);
+
+    let mut response = TestClient::get("http://127.0.0.1/readyz")
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["service"], "floria");
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["checks"]["provider_registry"]["ok"], false);
+    assert_eq!(body["checks"]["provider_registry"]["count"], json!(0));
 }
 
 /// T8.3 — `/health` MUST return a JSON body with a `hardening` block

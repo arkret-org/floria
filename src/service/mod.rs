@@ -74,6 +74,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
+        .push(Router::with_path("readyz").get(health::readyz))
 }
 
 pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLogConfig) -> Router {
@@ -100,6 +101,7 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
         )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
+        .push(Router::with_path("readyz").get(health::readyz))
 }
 
 struct AccessLogger {
@@ -138,7 +140,7 @@ impl AccessLogger {
         let status = res.status_code.unwrap_or(StatusCode::OK).as_u16();
         let elapsed = started.elapsed();
 
-        if path == "/health" || path == "/ready" {
+        if path == "/health" || path == "/ready" || path == "/readyz" {
             tracing::debug!(
                 method = %method,
                 path = %path,

@@ -47,9 +47,9 @@
 - [x] §17 Add local cosign/SLSA provenance command documentation; do not push images or tags.
 
 ### Observability polish
-- [ ] §18 Add `/readyz` (provider registry + Redis reachable) — currently `/ready` checks registry only.
-- [ ] §19 Add metrics for the audit-divert paths added in §1-§3.
-- [ ] §20 Document the recommended Grafana dashboard JSON under `docs/en/grafana-dashboard.json`.
+- [x] §18 Add `/readyz` (provider registry + Redis reachable) — currently `/ready` checks registry only.
+- [x] §19 Add metrics for the audit-divert paths added in §1-§3.
+- [x] §20 Document the recommended Grafana dashboard JSON under `docs/en/grafana-dashboard.json`.
 
 ### Tests
 - [ ] §21 Add a soak/chaos test: 10k notifications/min for 30 min, assert rate-limit cleanup doesn't OOM.

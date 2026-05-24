@@ -105,6 +105,24 @@ static NOTIFY_DEDUP_LOOKUP_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
     .expect("register floria_notify_dedup_lookup_total")
 });
 
+static AUDIT_DIVERT_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_audit_divert_total",
+        "Number of audit-divert events processed by /notify, by event type and outcome",
+        &["event_type", "outcome"]
+    )
+    .expect("register floria_audit_divert_total")
+});
+
+static AUDIT_REJECTED_DEVICE_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_audit_rejected_devices_total",
+        "Number of rejected devices submitted to the audit pipeline, grouped by public reason code",
+        &["reason"]
+    )
+    .expect("register floria_audit_rejected_devices_total")
+});
+
 static NOTIFY_RETRY_ENQUEUED_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         "floria_notify_retry_enqueued_total",
@@ -197,6 +215,8 @@ pub fn init() {
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER);
     LazyLock::force(&NOTIFY_RATE_LIMIT_REJECT_COUNTER);
     LazyLock::force(&NOTIFY_DEDUP_LOOKUP_COUNTER);
+    LazyLock::force(&AUDIT_DIVERT_COUNTER);
+    LazyLock::force(&AUDIT_REJECTED_DEVICE_COUNTER);
     LazyLock::force(&NOTIFY_RETRY_ENQUEUED_COUNTER);
     LazyLock::force(&NOTIFY_RETRY_REPLAYED_COUNTER);
     LazyLock::force(&NOTIFY_DEAD_LETTER_COUNTER);
@@ -291,6 +311,25 @@ pub fn notify_dedup_lookup(outcome: &str) {
     NOTIFY_DEDUP_LOOKUP_COUNTER
         .with_label_values(&[outcome])
         .inc();
+}
+
+pub fn audit_divert(event_type: &str, outcome: &str) {
+    AUDIT_DIVERT_COUNTER
+        .with_label_values(&[event_type, outcome])
+        .inc();
+}
+
+pub fn audit_rejected_devices(reason: Option<&str>, count: usize) {
+    if count == 0 {
+        return;
+    }
+    let reason = reason
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unspecified");
+    AUDIT_REJECTED_DEVICE_COUNTER
+        .with_label_values(&[reason])
+        .inc_by(count as u64);
 }
 
 pub fn notify_retry_enqueued(pushkin: &str) {
@@ -401,6 +440,8 @@ mod tests {
         notify_delivery_outcome_by_app("com.example.app", "accepted", 1);
         notify_rate_limit_reject("origin_service");
         notify_dedup_lookup("hit");
+        audit_divert("policy_access", "success");
+        audit_rejected_devices(Some("mention_redirect_not_targeted"), 1);
         observe_pushkin_dispatch("apns", "accepted", Duration::from_millis(12));
 
         let service = Service::new(build_router());
@@ -421,6 +462,8 @@ mod tests {
         assert!(body.contains("floria_notify_delivery_outcome_by_app_total"));
         assert!(body.contains("floria_notify_rate_limit_reject_total"));
         assert!(body.contains("floria_notify_dedup_lookup_total"));
+        assert!(body.contains("floria_audit_divert_total"));
+        assert!(body.contains("floria_audit_rejected_devices_total"));
         assert!(body.contains("floria_pushkin_dispatch_seconds"));
     }
 }

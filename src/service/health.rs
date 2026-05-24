@@ -139,3 +139,126 @@ pub(super) async fn ready(depot: &mut Depot, res: &mut Response) {
     res.status_code(StatusCode::OK);
     res.render(Text::Plain("ok"));
 }
+
+#[handler]
+pub(super) async fn readyz(depot: &mut Depot, res: &mut Response) {
+    let Ok(state) = depot.obtain::<Arc<AppState>>() else {
+        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        res.render(Json(json!({
+            "ok": false,
+            "service": "floria",
+            "error": "application state missing",
+        })));
+        return;
+    };
+
+    let provider_names = state.registry.provider_names();
+    let provider_registry_ok = !provider_names.is_empty();
+    let mut dependency_checks = Vec::new();
+    let mut dependencies_ok = true;
+
+    let (check, ok) = match state.notify_deduplicator.as_ref() {
+        Some(deduplicator) => dependency_check(
+            "notify_dedup",
+            deduplicator.backend_name(),
+            deduplicator.ready(),
+        ),
+        None => disabled_dependency_check("notify_dedup"),
+    };
+    dependencies_ok &= ok;
+    dependency_checks.push(check);
+
+    let (check, ok) = match state.notify_nonce_store.as_ref() {
+        Some(nonce_store) => dependency_check(
+            "notify_auth.nonce_store",
+            nonce_store.backend_name(),
+            nonce_store.ready(),
+        ),
+        None => disabled_dependency_check("notify_auth.nonce_store"),
+    };
+    dependencies_ok &= ok;
+    dependency_checks.push(check);
+
+    let (check, ok) = match state.notify_rate_limiter.as_ref() {
+        Some(rate_limiter) => dependency_check(
+            "notify_rate_limits",
+            rate_limiter.backend_name(),
+            rate_limiter.ready(),
+        ),
+        None => disabled_dependency_check("notify_rate_limits"),
+    };
+    dependencies_ok &= ok;
+    dependency_checks.push(check);
+
+    let (check, ok) = match state.notify_retry_queue.as_ref() {
+        Some(retry_queue) => dependency_check(
+            "notify_retry_queue",
+            retry_queue.backend_name(),
+            retry_queue.ready(),
+        ),
+        None => disabled_dependency_check("notify_retry_queue"),
+    };
+    dependencies_ok &= ok;
+    dependency_checks.push(check);
+
+    let ok = provider_registry_ok && dependencies_ok;
+    if ok {
+        res.status_code(StatusCode::OK);
+    } else {
+        tracing::warn!(
+            provider_registry_ok,
+            dependencies_ok,
+            "strict readiness check failed"
+        );
+        res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    res.render(Json(json!({
+        "ok": ok,
+        "service": "floria",
+        "checks": {
+            "provider_registry": {
+                "ok": provider_registry_ok,
+                "count": provider_names.len(),
+                "providers": provider_names,
+            },
+            "dependencies": dependency_checks,
+        }
+    })));
+}
+
+fn disabled_dependency_check(name: &str) -> (serde_json::Value, bool) {
+    (
+        json!({
+            "name": name,
+            "backend": "disabled",
+            "ok": true,
+        }),
+        true,
+    )
+}
+
+fn dependency_check(
+    name: &str,
+    backend: &str,
+    result: Result<(), String>,
+) -> (serde_json::Value, bool) {
+    match result {
+        Ok(()) => (
+            json!({
+                "name": name,
+                "backend": backend,
+                "ok": true,
+            }),
+            true,
+        ),
+        Err(error) => (
+            json!({
+                "name": name,
+                "backend": backend,
+                "ok": false,
+                "error": error,
+            }),
+            false,
+        ),
+    }
+}
