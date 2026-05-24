@@ -39,6 +39,23 @@ click_action {
 }
 ```
 
+### KDL environment placeholders
+
+floria does not expand shell-style placeholders inside config files. A KDL value
+such as `bearer_tokens "${FLORIA_NOTIFY_TOKEN}"` is passed to validation and
+runtime as the literal string `${FLORIA_NOTIFY_TOKEN}`; YAML behaves the same
+way. The only environment variables read directly by floria are listed in
+[Environment variables](#environment-variables).
+
+If a deployment wants `${ENV_VAR}` substitution, render the config before
+starting floria and point `SOFLARE_CONF` at the rendered file. Keep the rendered
+file owned by the service account, restrict file permissions, and restart the
+process after replacing it. Provider credential paths such as APNs `keyfile` /
+`certfile`, FCM `service_account_file`, and WebPush `vapid_private_key` are
+resolved at startup; relative paths are resolved from the directory containing
+`SOFLARE_CONF` when that variable is set, otherwise from the current working
+directory.
+
 ## Top-level sections
 
 ```kdl
@@ -178,6 +195,33 @@ http {
 In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
 For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
+
+### Secrets and operator workflow
+
+floria 1.0 does not include a built-in HashiCorp Vault, AWS Secrets Manager, or
+similar vault adapter. Operators should use their platform's secret manager,
+agent, or init process to materialize secret files and config before the
+process starts.
+
+Recommended workflow:
+
+1. Store provider private keys, APNs certificate bundles, FCM service account
+   JSON, VAPID private keys, custom push bearer tokens, and service-auth signing
+   material in the platform secret manager.
+2. At deploy time, mount or write those secrets as files readable only by the
+   floria service account. Prefer file path fields for provider credentials:
+   APNs `keyfile` / `certfile`, FCM `service_account_file`, WebPush
+   `vapid_private_key`, and custom push `client_certfile`.
+3. For service bearer fallback, prefer `bearer_token_hashes` over raw
+   `bearer_tokens` so the gateway config does not contain reusable bearer
+   material.
+4. Render any config that needs environment-specific values before startup; do
+   not rely on `${ENV_VAR}` strings being expanded by floria.
+5. Roll the deployment and verify `/ready` returns `200` before revoking the old
+   provider or caller credential.
+
+This keeps secret retrieval outside the gateway binary while matching the
+current configuration surface.
 
 ### `metrics`
 
@@ -582,3 +626,15 @@ com.example.web {
 | `SOFLARE_CONF` | Config file path (default: `floria.kdl`) |
 | `RUST_LOG` | Tracing filter (e.g. `floria=debug,info`) |
 | `HTTPS_PROXY` | Outbound proxy fallback (overridden by config `proxy`) |
+
+## Reload semantics
+
+Configuration, provider credentials, auth policy, rate-limit settings, metrics
+sinks, and provider registries are loaded once at process startup. floria does
+not install a `SIGHUP` handler and does not hot reload config files or mounted
+secret files.
+
+To apply any config or secret change, restart each floria process. For HA
+deployments, perform a rolling restart, keep old credentials valid through the
+overlap window, and wait for `/ready` to return `200` on the restarted instance
+before moving to the next one.

@@ -104,6 +104,9 @@ See [docs/en/reverse-proxy.md](./docs/en/reverse-proxy.md) for the TLS-terminati
 
 Quick notes:
 - `proxy` in the config file takes precedence over `HTTPS_PROXY`
+- config file strings are not environment-expanded; `${ENV_VAR}` remains literal unless an external deploy step renders it before startup
+- floria does not hot reload config or secrets; use a process restart or rolling restart for every config change
+- 1.0 deployments should use an external secret manager, sidecar, or init step to mount/render APNs, FCM, VAPID, custom push, and service-auth secrets before floria starts
 - `metrics.prometheus` starts a separate listener, defaulting to `127.0.0.1:8000`
 - unknown config sections / fields emit startup warnings
 - the `memory` dedup backend is single-instance only; use Redis-backed dedup for HA deployments
@@ -184,7 +187,7 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 - [ ] TLS enabled at the reverse proxy (or `FLORIA_TLS_CERT` / `FLORIA_TLS_KEY` when terminated in-process)
 - [ ] CSP header configured at the reverse proxy
 - [ ] CORS limited to the allowed origins for principal-server callers
-- [ ] Secrets in a secret manager (APNs auth key, FCM service account, VAPID keys)
+- [ ] Secrets sourced from an external secret manager and mounted/rendered before startup (APNs auth key/cert, FCM service account, VAPID keys, custom push secrets, service-auth keys)
 - [ ] Log redaction enabled (default outside dev mode)
 - [ ] Admin auth in production mode (no dev bypass)
 - [ ] Rate limit enabled

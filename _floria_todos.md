@@ -34,9 +34,9 @@
 - [ ] §8 `src/pushkin/android.rs:318`, `src/pushkin/fcm.rs:761`, `src/pushkin/mod.rs:554,582`, `src/pushkin/webpush.rs:698`, `src/service/notify.rs:431,547` — once SDK §1-§3 (this and `_contrix-rust-sdk_todos.md`) finish exporting `is_forbidden_payload_key` for round-4, replace floria's local sweep with SDK calls.
 
 ### Configuration & secrets
-- [ ] §9 Document the env-var substitution semantics in `docs/en/configuration.md` (KDL `${ENV_VAR}` patterns).
-- [ ] §10 Add a vault adapter (HashiCorp Vault or AWS Secrets Manager) as an optional feature for `apns.cert_path` / `fcm.bearer_token`. Or document operator workflow.
-- [ ] §11 Add a SIGHUP handler for hot config reload (or document restart-required in `README.md`).
+- [x] §9 Document the env-var substitution semantics in `docs/en/configuration.md` (KDL `${ENV_VAR}` patterns).
+- [x] §10 Add a vault adapter (HashiCorp Vault or AWS Secrets Manager) as an optional feature for `apns.cert_path` / `fcm.bearer_token`. Or document operator workflow.
+- [x] §11 Add a SIGHUP handler for hot config reload (or document restart-required in `README.md`).
 
 ### Engineering hygiene (master plan §5)
 - [x] §12 Add `cargo audit` weekly + on PR (currently absent).
