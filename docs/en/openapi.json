@@ -1,0 +1,370 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "floria push gateway API",
+    "version": "1.0.0-local",
+    "description": "Local OpenAPI artifact for the public floria notify and discovery endpoints."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:5000"
+    }
+  ],
+  "paths": {
+    "/api/v1/push/notify": {
+      "post": {
+        "operationId": "notify",
+        "summary": "Submit a minimized push wakeup request",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "httpMessageSignature": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-Origin-Service-DID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Destination-Service-DID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Request accepted or deduplicated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/push/bridge/describe": {
+      "get": {
+        "operationId": "bridgeDescribe",
+        "summary": "Describe configured provider bridge capabilities",
+        "responses": {
+          "200": {
+            "description": "Provider capability matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeDescribeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integration/describe": {
+      "get": {
+        "operationId": "integrationDescribe",
+        "summary": "Describe floria integration surfaces",
+        "responses": {
+          "200": {
+            "description": "Integration surface list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationDescribeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "httpMessageSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature-Input",
+        "description": "RFC 9421 HTTP Message Signature headers are validated with configured service principals."
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Standard error envelope",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "NotifyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation_id",
+          "notification"
+        ],
+        "properties": {
+          "operation_id": {
+            "const": "cx.push.notify"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "origin_service_did": {
+            "type": "string"
+          },
+          "destination_service_did": {
+            "type": "string"
+          },
+          "notification": {
+            "$ref": "#/components/schemas/Notification"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "push_target_id",
+          "wakeup_kind",
+          "devices"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^cx:event:"
+          },
+          "message_id": {
+            "type": "string",
+            "pattern": "^cx:message:"
+          },
+          "flow_id": {
+            "type": "string",
+            "pattern": "^cx:flow:"
+          },
+          "realm_id": {
+            "type": "string",
+            "pattern": "^cx:realm:"
+          },
+          "push_target_id": {
+            "type": "string",
+            "pattern": "^cx:pseudonym:push:"
+          },
+          "wakeup_kind": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,32}$"
+          },
+          "push_hint": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "devices": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Device"
+            }
+          }
+        }
+      },
+      "Device": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "app_id",
+          "push_key"
+        ],
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "push_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "NotifyResponse": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "accepted",
+          "rejected",
+          "provider_retries",
+          "delivery_receipts"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "accepted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejected": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RejectedDevice"
+            }
+          },
+          "provider_retries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "delivery_receipts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "RejectedDevice": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "push_key_hash": {
+            "type": "string"
+          }
+        }
+      },
+      "BridgeDescribeResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "provider_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "provider_capabilities_version": {
+            "type": "string"
+          }
+        }
+      },
+      "IntegrationDescribeResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "ok",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "const": false
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

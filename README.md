@@ -100,9 +100,12 @@ The config format is detected by file extension:
 - `.yaml` / `.yml` — YAML
 
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
+See [docs/en/server-integration.md](./docs/en/server-integration.md) for soland / server-side `/notify` integration.
+See [docs/en/mobile-integration.md](./docs/en/mobile-integration.md) for chime / mobile-client integration boundaries.
 See [docs/en/credential-rotation.md](./docs/en/credential-rotation.md) for the credential rotation runbook.
 See [docs/en/reverse-proxy.md](./docs/en/reverse-proxy.md) for the TLS-termination / mTLS reverse-proxy reference (sample nginx and Caddy configs in `examples/reverse-proxy/`).
 See [docs/en/supply-chain.md](./docs/en/supply-chain.md) for local Trivy, Syft SBOM, and Cosign/SLSA provenance commands.
+See [docs/en/openapi.json](./docs/en/openapi.json) for the local OpenAPI artifact.
 
 Quick notes:
 - `proxy` in the config file takes precedence over `HTTPS_PROXY`
