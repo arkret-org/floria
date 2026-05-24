@@ -59,7 +59,7 @@
 ### Docs
 - [x] §24 Add a server-side integration guide (`docs/en/server-integration.md`) for soland calling `/api/v1/push/notify`.
 - [x] §25 Add a mobile-dev integration guide (`docs/en/mobile-integration.md`) referencing chime.
-- [x] §26 Publish an OpenAPI spec for `/notify`, `/bridge/describe`, `/integration/describe`.
+- [x] §26 Generate and document the local OpenAPI spec for `/notify`, `/bridge/describe`, `/integration/describe`; no remote publish step.
 
 ## Phase 5
 
