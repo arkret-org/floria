@@ -99,7 +99,7 @@ pub(super) async fn account_deactivate_fanout(
 
     let Some(ledger) = state.deactivation_ledger.as_ref() else {
         // The endpoint exists even when the ledger isn't wired up so
-        // soland can detect mis-configurations early. We answer 503 so
+        // soland can detect misconfigurations early. We answer 503 so
         // soland retries rather than reporting fanout_complete on a
         // dropped broadcast.
         finish_error(

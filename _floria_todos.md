@@ -39,9 +39,9 @@
 - [ ] §11 Add a SIGHUP handler for hot config reload (or document restart-required in `README.md`).
 
 ### Engineering hygiene (master plan §5)
-- [ ] §12 Add `cargo audit` weekly + on PR (currently absent).
-- [ ] §13 Add `cargo deny check` to CI.
-- [ ] §14 Add `typos` workflow.
+- [x] §12 Add `cargo audit` weekly + on PR (currently absent).
+- [x] §13 Add `cargo deny check` to CI.
+- [x] §14 Add `typos` workflow.
 - [ ] §15 Add Trivy scan on docker image; fail build on HIGH+ CVEs.
 - [ ] §16 Generate SBOM as a local artifact.
 - [ ] §17 Add local cosign/SLSA provenance command documentation; do not push images or tags.
