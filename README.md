@@ -101,6 +101,7 @@ The config format is detected by file extension:
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
 See [docs/en/credential-rotation.md](./docs/en/credential-rotation.md) for the credential rotation runbook.
 See [docs/en/reverse-proxy.md](./docs/en/reverse-proxy.md) for the TLS-termination / mTLS reverse-proxy reference (sample nginx and Caddy configs in `examples/reverse-proxy/`).
+See [docs/en/supply-chain.md](./docs/en/supply-chain.md) for local Trivy, Syft SBOM, and Cosign/SLSA provenance commands.
 
 Quick notes:
 - `proxy` in the config file takes precedence over `HTTPS_PROXY`
@@ -151,6 +152,12 @@ Build the image:
 
 ```powershell
 docker build -t floria .
+```
+
+Generate local supply-chain artifacts without publishing an image or Git tag:
+
+```powershell
+.\scripts\local-supply-chain.ps1 -Image floria:local-supply-chain -SkipCosign
 ```
 
 Run it with a mounted config file:
