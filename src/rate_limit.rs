@@ -325,6 +325,7 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
     fn config() -> NotifyRateLimitConfig {
         let mut config = NotifyRateLimitConfig::default();
@@ -403,5 +404,81 @@ mod tests {
             units: 1,
         }];
         assert!(limiter.check_many(&probe).is_ok());
+    }
+
+    #[test]
+    #[ignore = "long-running local soak scaffold; set FLORIA_SOAK_RUN=1 to execute"]
+    fn soak_chaos_rate_limit_cleanup() {
+        if env::var("FLORIA_SOAK_RUN").ok().as_deref() != Some("1") {
+            eprintln!("set FLORIA_SOAK_RUN=1 to run the local soak/chaos scaffold");
+            return;
+        }
+
+        let notifications_per_minute = env_usize("FLORIA_SOAK_NOTIFICATIONS_PER_MINUTE", 10_000);
+        let minutes = env_usize("FLORIA_SOAK_MINUTES", 30);
+        let realtime = env::var("FLORIA_SOAK_REALTIME").ok().as_deref() == Some("1");
+        let window = if realtime {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(1)
+        };
+
+        let mut config = NotifyRateLimitConfig::default();
+        config.window_seconds = window.as_secs();
+        let limiter = NotifyRateLimiter::new(config);
+
+        for minute in 0..minutes {
+            for index in 0..notifications_per_minute {
+                let check = NotifyRateLimitCheck {
+                    scope: "soak_notification",
+                    subject: format!("minute-{minute}-device-{index}"),
+                    limit: 1,
+                    units: 1,
+                };
+                limiter
+                    .check_many(&[check])
+                    .expect("soak rate-limit check should accept unique subjects");
+            }
+
+            let live_counters = memory_counter_len(&limiter);
+            assert!(
+                live_counters <= notifications_per_minute + 1,
+                "rate-limit counters grew beyond one active window: {live_counters}"
+            );
+
+            std::thread::sleep(window + Duration::from_millis(50));
+            let cleanup_probe = NotifyRateLimitCheck {
+                scope: "soak_cleanup_probe",
+                subject: format!("minute-{minute}"),
+                limit: 1,
+                units: 1,
+            };
+            limiter
+                .check_many(&[cleanup_probe])
+                .expect("cleanup probe should be accepted");
+            assert_eq!(
+                memory_counter_len(&limiter),
+                1,
+                "expired rate-limit counters should be retained only until the next check"
+            );
+        }
+    }
+
+    fn env_usize(name: &str, default: usize) -> usize {
+        env::var(name)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(default)
+    }
+
+    fn memory_counter_len(limiter: &NotifyRateLimiter) -> usize {
+        match &limiter.backend {
+            RateLimiterBackend::Memory(backend) => backend
+                .counters
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .len(),
+            RateLimiterBackend::Redis(_) => unreachable!("soak scaffold uses memory backend"),
+        }
     }
 }

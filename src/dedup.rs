@@ -472,6 +472,8 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
     use crate::models::RejectedDevice;
 
     #[test]
@@ -554,5 +556,87 @@ mod tests {
             .to_string();
 
         assert!(error.contains("invalid notify_dedup redis_url"));
+    }
+
+    #[test]
+    #[ignore = "Redis-backed local load scaffold; set FLORIA_REDIS_DEDUP_LOAD_RUN=1 and FLORIA_REDIS_URL"]
+    fn redis_dedup_ttl_load() -> Result<()> {
+        if env::var("FLORIA_REDIS_DEDUP_LOAD_RUN").ok().as_deref() != Some("1") {
+            eprintln!(
+                "set FLORIA_REDIS_DEDUP_LOAD_RUN=1 and FLORIA_REDIS_URL to run the Redis TTL load scaffold"
+            );
+            return Ok(());
+        }
+
+        let redis_url = env::var("FLORIA_REDIS_URL")
+            .context("FLORIA_REDIS_URL is required for redis_dedup_ttl_load")?;
+        let samples = env_usize("FLORIA_REDIS_DEDUP_LOAD_SAMPLES", 1_000);
+        let ttl = Duration::from_secs(env_usize("FLORIA_REDIS_DEDUP_TTL_SECONDS", 30) as u64);
+        let key_prefix = format!("floria:test:dedup-load:{}", std::process::id());
+        let dedup = NotifyDeduplicator::redis(ttl, &redis_url, key_prefix)?;
+        let backend = match &dedup.backend {
+            NotifyDedupBackend::Redis(backend) => backend,
+            NotifyDedupBackend::Memory(_) => unreachable!("load scaffold requires Redis backend"),
+        };
+        let mut connection = backend.connection()?;
+        let mut keys = Vec::with_capacity(samples * 2);
+
+        for index in 0..samples {
+            let key = format!("load-key-{index}");
+            let fingerprint = request_hash(format!("request-{index}").as_bytes());
+            dedup.insert_success(&key, &fingerprint, sample_response(index));
+
+            let response_key = backend.response_key(&key);
+            assert_redis_ttl(&mut connection, &response_key, ttl)?;
+            keys.push(response_key);
+
+            let push_key = format!("push-key-{index}");
+            dedup.mark_delivered_device(&key, "com.example.mobile", &push_key);
+            let delivered_key = backend.delivered_key(&key, "com.example.mobile", &push_key);
+            assert_redis_ttl(&mut connection, &delivered_key, ttl)?;
+            keys.push(delivered_key);
+        }
+
+        for chunk in keys.chunks(256) {
+            let mut command = redis::cmd("DEL");
+            for key in chunk {
+                command.arg(key);
+            }
+            let _: i64 = command.query(&mut connection)?;
+        }
+        Ok(())
+    }
+
+    fn sample_response(index: usize) -> NotifyResponse {
+        NotifyResponse {
+            request_id: format!("request-{index}"),
+            accepted: 1,
+            rejected: vec![],
+            provider_retries: vec![],
+            delivery_receipts: vec![],
+        }
+    }
+
+    fn assert_redis_ttl(
+        connection: &mut redis::Connection,
+        key: &str,
+        expected: Duration,
+    ) -> Result<()> {
+        let actual = connection
+            .ttl::<_, i64>(key)
+            .with_context(|| format!("failed to query TTL for {key}"))?;
+        let expected = ttl_seconds(expected);
+        anyhow::ensure!(
+            (1..=expected).contains(&actual),
+            "Redis key {key} TTL {actual} was outside 1..={expected}"
+        );
+        Ok(())
+    }
+
+    fn env_usize(name: &str, default: usize) -> usize {
+        env::var(name)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(default)
     }
 }

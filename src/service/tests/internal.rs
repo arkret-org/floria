@@ -4,6 +4,7 @@
 //! the sealed-channel "still complete" outcome.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
@@ -11,9 +12,24 @@ use serde_json::{Value, json};
 use super::*;
 use crate::AppState;
 use crate::broadcast::InProcessBroadcastBus;
-use crate::deactivation::DeactivationLedger;
+use crate::deactivation::{
+    AccountDeactivateFanoutBroadcast, DeactivationLedger, DeactivationQueueDrain,
+};
 use crate::push_contact_cache::{PsiVerdict, PushContactCache};
 use crate::pushkin::PushkinRegistry;
+
+#[derive(Debug)]
+struct TestQueueDrain {
+    calls: Arc<AtomicUsize>,
+    drained: usize,
+}
+
+impl DeactivationQueueDrain for TestQueueDrain {
+    fn drain(&self, _broadcast: &AccountDeactivateFanoutBroadcast) -> anyhow::Result<usize> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.drained)
+    }
+}
 
 fn test_service_with_internal_state(
     deactivation_ledger: Option<Arc<DeactivationLedger>>,
@@ -88,6 +104,49 @@ async fn account_deactivate_fanout_is_idempotent_across_retries() {
     assert_eq!(first_body, second_body);
     // Critical property — the retry does NOT double-count.
     assert_eq!(second_body["device_bindings_unbound"], json!(1));
+}
+
+#[tokio::test]
+async fn account_deactivate_fanout_reports_drained_queue_count() {
+    let drain_calls = Arc::new(AtomicUsize::new(0));
+    let ledger = Arc::new(DeactivationLedger::with_queue_drain(Arc::new(
+        TestQueueDrain {
+            calls: drain_calls.clone(),
+            drained: 7,
+        },
+    )));
+    let service = test_service_with_internal_state(Some(ledger), None);
+
+    let payload = json!({
+        "fanout_id": "fanout-drain-1",
+        "actor_did": "did:web:alice.example",
+        "devices": [
+            {"device_id": "device-a", "push_key_hash": "hash-a"},
+            {"device_id": "device-b"}
+        ]
+    });
+
+    let mut first = TestClient::post("http://127.0.0.1/api/v1/internal/account_deactivate_fanout")
+        .json(&payload)
+        .send(&service)
+        .await;
+    assert_eq!(first.status_code.unwrap(), StatusCode::OK);
+    let first_body: Value = first.take_json().await.unwrap();
+    assert_eq!(first_body["outcome"], json!("completed"));
+    assert_eq!(first_body["messages_drained"], json!(7));
+    assert_eq!(drain_calls.load(Ordering::SeqCst), 1);
+
+    let mut second = TestClient::post("http://127.0.0.1/api/v1/internal/account_deactivate_fanout")
+        .json(&payload)
+        .send(&service)
+        .await;
+    let second_body: Value = second.take_json().await.unwrap();
+    assert_eq!(second_body, first_body);
+    assert_eq!(
+        drain_calls.load(Ordering::SeqCst),
+        1,
+        "idempotent retry must not drain the queue twice"
+    );
 }
 
 #[tokio::test]
