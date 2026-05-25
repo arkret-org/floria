@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod auth;
 pub mod broadcast;
+pub mod circuit_breaker;
 pub mod config;
 pub mod deactivation;
 pub mod dedup;
