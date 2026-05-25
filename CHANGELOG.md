@@ -11,12 +11,57 @@ parent Contrix spec's round-numbering for grouping wire-breaking changes.
 Push-gateway alignment with the CXP-0007 Circle primitive landing in
 contrix-rust-sdk P1.
 
-- **Changed** `rust-version` lowered from `1.94` to `1.92` (edition 2024 is
-  stable since 1.85, let-chains since 1.88 — keeping edition 2024 with a
-  more conservative MSRV floor).
-- **Fixed** `.github/workflows/ci.yml` formatting job now invokes plain
-  `cargo fmt --all -- --check` (was `cargo +nightly fmt`, which conflicted
-  with the `dtolnay/rust-toolchain@stable` action and broke CI on stable).
+#### Added
+
+- `Notification.circle_id` (typed `cx:circle:…`) and
+  `Notification.effective_scope` (reducer-stamped envelope binding
+  mirrored from the SDK's `EffectiveScope`). Routing / dedup /
+  metrics key off `circle_id > flow_id > realm_id` precedence.
+- Per-(provider, scope) delivery counter
+  `floria_notify_delivery_total{provider, scope_kind, scope_id}` gated
+  by the new `http.metrics_detailed_circle_labels` boolean
+  (default `false` — labels key off `realm_id` to bound cardinality).
+- New `http.circle_rate_limits.{per_circle_qps,
+  per_circle_concurrency}` config fields (both default null).
+- New `circuit_breaker` module: in-process per-(provider, realm,
+  circle) breaker so a single misbehaving Circle does NOT bleed into a
+  realm- or provider-wide outage. Threshold + open-window are
+  config-driven; auto-resets on cool-down.
+- `effective_scope_mismatch` schema rejection — the wire routing
+  fields (`realm_id`, `circle_id`) must agree with the envelope's
+  `effective_scope` binding when present.
+- Three new privacy-invariant tests asserting that Circle routing
+  identifiers (`circle_id`, `effective_scope`, `scope_circle_id`)
+  NEVER reach a provider's plaintext payload (top-level, recursive,
+  builder paths). proptest harness extended with the same forbidden
+  keys.
+
+#### Changed
+
+- `rust-version` lowered from `1.94` to `1.92` (edition 2024 is
+  stable since 1.85, let-chains since 1.88 — keeping edition 2024
+  with a more conservative MSRV floor).
+- `.github/workflows/ci.yml`: formatting job now invokes plain
+  `cargo fmt --all -- --check` (was `cargo +nightly fmt`, which
+  conflicted with the `dtolnay/rust-toolchain@stable` action and
+  broke CI on stable). New `msrv` job verifies the workspace builds
+  on the declared MSRV.
+- Dockerfile: pinned `rust:1.94-bookworm` → `rust:1.92-bookworm` to
+  match the new MSRV floor.
+- Round-23 local forbidden-key list: drops `realm_id` (SDK now covers
+  it) and adds CXP-0007's `circle_id`, `effective_scope`, and
+  `scope_circle_id`.
+
+#### Fixed
+
+- Resolved both `TODO(realm-rework)` markers at
+  `src/service/notify.rs:432, 548` and the matching markers in
+  `src/pushkin/{android,fcm,webpush,mod}.rs`.
+
+#### Notes
+
+- Version number stays `0.1.0` per the milestone hard rule (no
+  release this round).
 
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
 
