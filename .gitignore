@@ -1,3 +1,5 @@
 /target*
 .claude//_circle_rollout_baseline.md
-/_*_todos.md
+/_*.md
+
+.claude/
