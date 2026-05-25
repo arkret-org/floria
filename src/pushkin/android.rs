@@ -296,6 +296,7 @@ mod tests {
                 missed_calls: Some(1),
                 highlight_count: Some(1),
             },
+            ..Default::default()
         }
     }
 
@@ -315,11 +316,15 @@ mod tests {
         // correlation identifiers any more. The client now derives
         // those from the e2ee wakeup material it pulls server-side.
         assert!(payload.data.get("flow_id").is_none());
-        // TODO(realm-rework): SDK forbidden list still names the legacy
-        // `space_id`; once it adds `realm_id`, this defense-in-depth
-        // assertion stays in place to cover both.
+        // SDK + local R23 sanitizers cover both the renamed security
+        // id (`realm_id`) AND the renamed container id (`space_id`).
         assert!(payload.data.get("space_id").is_none());
         assert!(payload.data.get("realm_id").is_none());
+        // CXP-0007 — Circle routing identifiers never appear in the
+        // android freeform `data` dict.
+        assert!(payload.data.get("circle_id").is_none());
+        assert!(payload.data.get("effective_scope").is_none());
+        assert!(payload.data.get("scope_circle_id").is_none());
         assert!(payload.data.get("event_id").is_none());
         assert!(payload.data.get("message_id").is_none());
         assert!(payload.data.get("sender").is_none());
@@ -384,6 +389,7 @@ mod tests {
                 devices: vec![device()],
                 mention_redirect_target_actor_ids: Vec::new(),
                 counts: Counts::default(),
+                ..Default::default()
             },
             Map::new(),
             true,

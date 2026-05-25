@@ -662,6 +662,7 @@ mod tests {
                 missed_calls: Some(1),
                 highlight_count: Some(1),
             },
+        ..Default::default()
         }
     }
 
@@ -695,9 +696,15 @@ mod tests {
         for forbidden in [
             "flow_id",
             "realm_id",
-            // TODO(realm-rework): keep `space_id` here too — both the
-            // renamed security id AND the new container id are off-wire.
+            // Both the renamed security id (`realm_id`) AND the
+            // renamed container id (`space_id`) are off-wire — SDK
+            // sanitizer covers both since spec 59ac1d4.
             "space_id",
+            // CXP-0007 — Circle routing identifiers MUST NOT surface
+            // on the webpush plaintext envelope.
+            "circle_id",
+            "effective_scope",
+            "scope_circle_id",
             "event_id",
             "message_id",
             "sender",

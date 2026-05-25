@@ -115,8 +115,40 @@ pub struct HttpConfig {
     pub notify_auth: NotifyAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
+    /// CXP-0007 Circle primitive — when `true`, the per-(provider,
+    /// scope) delivery counter (`floria_notify_delivery_total`) labels
+    /// `scope_id` with the `circle_id` instead of the parent
+    /// `realm_id` when a Circle is set. Default `false` keeps the
+    /// label cardinality bounded by realm count; operators only opt
+    /// in for environments where per-Circle delivery dashboards are
+    /// needed.
+    #[serde(default)]
+    pub metrics_detailed_circle_labels: bool,
+    /// CXP-0007 Circle primitive — per-Circle rate limits and
+    /// concurrency caps. Default disabled.
+    #[serde(default)]
+    pub circle_rate_limits: CircleRateLimitConfig,
     #[serde(flatten)]
     extra: Map<String, Value>,
+}
+
+/// CXP-0007 Circle primitive — per-Circle rate-limit configuration.
+/// Defaults leave both knobs unset (no Circle-specific limits applied).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct CircleRateLimitConfig {
+    /// Max sustained notify QPS for a single Circle. `None` disables
+    /// the per-Circle QPS cap.
+    pub per_circle_qps: Option<u32>,
+    /// Max in-flight notify dispatches for a single Circle. `None`
+    /// disables the per-Circle concurrency cap.
+    pub per_circle_concurrency: Option<u32>,
+}
+
+impl CircleRateLimitConfig {
+    pub fn enabled(&self) -> bool {
+        self.per_circle_qps.is_some() || self.per_circle_concurrency.is_some()
+    }
 }
 
 /// Accept both `"value"` and `["value", ...]` when deserializing a `Vec<String>`.
@@ -162,6 +194,8 @@ impl Default for HttpConfig {
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
+            metrics_detailed_circle_labels: false,
+            circle_rate_limits: CircleRateLimitConfig::default(),
             extra: Map::new(),
         }
     }
@@ -2025,6 +2059,8 @@ apps: {}
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
+            metrics_detailed_circle_labels: false,
+            circle_rate_limits: CircleRateLimitConfig::default(),
             extra: Map::new(),
         };
 
@@ -2044,6 +2080,8 @@ apps: {}
             notify_auth: NotifyAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
+            metrics_detailed_circle_labels: false,
+            circle_rate_limits: CircleRateLimitConfig::default(),
             extra: Map::new(),
         };
 

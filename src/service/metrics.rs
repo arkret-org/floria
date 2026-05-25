@@ -6,7 +6,7 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use crate::metrics as app_metrics;
-use crate::models::{DeliveryReceipt, NotifyResponse};
+use crate::models::{DeliveryReceipt, Notification, NotifyResponse};
 
 #[derive(Debug, Serialize)]
 pub(super) struct ErrorEnvelope<'a> {
@@ -63,6 +63,40 @@ pub(super) fn record_delivery_receipt_outcomes(
     }
     for ((provider, outcome), count) in per_provider {
         app_metrics::notify_delivery_outcome_by_provider(&provider, outcome, count);
+    }
+}
+
+/// CXP-0007 — emit the per-(provider, scope) delivery counter. When
+/// `detailed_circle_labels` is `true` and the notification carried a
+/// `circle_id`, labels with `scope_kind=circle, scope_id=<cx:circle:…>`.
+/// Otherwise labels with `scope_kind=realm, scope_id=<cx:realm:…>` to
+/// keep the cardinality bounded.
+pub(super) fn record_notify_delivery_by_scope(
+    notification: &Notification,
+    delivery_receipts: &[DeliveryReceipt],
+    detailed_circle_labels: bool,
+) {
+    let (scope_kind, scope_id): (&'static str, Option<&str>) =
+        match (detailed_circle_labels, notification.circle_id()) {
+            (true, Some(circle)) => ("circle", Some(circle)),
+            _ => ("realm", notification.realm_id()),
+        };
+
+    let mut per_provider: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for receipt in delivery_receipts {
+        let Some(provider) = receipt.provider.as_deref() else {
+            continue;
+        };
+        if receipt.status.as_deref() != Some("accepted")
+            && receipt.status.as_deref() != Some("accepted_cached")
+        {
+            continue;
+        }
+        *per_provider.entry(provider.to_owned()).or_default() += 1;
+    }
+    for (provider, count) in per_provider {
+        app_metrics::notify_delivery_by_scope(&provider, scope_kind, scope_id, count);
     }
 }
 
