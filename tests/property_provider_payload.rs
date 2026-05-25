@@ -77,6 +77,13 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
+    // CXP-0007 Circle primitive — `circle_id` is the encryption
+    // sub-boundary id, `effective_scope` is the reducer-stamped
+    // envelope binding. Both drive gateway-internal routing only;
+    // either on the plaintext wire is a hard correlation leak.
+    "circle_id",
+    "effective_scope",
+    "scope_circle_id",
 ];
 
 fn arb_forbidden_key() -> impl Strategy<Value = &'static str> {
