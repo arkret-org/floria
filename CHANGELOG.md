@@ -6,6 +6,18 @@ parent Contrix spec's round-numbering for grouping wire-breaking changes.
 
 ## [Unreleased]
 
+### CXP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
+
+Push-gateway alignment with the CXP-0007 Circle primitive landing in
+contrix-rust-sdk P1.
+
+- **Changed** `rust-version` lowered from `1.94` to `1.92` (edition 2024 is
+  stable since 1.85, let-chains since 1.88 — keeping edition 2024 with a
+  more conservative MSRV floor).
+- **Fixed** `.github/workflows/ci.yml` formatting job now invokes plain
+  `cargo fmt --all -- --check` (was `cargo +nightly fmt`, which conflicted
+  with the `dtolnay/rust-toolchain@stable` action and broke CI on stable).
+
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
 
 Push-gateway alignment with the round-4 protocol-review commits. See
