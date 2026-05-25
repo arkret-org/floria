@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "contrix"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -649,7 +649,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-api"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "contrix-core",
@@ -662,11 +662,12 @@ dependencies = [
 
 [[package]]
 name = "contrix-core"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "contrix-identifiers",
+ "getrandom 0.3.4",
  "regex",
  "serde",
  "serde_json",
@@ -676,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-crypto"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "contrix-core",
@@ -688,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-ffi"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "contrix-core",
  "serde",
@@ -697,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-html"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "contrix-core",
  "serde",
@@ -706,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-identifiers"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -718,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-signatures"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -730,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-testing"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "contrix-api",
