@@ -25,11 +25,12 @@ use crate::models::{
 use crate::rate_limit::NotifyRateLimitCheck;
 
 use super::metrics::{
-    finish_error, finish_json, record_delivery_receipt_outcomes, record_notify_delivery_outcomes,
+    finish_error, finish_json, record_delivery_receipt_outcomes, record_notify_delivery_by_scope,
+    record_notify_delivery_outcomes,
 };
 use super::{
-    ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX, ACTIVE_MESSAGE_ID_PREFIX,
-    ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
+    ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX,
+    ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
 };
 
 // Round 4 (spec a77b995) — additional forbidden-key list maintained
@@ -429,10 +430,20 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.realm_id",
         ACTIVE_REALM_ID_PREFIX,
     )?;
-    // TODO(realm-rework): the SDK's `is_forbidden_payload_key` still
-    // lists the legacy `space_id`. Once it adds `realm_id`, the local
-    // defense-in-depth check in `validate_notification_contract` for
-    // `realm_id` / `space_id` can fall through to the SDK helper.
+    // CXP-0007 — `circle_id` is the encryption-sub-boundary id when the
+    // notification is scoped into a Circle. Validated for prefix shape
+    // here; consistency with `effective_scope` is enforced separately
+    // in `validate_effective_scope_consistency`.
+    validate_active_ref(
+        notification.get("circle_id"),
+        "notification.circle_id",
+        ACTIVE_CIRCLE_ID_PREFIX,
+    )?;
+    // SDK's `is_forbidden_payload_key` now lists `realm_id` (spec
+    // 59ac1d4 Realm/Space inversion) so the pushkin-level strip is
+    // covered there. We still hard-reject `space_id` at the inbound
+    // contract layer because it is forbidden on the wire model
+    // entirely — not just as a forbidden payload key.
     if notification.get("space_id").is_some() {
         return Err(
             "notification.space_id is forbidden on the push wire model (Realm/Space rework)"
@@ -441,6 +452,44 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
     }
 
     Ok(())
+}
+
+/// CXP-0007 — assert that `notification.effective_scope` (the
+/// reducer-stamped envelope binding) is consistent with the routing
+/// fields the caller supplied (`realm_id` / `circle_id`). Mismatch
+/// means either the principal server stamped a different scope onto
+/// the originating Event than the push caller is now claiming, OR
+/// the caller forgot to update `circle_id` after a Circle scope
+/// switch; both are operator bugs and we fail closed with
+/// `effective_scope_mismatch`.
+fn validate_effective_scope_consistency(notification: &Notification) -> Result<(), String> {
+    let Some(scope) = notification.effective_scope.as_ref() else {
+        return Ok(());
+    };
+    let scope_realm = scope.realm_id().as_str();
+    if let Some(realm_id) = notification.realm_id()
+        && realm_id != scope_realm
+    {
+        return Err(format!(
+            "effective_scope_mismatch: notification.realm_id `{realm_id}` does not match \
+             effective_scope.realm_id `{scope_realm}`"
+        ));
+    }
+    match (scope.circle_id().map(|c| c.as_str()), notification.circle_id()) {
+        (Some(scope_circle), Some(wire_circle)) if scope_circle != wire_circle => Err(format!(
+            "effective_scope_mismatch: notification.circle_id `{wire_circle}` does not match \
+             effective_scope.circle_id `{scope_circle}`"
+        )),
+        (Some(scope_circle), None) => Err(format!(
+            "effective_scope_mismatch: effective_scope is Circle (`{scope_circle}`) but \
+             notification.circle_id is absent"
+        )),
+        (None, Some(wire_circle)) => Err(format!(
+            "effective_scope_mismatch: effective_scope is Realm but notification.circle_id \
+             `{wire_circle}` is set"
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn validate_push_target_id(value: Option<&Value>) -> Result<(), String> {
@@ -544,19 +593,24 @@ fn validate_notification_contract(
             || notification.realm_name.is_some())
     {
         // Realm/Space reversal — `space_name` is gone from the wire
-        // model; the security-boundary name is now `realm_name`.
-        // TODO(realm-rework): once the broader access-policy schema
-        // splits Realm policy from Space (container) policy, gate
-        // `realm_name` here against the Realm-policy decision and the
-        // new container-`space_name` (if it ever lands on the wire)
-        // against a separate Space policy. The blind-profile blanket
-        // ban below is still safe in the meantime.
+        // model; the security-boundary name is now `realm_name`. The
+        // blind-profile blanket ban below stays as the active
+        // enforcement — a follow-up `TODO(circle-rollout-P2C.3):` will
+        // split this into Realm- vs Container-policy decisions once
+        // the access-policy schema lands the corresponding split.
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
              sender_display_name or flow/realm name metadata under the default \
              `cx.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
+
+    // CXP-0007 — `effective_scope` must agree with the routing fields
+    // when set. This catches operator misconfigurations (caller
+    // updated `realm_id` but forgot `circle_id`, or stamped a Circle
+    // scope on the envelope but kept `circle_id` blank in the push
+    // wire model).
+    validate_effective_scope_consistency(notification)?;
 
     if let Some(push_hint) = notification.push_hint.as_deref() {
         validate_push_hint(push_hint)?;
@@ -1940,6 +1994,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
         }
         record_notify_delivery_outcomes(&response);
+        record_notify_delivery_by_scope(
+            &notification,
+            &response.delivery_receipts,
+            state.metrics_detailed_circle_labels,
+        );
         finish_json(res, StatusCode::OK, response, started);
         return;
     }
@@ -2080,6 +2139,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
     }
     record_notify_delivery_outcomes(&response);
+    record_notify_delivery_by_scope(
+        &notification,
+        &response.delivery_receipts,
+        state.metrics_detailed_circle_labels,
+    );
     finish_json(res, StatusCode::OK, response, started);
 }
 
@@ -2178,6 +2242,17 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     }
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
+    }
+    // CXP-0007 — `circle_id` and `effective_scope` are routing-affecting
+    // (two pushes for the same Flow in different Circles must not
+    // collide in the dedup cache).
+    if let Some(value) = notification.circle_id() {
+        normalized.insert("circle_id".to_owned(), Value::String(value.to_owned()));
+    }
+    if let Some(scope) = notification.effective_scope.as_ref()
+        && let Ok(value) = serde_json::to_value(scope)
+    {
+        normalized.insert("effective_scope".to_owned(), canonical_json_value(&value));
     }
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));

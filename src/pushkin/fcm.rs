@@ -719,6 +719,7 @@ mod tests {
                 missed_calls: Some(1),
                 highlight_count: Some(1),
             },
+        ..Default::default()
         }
     }
 
@@ -758,11 +759,15 @@ mod tests {
             "message_id",
             "flow_id",
             "realm_id",
-            // TODO(realm-rework): SDK forbidden list still keys off
-            // `space_id`; pin `space_id` here too once SDK catches up
-            // so this defense-in-depth check covers both the renamed
-            // security id AND the new container id.
+            // SDK + local R23 sanitizers strip both the renamed
+            // security id (`realm_id`) AND the renamed container id
+            // (`space_id`).
             "space_id",
+            // CXP-0007 — Circle routing identifiers MUST NOT reach
+            // the provider plaintext payload.
+            "circle_id",
+            "effective_scope",
+            "scope_circle_id",
             "sender",
             "sender_display_name",
             "flow_name",
@@ -833,6 +838,7 @@ mod tests {
                 missed_calls: Some(0),
                 highlight_count: Some(0),
             },
+        ..Default::default()
         };
 
         assert_eq!(

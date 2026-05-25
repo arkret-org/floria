@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod auth;
 pub mod broadcast;
+pub mod circuit_breaker;
 pub mod config;
 pub mod deactivation;
 pub mod dedup;
@@ -57,6 +58,10 @@ pub struct AppState {
     pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
     pub push_contact_cache: Option<Arc<PushContactCache>>,
     pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
+    /// CXP-0007 — when `true`, per-(provider, scope) metrics use the
+    /// `circle_id` (cardinality up to the number of active Circles).
+    /// Default `false` — labels key off the parent `realm_id`.
+    pub metrics_detailed_circle_labels: bool,
 }
 
 impl AppState {
@@ -72,6 +77,7 @@ impl AppState {
             deactivation_ledger: None,
             push_contact_cache: None,
             broadcast_bus: None,
+            metrics_detailed_circle_labels: false,
         }
     }
 
@@ -90,6 +96,7 @@ impl AppState {
             deactivation_ledger: None,
             push_contact_cache: None,
             broadcast_bus: None,
+            metrics_detailed_circle_labels: false,
         }
     }
 }

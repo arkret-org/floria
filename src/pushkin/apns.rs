@@ -969,6 +969,7 @@ mod tests {
                 missed_calls: None,
                 highlight_count: Some(1),
             },
+        ..Default::default()
         };
 
         let payload = pushkin
@@ -1045,6 +1046,7 @@ mod tests {
                 missed_calls: None,
                 highlight_count: None,
             },
+        ..Default::default()
         };
 
         let payload = pushkin

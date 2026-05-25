@@ -87,6 +87,22 @@ static NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER: LazyLock<IntCounterVec> = LazyLoc
     .expect("register floria_notify_delivery_outcome_by_app_total")
 });
 
+// CXP-0007 — per-(provider, scope) delivery breakdown. The scope label
+// is `realm_id` by default; when the operator opts in to
+// `http.metrics_detailed_circle_labels = true` and the request carried
+// a `circle_id`, the label becomes the circle id instead so dashboards
+// can observe per-Circle delivery health. Cardinality is bounded by
+// the operator configuration — detailed-mode is OFF by default.
+static NOTIFY_DELIVERY_BY_CIRCLE_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_delivery_total",
+        "Per-(provider, scope) delivery counter (scope is realm_id by default; \
+         circle_id when http.metrics_detailed_circle_labels=true)",
+        &["provider", "scope_kind", "scope_id"]
+    )
+    .expect("register floria_notify_delivery_total")
+});
+
 static NOTIFY_RATE_LIMIT_REJECT_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         "floria_notify_rate_limit_reject_total",
@@ -298,6 +314,29 @@ pub fn notify_delivery_outcome_by_app(app_id: &str, outcome: &str, count: usize)
     }
     NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER
         .with_label_values(&[app_id, outcome])
+        .inc_by(count as u64);
+}
+
+/// CXP-0007 — per-(provider, scope) delivery counter. `scope_kind` is
+/// `circle` when the caller passed a circle id AND the operator opted
+/// in to detailed labels via `http.metrics_detailed_circle_labels`;
+/// otherwise `realm`. Empty `scope_id` is rendered as `_unknown` to
+/// keep the metric vector dense without leaking `""`.
+pub fn notify_delivery_by_scope(
+    provider: &str,
+    scope_kind: &str,
+    scope_id: Option<&str>,
+    count: usize,
+) {
+    if count == 0 {
+        return;
+    }
+    let scope_id = scope_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("_unknown");
+    NOTIFY_DELIVERY_BY_CIRCLE_COUNTER
+        .with_label_values(&[provider, scope_kind, scope_id])
         .inc_by(count as u64);
 }
 

@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use blake2::Blake2s256;
 use blake2::digest::Digest;
+use contrix::EffectiveScope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -185,6 +186,24 @@ pub struct Notification {
     /// model entirely so it does NOT appear on this struct.
     #[serde(default)]
     pub realm_id: Option<String>,
+    /// CXP-0007 Circle primitive (spec b7d35be) — typed `cx:circle:` id
+    /// of the encryption sub-boundary this notification belongs to. When
+    /// present, routing / dedup / per-(provider,realm,circle) circuit
+    /// breaker stats key off this id rather than the parent realm so two
+    /// flows with the same name in different Circles do not collide.
+    /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
+    /// on the wire only to drive gateway-internal routing.
+    #[serde(default)]
+    pub circle_id: Option<String>,
+    /// CXP-0007 — reducer-stamped envelope scope binding mirrored on the
+    /// push wire model (`event_envelope.effective_scope`). Carries the
+    /// `{realm_id}` (Realm-default scope) or `{realm_id, circle_id}`
+    /// (Circle scope) discriminator the principal server stamped onto
+    /// the originating Event. When present and inconsistent with the
+    /// notification's `realm_id` / `circle_id` the request is rejected
+    /// with `effective_scope_mismatch`.
+    #[serde(default)]
+    pub effective_scope: Option<EffectiveScope>,
     #[serde(default)]
     pub user_is_target: Option<bool>,
     #[serde(default)]
@@ -226,12 +245,22 @@ pub struct Notification {
 }
 
 impl Notification {
+    /// CXP-0007 — the most-specific scope id the gateway should key
+    /// per-(provider, scope) state off (rate limits, circuit breaker
+    /// windows, retry queues). Precedence:
+    ///   1. `circle_id` (encryption sub-boundary)
+    ///   2. `flow_id`   (Realm-default-scoped conversation)
+    ///   3. `realm_id`  (security boundary)
     pub fn scope_id(&self) -> Option<&str> {
-        self.flow_id().or(self.realm_id())
+        self.circle_id().or_else(|| self.flow_id()).or_else(|| self.realm_id())
     }
 
     pub fn scope_name(&self) -> Option<&str> {
         self.flow_name().or(self.realm_name())
+    }
+
+    pub fn circle_id(&self) -> Option<&str> {
+        non_empty(self.circle_id.as_deref())
     }
 
     pub fn flow_id(&self) -> Option<&str> {

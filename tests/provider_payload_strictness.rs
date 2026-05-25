@@ -175,10 +175,14 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "event_id",
         "message_id",
         "flow_id",
-        // TODO(realm-rework): keep both `space_id` (SDK list) and
-        // `realm_id` (floria local strip) under assertion.
+        // Both `space_id` (SDK list since 59ac1d4) and `realm_id`
+        // (renamed security boundary) MUST stay off the wire.
         "space_id",
         "realm_id",
+        // CXP-0007 — Circle routing identifiers MUST NOT leak.
+        "circle_id",
+        "effective_scope",
+        "scope_circle_id",
         "sender",
         "sender_display_name",
         "flow_name",
@@ -191,6 +195,112 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
             "build_blind_provider_data should never emit `{forbidden}`"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// CXP-0007 Circle primitive — privacy invariants.
+//
+// Circle routing metadata (`circle_id`, `effective_scope`,
+// `scope_circle_id`) drives gateway-internal routing only. It MUST
+// NOT surface in any provider plaintext payload, regardless of which
+// profile (blind / visible) the caller is on — Circle identifiers
+// reveal the encryption sub-boundary an observer is looking at and
+// the reducer-stamped realm/circle binding.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sanitizer_strips_circle_routing_identifiers() {
+    let payload = json!({
+        "client": "ios",
+        "circle_id":         "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "effective_scope":   {
+            "kind": "circle",
+            "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000123",
+            "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+        },
+        "scope_circle_id":   "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "wakeup_kind": "message",
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let sanitized = sanitized_provider_payload(payload).unwrap();
+    for forbidden in ["circle_id", "effective_scope", "scope_circle_id"] {
+        assert!(
+            sanitized.get(forbidden).is_none(),
+            "CXP-0007 circle identifier `{forbidden}` survived the sanitizer"
+        );
+    }
+    assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));
+}
+
+#[test]
+fn sanitizer_strips_nested_circle_metadata() {
+    // Circle metadata smuggled inside a provider-defined wrapper (e.g.
+    // an APNs `aps` block, an Android `notification` block) must also
+    // get stripped by the recursive walk. The strings here are
+    // opaque to the sanitizer (it walks by key name, not value
+    // shape), so any cx-prefixed string works.
+    let payload = json!({
+        "client": "android",
+        "extra_block": {
+            "level_one": {
+                "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+                "nested": {
+                    "effective_scope": {
+                        "kind": "circle",
+                        "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000123",
+                        "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+                    },
+                },
+            },
+        },
+        "wakeup_kind": "message",
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let sanitized = sanitized_provider_payload(payload).unwrap();
+    let serialized = serde_json::to_string(&sanitized).unwrap();
+    assert!(
+        !serialized.contains("circle_id"),
+        "nested circle_id leaked through the recursive sanitizer: {serialized}"
+    );
+    assert!(
+        !serialized.contains("effective_scope"),
+        "nested effective_scope leaked through the recursive sanitizer: {serialized}"
+    );
+}
+
+#[test]
+fn build_blind_provider_data_never_emits_circle_metadata() {
+    // Realm + Circle ids must be canonical lower-case UUIDv7 to satisfy
+    // the SDK `EffectiveScope` deserializer (which is strict per
+    // `conformance/encoding.md` §4).
+    let notification: Notification = serde_json::from_value(json!({
+        "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+        "wakeup_kind": "message",
+        "realm_id":  "cx:realm:0196419b-0000-7000-8000-000000000123",
+        "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "effective_scope": {
+            "kind": "circle",
+            "realm_id":  "cx:realm:0196419b-0000-7000-8000-000000000123",
+            "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+        },
+        "counts": { "unread": 3 },
+    }))
+    .unwrap();
+
+    let data = build_blind_provider_data(&notification);
+    for forbidden in ["circle_id", "effective_scope", "scope_circle_id", "realm_id"] {
+        assert!(
+            data.get(forbidden).is_none(),
+            "blind provider data must never carry `{forbidden}`"
+        );
+    }
+    // The allow-listed blind fields still survive.
+    assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
+    assert_eq!(data.get("unread_count"), Some(&json!(3)));
 }
 
 // ---------------------------------------------------------------------------

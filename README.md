@@ -209,3 +209,10 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 Licensed under Apache 2.0. See `LICENSE`.
+
+---
+
+<!-- circle-rollout milestone pointer -->
+> **Active milestone tracking** (local-only, gitignored): see
+> `_floria_todos.md` in the parent `contrix-dev/` directory for the
+> circle-rollout (CXP-0007) work item list and per-stage checkpoints.

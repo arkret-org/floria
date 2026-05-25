@@ -551,10 +551,16 @@ impl std::fmt::Display for ProviderPayloadRejection {
 /// posture; `policy_frontier_digest` is a stable per-policy correlator;
 /// `trust_domain` discloses deployment scope; `reset_event_id` links
 /// pushes back to a cross-signing reset event.
-// TODO(round23-T07): once the SDK ships `is_forbidden_payload_key`
-// coverage for these names, drop the local list.
+///
+/// CXP-0007 adds `circle_id` and `effective_scope` to the list: both
+/// drive gateway-internal routing but are NEVER allowed to surface on
+/// the plaintext wire — `circle_id` would leak the encryption
+/// sub-boundary an observer is looking at, and `effective_scope`
+/// reveals the realm/circle binding the principal server stamped.
+// TODO(circle-rollout-P2C.5): once the SDK ships
+// `is_forbidden_payload_key` coverage for these names, drop the local
+// list.
 const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
-    "realm_id",
     "appeal_id",
     "attestation_evidence",
     "audit_purpose",
@@ -563,6 +569,10 @@ const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
     "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
+    // CXP-0007 Circle primitive.
+    "circle_id",
+    "effective_scope",
+    "scope_circle_id",
 ];
 
 /// Returns `true` if `key` matches a round R2/R3 locally-stripped
@@ -579,10 +589,11 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // `payload` — those are themselves on the SDK forbidden list when
     // they appear in the blind-wakeup contract, so anything that gets
     // here with one of those keys gets stripped.
-    // TODO(realm-rework): the SDK's `is_forbidden_payload_key` covers
-    // the legacy `space_id` (formerly the security boundary, now the
-    // container) but not yet the new `realm_id`. Strip it locally as
-    // defense-in-depth until the SDK catches up.
+    //
+    // SDK's `is_forbidden_payload_key` now covers `realm_id` (the
+    // renamed security-boundary id) AND the renamed container
+    // `space_id`. The local R23 list adds the round-R23 governance
+    // identifiers and CXP-0007's `circle_id` / `effective_scope`.
     map.retain(|key, _| {
         !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key)
             && !is_round23_local_forbidden(key)
@@ -806,6 +817,7 @@ mod sanitize_tests {
                 missed_calls: None,
                 highlight_count: None,
             },
+        ..Default::default()
         };
         let data = build_blind_provider_data(&notification);
         assert!(data.contains_key("push_target_id"));

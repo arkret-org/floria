@@ -26,6 +26,13 @@ const ACTIVE_FLOW_ID_PREFIX: &str = "cx:flow:";
 // prefix `cx:realm:`. The push wire model carries `realm_id`, never the
 // container-level `space_id` (which is on the forbidden-key list).
 const ACTIVE_REALM_ID_PREFIX: &str = "cx:realm:";
+// CXP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
+// inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
+// when present so two Flows that share a name in different Circles do
+// not collide. `circle_id` is gateway-routing only; it MUST NOT be
+// echoed back to providers (the local strip list in
+// `pushkin/mod.rs::ROUND23_LOCAL_FORBIDDEN` enforces that).
+const ACTIVE_CIRCLE_ID_PREFIX: &str = "cx:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
 // floria entirely. The four broadcast ephemeral signal kinds
