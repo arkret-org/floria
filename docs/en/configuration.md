@@ -1,6 +1,6 @@
 # Configuration Reference
 
-floria reads its configuration from a file specified by the `SOFLARE_CONF` environment variable.
+floria reads its configuration from a file specified by the `FLORIA_CONF` environment variable.
 When unset, it defaults to `floria.kdl` in the working directory.
 
 ## Config format
@@ -48,12 +48,12 @@ way. The only environment variables read directly by floria are listed in
 [Environment variables](#environment-variables).
 
 If a deployment wants `${ENV_VAR}` substitution, render the config before
-starting floria and point `SOFLARE_CONF` at the rendered file. Keep the rendered
+starting floria and point `FLORIA_CONF` at the rendered file. Keep the rendered
 file owned by the service account, restrict file permissions, and restart the
 process after replacing it. Provider credential paths such as APNs `keyfile` /
 `certfile`, FCM `service_account_file`, and WebPush `vapid_private_key` are
 resolved at startup; relative paths are resolved from the directory containing
-`SOFLARE_CONF` when that variable is set, otherwise from the current working
+`FLORIA_CONF` when that variable is set, otherwise from the current working
 directory.
 
 ## Top-level sections
@@ -651,7 +651,7 @@ com.example.web {
 
 | Variable | Description |
 |----------|-------------|
-| `SOFLARE_CONF` | Config file path (default: `floria.kdl`) |
+| `FLORIA_CONF` | Config file path (default: `floria.kdl`) |
 | `RUST_LOG` | Tracing filter (e.g. `floria=debug,info`) |
 | `HTTPS_PROXY` | Outbound proxy fallback (overridden by config `proxy`) |
 

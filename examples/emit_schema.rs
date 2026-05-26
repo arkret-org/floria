@@ -1,6 +1,6 @@
 //! Emit the canonical floria config JSON schema to stdout.
 //!
-//! Run with `cargo run --example emit_schema > soflare.config.schema.json` to
+//! Run with `cargo run --example emit_schema > floria.config.schema.json` to
 //! refresh the artifact after `Config::SCHEMA_VERSION` changes.
 
 fn main() {

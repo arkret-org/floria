@@ -1,6 +1,6 @@
 # 配置参考
 
-floria 从 `SOFLARE_CONF` 环境变量指定的文件中读取配置。
+floria 从 `FLORIA_CONF` 环境变量指定的文件中读取配置。
 未设置时，默认读取工作目录下的 `floria.kdl`。
 
 ## 配置格式
@@ -576,6 +576,6 @@ com.example.web {
 
 | 变量 | 说明 |
 |------|------|
-| `SOFLARE_CONF` | 配置文件路径（默认：`floria.kdl`） |
+| `FLORIA_CONF` | 配置文件路径（默认：`floria.kdl`） |
 | `RUST_LOG` | 日志过滤器（如 `floria=debug,info`） |
 | `HTTPS_PROXY` | 出站代理回退（被配置文件中的 `proxy` 覆盖） |

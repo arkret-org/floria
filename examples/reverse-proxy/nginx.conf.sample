@@ -1,4 +1,4 @@
-# Soflare – nginx reverse-proxy reference for mTLS-fronted /notify.
+# Floria – nginx reverse-proxy reference for mTLS-fronted /notify.
 #
 # This sample terminates TLS, validates the client certificate against
 # a pinned trust root chain, and forwards the four headers that

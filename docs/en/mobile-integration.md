@@ -58,7 +58,7 @@ without exposing raw provider tokens.
 ## Local Development
 
 For local testing, run floria with `examples/minimal.kdl` or the full
-`soflare.sample.kdl`, then have the server call
+`floria.sample.kdl`, then have the server call
 `POST /api/v1/push/notify` with a test app id that matches one configured
 provider. Mobile-side tests should assert that receiving a provider wakeup
 causes the app to sync, not that the provider payload carries plaintext state.

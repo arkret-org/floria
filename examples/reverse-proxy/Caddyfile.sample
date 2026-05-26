@@ -1,4 +1,4 @@
-# Soflare – Caddy reverse-proxy reference for mTLS-fronted /notify.
+# Floria – Caddy reverse-proxy reference for mTLS-fronted /notify.
 #
 # Caddy validates the client certificate against `trust_pool.pem`
 # (the bundle of CAs that tenants are allowed to chain to). The

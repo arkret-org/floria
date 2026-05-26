@@ -14,7 +14,7 @@ Files:
 Run locally:
 
 ```sh
-SOFLARE_CONF=examples/minimal.kdl cargo run
+FLORIA_CONF=examples/minimal.kdl cargo run
 ```
 
 Send the example request from another shell:

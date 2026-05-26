@@ -41,7 +41,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<(Self, PathBuf)> {
-        let path = env::var("SOFLARE_CONF").unwrap_or_else(|_| "floria.kdl".to_owned());
+        let path = env::var("FLORIA_CONF").unwrap_or_else(|_| "floria.kdl".to_owned());
         let path = PathBuf::from(path);
         let body = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config file {}", path.display()))?;
@@ -1582,7 +1582,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-25.1/soflare.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-25.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -2393,16 +2393,16 @@ apps: {}
     #[test]
     fn schema_artifact_matches_committed_snapshot() {
         let snapshot_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("soflare.config.schema.json");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("floria.config.schema.json");
         let live = serde_json::to_string_pretty(&config_json_schema()).unwrap();
         let on_disk = std::fs::read_to_string(&snapshot_path).expect(
-            "soflare.config.schema.json missing — refresh with `cargo run --example emit_schema > soflare.config.schema.json`",
+            "floria.config.schema.json missing — refresh with `cargo run --example emit_schema > floria.config.schema.json`",
         );
         let on_disk = on_disk.trim_end_matches(['\n', '\r']);
         assert_eq!(
             live.trim_end_matches(['\n', '\r']),
             on_disk,
-            "soflare.config.schema.json is stale — refresh with `cargo run --example emit_schema > soflare.config.schema.json`"
+            "floria.config.schema.json is stale — refresh with `cargo run --example emit_schema > floria.config.schema.json`"
         );
     }
 

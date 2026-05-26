@@ -79,9 +79,9 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 WORKDIR /app
 
 COPY --from=builder /app/floria /usr/local/bin/floria
-COPY soflare.sample.kdl /app/floria.kdl
+COPY floria.sample.kdl /app/floria.kdl
 
-ENV SOFLARE_CONF=/app/floria.kdl
+ENV FLORIA_CONF=/app/floria.kdl
 
 EXPOSE 5000 8000
 

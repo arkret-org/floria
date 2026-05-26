@@ -316,7 +316,7 @@ pub struct PushkinRegistry {
 
 impl PushkinRegistry {
     pub async fn from_config(config: &Config) -> Result<Self> {
-        let base_dir = std::env::var("SOFLARE_CONF")
+        let base_dir = std::env::var("FLORIA_CONF")
             .ok()
             .and_then(|path| {
                 std::path::PathBuf::from(path)

@@ -32,7 +32,7 @@
 - vivo 推送服务端推送
 - 小米推送服务端推送
 - WebPush / VAPID
-- `SOFLARE_CONF` 环境变量
+- `FLORIA_CONF` 环境变量
 - `HTTPS_PROXY` 环境变量用于出站代理回退
 - KDL 配置（默认）与 YAML 配置，按文件扩展名自动检测
 - 通过 `log.setup` 进行结构化日志（文本或 JSON 格式器，EnvFilter / `RUST_LOG`）
@@ -42,7 +42,7 @@
 ## 配置
 
 配置格式按文件扩展名自动检测：
-- `.kdl` — [KDL](https://kdl.dev)（未设置 `SOFLARE_CONF` 时的默认格式）
+- `.kdl` — [KDL](https://kdl.dev)（未设置 `FLORIA_CONF` 时的默认格式）
 - `.yaml` / `.yml` — YAML
 
 完整配置参考请参阅 [docs/zh/configuration.md](./docs/zh/configuration.md)。
@@ -72,8 +72,8 @@
 - readiness 探针使用 `GET /ready`，Docker 健康检查同样走这个端点
 
 示例文件：
-- `soflare.sample.kdl` — KDL 配置，所有推送通道已注释
-- `soflare.sample.yaml` — YAML 配置，所有推送通道已注释
+- `floria.sample.kdl` — KDL 配置，所有推送通道已注释
+- `floria.sample.yaml` — YAML 配置，所有推送通道已注释
 
 ## 推荐策略
 
@@ -85,7 +85,7 @@
 ## 运行
 
 ```powershell
-$env:SOFLARE_CONF="E:\Works\contrix-dev\floria\soflare.sample.kdl"
+$env:FLORIA_CONF="E:\Works\contrix-dev\floria\floria.sample.kdl"
 cargo run
 ```
 
@@ -100,7 +100,7 @@ docker build -t floria .
 使用挂载的配置文件运行：
 
 ```powershell
-docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.sample.kdl:/app/floria.kdl floria
+docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/floria.sample.kdl:/app/floria.kdl floria
 ```
 
 ## Docker Compose
@@ -113,7 +113,7 @@ docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.sample.kdl:/app/flor
 [examples/minimal.notify.request.json](./examples/minimal.notify.request.json)。
 
 ```sh
-cp soflare.sample.kdl examples/floria.kdl
+cp floria.sample.kdl examples/floria.kdl
 cd examples
 docker compose up -d
 ```

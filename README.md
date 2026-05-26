@@ -86,7 +86,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 - vivo Push server push
 - Xiaomi Mi Push server push
 - WebPush / VAPID
-- `SOFLARE_CONF` env var
+- `FLORIA_CONF` env var
 - `HTTPS_PROXY` env var fallback for outbound proxying
 - KDL config (default) and YAML config, detected by file extension
 - structured logging via `log.setup` (text or JSON formatter, EnvFilter / `RUST_LOG`)
@@ -96,7 +96,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 ## Configuration
 
 The config format is detected by file extension:
-- `.kdl` — [KDL](https://kdl.dev) (default when `SOFLARE_CONF` is not set)
+- `.kdl` — [KDL](https://kdl.dev) (default when `FLORIA_CONF` is not set)
 - `.yaml` / `.yml` — YAML
 
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
@@ -135,8 +135,8 @@ Quick notes:
 - lightweight readiness probes hit `GET /ready`; strict readiness probes can use `GET /readyz` to require a populated provider registry and reachable Redis-backed dependencies
 
 Sample files:
-- `soflare.sample.kdl` — KDL config with all providers commented out
-- `soflare.sample.yaml` — YAML config with all providers commented out
+- `floria.sample.kdl` — KDL config with all providers commented out
+- `floria.sample.yaml` — YAML config with all providers commented out
 
 ## Recommended strategy
 
@@ -148,7 +148,7 @@ Sample files:
 ## Run
 
 ```powershell
-$env:SOFLARE_CONF="E:\Works\contrix-dev\floria\soflare.sample.kdl"
+$env:FLORIA_CONF="E:\Works\contrix-dev\floria\floria.sample.kdl"
 cargo run
 ```
 
@@ -169,7 +169,7 @@ Generate local supply-chain artifacts without publishing an image or Git tag:
 Run it with a mounted config file:
 
 ```powershell
-docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/soflare.sample.kdl:/app/floria.kdl floria
+docker run --rm -p 5000:5000 -p 8000:8000 -v ${PWD}/floria.sample.kdl:/app/floria.kdl floria
 ```
 
 ## Docker Compose
@@ -182,7 +182,7 @@ For the smallest config and one canonical notify request shape, see
 [examples/minimal.notify.request.json](./examples/minimal.notify.request.json).
 
 ```sh
-cp soflare.sample.kdl examples/floria.kdl
+cp floria.sample.kdl examples/floria.kdl
 cd examples
 docker compose up -d
 ```

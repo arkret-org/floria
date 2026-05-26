@@ -1,15 +1,15 @@
-# Soflare – Docker Compose example
+# Floria – Docker Compose example
 #
 # How to configure
 # ================
 #
-# 1. Copy `soflare.sample.kdl` from the project root into this directory
+# 1. Copy `floria.sample.kdl` from the project root into this directory
 #    (or wherever you prefer) and rename it to `floria.kdl`:
 #
-#      cp ../soflare.sample.kdl ./floria.kdl
+#      cp ../floria.sample.kdl ./floria.kdl
 #
-#    YAML is also supported — use `soflare.sample.yaml` instead and set
-#    SOFLARE_CONF to a `.yaml` path.
+#    YAML is also supported — use `floria.sample.yaml` instead and set
+#    FLORIA_CONF to a `.yaml` path.
 #
 # 2. Edit `floria.kdl` to register your push provider apps.  Each child
 #    node under `apps` represents one push provider.  Supported types:
@@ -33,7 +33,7 @@
 #    then uncomment the Redis service below.
 #
 # 5. Adjust environment variables as needed:
-#      - SOFLARE_CONF : path to the config file inside the container
+#      - FLORIA_CONF : path to the config file inside the container
 #                     (default: /app/floria.kdl)
 #                     The format is detected by file extension:
 #                       .kdl  → KDL (default)
@@ -72,7 +72,7 @@ services:
       # are in a separate directory, mount it too:
       # - ./credentials:/app/credentials:ro
     environment:
-      SOFLARE_CONF: /app/floria.kdl
+      FLORIA_CONF: /app/floria.kdl
       # RUST_LOG: "floria=debug,info"
       # HTTPS_PROXY: "http://proxy.example.com:8080"  # outbound proxy for push requests
     # depends_on:
