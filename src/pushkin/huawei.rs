@@ -467,7 +467,7 @@ mod tests {
                 missed_calls: Some(1),
                 highlight_count: None,
             },
-        ..Default::default()
+            ..Default::default()
         }
     }
 

@@ -78,6 +78,19 @@ pub struct ConsentRevokeBroadcast {
     /// MUST be `"any"`. Any other value is a wire-shape violation —
     /// floria responds with `unsupported_feature`.
     pub scope: String,
+    /// Phase P2 (CXP-0008 / CXP-0009) — optional diagnostic reason
+    /// soland attaches to a broadcast so floria can log *why* the
+    /// principal's consent cache is being invalidated. Default
+    /// (None / omitted) is the historical "user-initiated revoke"
+    /// case. The two new well-known reasons (`agent_paused`,
+    /// `agent_deactivated`) are emitted by the Personal Agent
+    /// lifecycle path so floria can correlate consent-cache flushes
+    /// with the upstream agent state machine in audit / tracing.
+    /// Unknown reasons are tolerated as opaque strings — floria
+    /// treats every reason identically (full PSI cache invalidation
+    /// for the principal); the field is informational only.
+    #[serde(default)]
+    pub reason: Option<ConsentRevokeReason>,
 }
 
 impl ConsentRevokeBroadcast {
@@ -85,6 +98,66 @@ impl ConsentRevokeBroadcast {
 
     pub fn scope_is_any(&self) -> bool {
         self.scope == Self::SUPPORTED_SCOPE
+    }
+
+    /// Returns the wire form of the attached `reason`, or `None` when
+    /// the broadcast carried no reason.
+    pub fn reason_str(&self) -> Option<&str> {
+        self.reason.as_ref().map(ConsentRevokeReason::as_str)
+    }
+}
+
+/// Phase P2 — well-known `reason` values for a `consent_revoke`
+/// broadcast. The two `Agent*` variants are new (CXP-0008 / CXP-0009)
+/// and correspond to the Personal Agent lifecycle invalidating a
+/// principal's downstream capability cache. Any string soland sends
+/// that doesn't match a known variant is captured by `Other` so a new
+/// reason coined on the principal-server side never breaks the
+/// listener.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConsentRevokeReason {
+    /// Historical user-initiated revocation (no agent involvement).
+    /// The soland broadcast may omit `reason` entirely for this case;
+    /// when set explicitly it serializes as `"user_revoked"`.
+    UserRevoked,
+    /// CXP-0008 — controller paused a native Personal Agent. The
+    /// agent's runtime capability cache is invalidated; the cache is
+    /// re-warmed on resume.
+    AgentPaused,
+    /// CXP-0009 — controller deactivated a native Personal Agent.
+    /// The agent's runtime capability cache is torn down for good
+    /// alongside the agent_key revocation cascade in soland.
+    AgentDeactivated,
+    /// Forward-compatibility catch-all. Any reason floria doesn't
+    /// recognize is preserved verbatim so operator dashboards still
+    /// see the original token and so a future spec round can introduce
+    /// a new reason without a floria deploy.
+    Other(String),
+}
+
+impl ConsentRevokeReason {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::UserRevoked => "user_revoked",
+            Self::AgentPaused => "agent_paused",
+            Self::AgentDeactivated => "agent_deactivated",
+            Self::Other(value) => value.as_str(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ConsentRevokeReason {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Ok(match raw.as_str() {
+            "user_revoked" => Self::UserRevoked,
+            "agent_paused" => Self::AgentPaused,
+            "agent_deactivated" => Self::AgentDeactivated,
+            _ => Self::Other(raw),
+        })
     }
 }
 
@@ -421,6 +494,7 @@ mod tests {
             broadcast_id: "id-1".to_owned(),
             principal_did: "did:web:alice.example".to_owned(),
             scope: "any".to_owned(),
+            reason: None,
         };
         assert!(bcast.scope_is_any());
 
@@ -428,8 +502,73 @@ mod tests {
             broadcast_id: "id-2".to_owned(),
             principal_did: "did:web:alice.example".to_owned(),
             scope: "realm".to_owned(),
+            reason: None,
         };
         assert!(!scoped.scope_is_any());
+    }
+
+    #[test]
+    fn consent_revoke_reason_round_trips_well_known_variants() {
+        let json = serde_json::json!({
+            "broadcast_id": "bcast-paused",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "agent_paused"
+        });
+        let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed.reason_str(), Some("agent_paused"));
+        assert!(matches!(
+            parsed.reason,
+            Some(ConsentRevokeReason::AgentPaused)
+        ));
+
+        let json = serde_json::json!({
+            "broadcast_id": "bcast-deact",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "agent_deactivated"
+        });
+        let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
+        assert!(matches!(
+            parsed.reason,
+            Some(ConsentRevokeReason::AgentDeactivated)
+        ));
+
+        let json = serde_json::json!({
+            "broadcast_id": "bcast-user",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "user_revoked"
+        });
+        let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
+        assert!(matches!(
+            parsed.reason,
+            Some(ConsentRevokeReason::UserRevoked)
+        ));
+
+        // Unknown reason — preserved verbatim in the `Other` variant.
+        let json = serde_json::json!({
+            "broadcast_id": "bcast-future",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "future_reason_v2"
+        });
+        let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed.reason_str(), Some("future_reason_v2"));
+        match parsed.reason {
+            Some(ConsentRevokeReason::Other(value)) => assert_eq!(value, "future_reason_v2"),
+            other => panic!("expected Other variant, got {other:?}"),
+        }
+
+        // Missing reason — None (historical pre-P2 shape).
+        let json = serde_json::json!({
+            "broadcast_id": "bcast-nopadding",
+            "principal_did": "did:web:alice.example",
+            "scope": "any"
+        });
+        let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
+        assert!(parsed.reason.is_none());
+        assert!(parsed.reason_str().is_none());
     }
 
     #[test]

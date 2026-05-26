@@ -719,7 +719,7 @@ mod tests {
                 missed_calls: Some(1),
                 highlight_count: Some(1),
             },
-        ..Default::default()
+            ..Default::default()
         }
     }
 
@@ -838,7 +838,7 @@ mod tests {
                 missed_calls: Some(0),
                 highlight_count: Some(0),
             },
-        ..Default::default()
+            ..Default::default()
         };
 
         assert_eq!(

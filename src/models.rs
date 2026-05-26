@@ -252,7 +252,9 @@ impl Notification {
     ///   2. `flow_id`   (Realm-default-scoped conversation)
     ///   3. `realm_id`  (security boundary)
     pub fn scope_id(&self) -> Option<&str> {
-        self.circle_id().or_else(|| self.flow_id()).or_else(|| self.realm_id())
+        self.circle_id()
+            .or_else(|| self.flow_id())
+            .or_else(|| self.realm_id())
     }
 
     pub fn scope_name(&self) -> Option<&str> {

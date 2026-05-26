@@ -118,6 +118,7 @@ mod tests {
                 broadcast_id: "bcast-1".to_owned(),
                 principal_did: "did:web:alice.example".to_owned(),
                 scope: "any".to_owned(),
+                reason: None,
             })
             .unwrap();
         assert_eq!(ack.entries_evicted, 1);

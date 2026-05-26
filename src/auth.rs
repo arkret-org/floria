@@ -312,8 +312,7 @@ fn authenticate_bearer_request(
             .plaintext_metadata_service_dids
             .iter()
             .any(|candidate| candidate == origin_did)
-            || (principal.allow_plaintext_metadata
-                && principal_is_plaintext_eligible(principal));
+            || (principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal));
         return Ok(AuthenticatedNotifyCaller {
             origin_service_did: origin_did.to_owned(),
             allow_plaintext_metadata,

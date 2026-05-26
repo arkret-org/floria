@@ -103,7 +103,10 @@ struct CircuitBreakerInner {
 
 impl CircuitBreaker {
     pub fn new(config: CircuitBreakerConfig) -> Self {
-        Self { config, inner: Mutex::new(CircuitBreakerInner::default()) }
+        Self {
+            config,
+            inner: Mutex::new(CircuitBreakerInner::default()),
+        }
     }
 
     fn open_for(&self, provider: &str) -> Duration {

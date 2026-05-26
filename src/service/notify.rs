@@ -48,8 +48,23 @@ use super::{
 // match when the parent key + leaf key form that path, so callers
 // can't smuggle a `signature` under an unrelated parent and have it
 // pass.
-const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] =
-    &["expected_previous_generation", "attestation_evidence"];
+const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
+    "expected_previous_generation",
+    "attestation_evidence",
+    // Phase P2 (spec 37ce729 / SDK 4d5a1af) — legacy B-B field-naming
+    // aliases that were renamed in the candidate-stage breaking pass.
+    // The new wire shape carries `size_bytes` / `flow_content` /
+    // `message_content` / `content_only`; the legacy forms `size` /
+    // `flow_body` / `message_body` / `body_only` are fail-closed on the
+    // push wire so a caller still pinned to the old SDK can't smuggle
+    // mismatched semantics through. This is a hard reject, not a
+    // silent rename — the gateway never translates between the two
+    // forms.
+    "size",
+    "flow_body",
+    "message_body",
+    "body_only",
+];
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -82,6 +97,97 @@ const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
 /// device-loop reject path and the per-device dedup test that the
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
 pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
+
+/// Phase P2 (CXP-0008 / CXP-0009) — durable Personal Agent lifecycle
+/// event kinds. When the inbound `/notify` request carries a top-level
+/// `event_kind` matching one of these, floria silently consumes the
+/// request: it answers 200 with an empty fanout body so the caller's
+/// pipeline advances, but it does not dispatch any provider push. The
+/// event is treated as an internal cache-invalidation signal only —
+/// the `consent_revoke` fanout (with `reason=agent_paused` /
+/// `agent_deactivated`) is the authoritative way to invalidate the
+/// per-principal capability cache. Pushing these lifecycle kinds to
+/// user devices would leak agent state into the operator surface.
+const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
+    &["cx.agent.pause", "cx.agent.resume", "cx.agent.deactivate"];
+
+/// Phase P2 — actor-private Personal Agent event kinds. These never
+/// reach user-device push by default: they're controller-private state
+/// transitions between the controller and its native agent runtime.
+/// Floria drops them with a 200 + zero-fanout ack. A follow-up
+/// subscription mechanism (TODO: opt-in controller-private channel)
+/// MAY route a subset to a dedicated `agent runtime endpoint`, but
+/// until that subscription gate lands the default is "do nothing".
+const AGENT_ACTOR_PRIVATE_KINDS: &[&str] = &[
+    "cx.agent.draft.propose",
+    "cx.agent.action_request",
+    "cx.agent.action_approve",
+    "cx.agent.action_reject",
+];
+
+/// Phase P2 — classification of an inbound `event_kind` field. `None`
+/// means the request carries no event_kind, OR a kind that floria
+/// does not route specially (the historical default — fall through to
+/// the normal push fanout path).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AgentEventRouting {
+    /// Durable agent lifecycle (`cx.agent.{pause,resume,deactivate}`):
+    /// silently consumed — 200 OK, no provider dispatch.
+    DurableLifecycle,
+    /// Actor-private agent kind
+    /// (`cx.agent.{draft.propose,action_request,action_approve,
+    /// action_reject}`): dropped — 200 OK, no provider dispatch. A
+    /// future opt-in subscription gate may upgrade specific kinds to
+    /// `agent runtime endpoint` fanout; today the default is drop.
+    ActorPrivateDrop,
+}
+
+/// Classify a top-level `event_kind` string against the Phase P2
+/// agent-routing table. Unknown kinds (including non-`cx.agent.*`
+/// strings and `cx.agent.*` kinds we don't yet recognize) return
+/// `None` and continue down the normal push pipeline.
+fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
+    if AGENT_LIFECYCLE_SILENT_KINDS.contains(&event_kind) {
+        return Some(AgentEventRouting::DurableLifecycle);
+    }
+    if AGENT_ACTOR_PRIVATE_KINDS.contains(&event_kind) {
+        return Some(AgentEventRouting::ActorPrivateDrop);
+    }
+    None
+}
+
+/// Phase P2 — the eight new SDK typed-id prefixes
+/// (`agent_principal`, `agent_session`, `agent_key`, `agent_draft`,
+/// `accountability_grant`, `sidecar_circle`, `backup_series`,
+/// `recovery_session`). Floria does not route on these today — none
+/// of them appear in the push-wire reference fields — but we keep the
+/// list here so the prefix validator is aware of them when a future
+/// notify field starts to carry one. Any caller that smuggles one of
+/// these into an `event_id` / `message_id` / `flow_id` / `realm_id` /
+/// `circle_id` slot still fails closed against the existing
+/// `validate_active_ref` gates because those slots are pinned to
+/// their own typed-id prefix (`cx:event:`, etc.).
+const PHASE_P2_AGENT_TYPED_ID_PREFIXES: &[&str] = &[
+    "cx:agent_principal:",
+    "cx:agent_session:",
+    "cx:agent_key:",
+    "cx:agent_draft:",
+    "cx:accountability_grant:",
+    "cx:sidecar_circle:",
+    "cx:backup_series:",
+    "cx:recovery_session:",
+];
+
+/// Phase P2 — returns `true` if `value` starts with one of the eight
+/// new SDK typed-id prefixes. Used by the typed-id prefix recognizer
+/// so any future routing code can ask "is this one of the new agent /
+/// sidecar / backup / recovery typed IDs?" without having to thread
+/// the SDK identifier crate into the wire-validation layer.
+pub(super) fn is_phase_p2_agent_typed_id(value: &str) -> bool {
+    PHASE_P2_AGENT_TYPED_ID_PREFIXES
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
+}
 
 #[handler]
 pub(super) async fn notify_method_not_allowed(res: &mut Response) {
@@ -475,7 +581,10 @@ fn validate_effective_scope_consistency(notification: &Notification) -> Result<(
              effective_scope.realm_id `{scope_realm}`"
         ));
     }
-    match (scope.circle_id().map(|c| c.as_str()), notification.circle_id()) {
+    match (
+        scope.circle_id().map(|c| c.as_str()),
+        notification.circle_id(),
+    ) {
         (Some(scope_circle), Some(wire_circle)) if scope_circle != wire_circle => Err(format!(
             "effective_scope_mismatch: notification.circle_id `{wire_circle}` does not match \
              effective_scope.circle_id `{scope_circle}`"
@@ -556,6 +665,19 @@ fn validate_active_ref(
         return Err(format!("{path} must not be empty"));
     }
     if !value.starts_with(required_prefix) {
+        // Phase P2 — if the value carries one of the eight new
+        // agent / sidecar / backup / recovery typed-id prefixes, fail
+        // closed with a clearer error so the caller can see they're
+        // routing the wrong typed id into a push-wire slot. Floria's
+        // notify model has dedicated slots only for event / message /
+        // flow / realm / circle ids — the Phase-P2 typed ids never
+        // belong here.
+        if is_phase_p2_agent_typed_id(value) {
+            return Err(format!(
+                "{path} must use active `{required_prefix}*` typed IDs; got a Phase-P2 \
+                 agent / sidecar / backup / recovery typed id which has no push-wire slot"
+            ));
+        }
         return Err(format!(
             "{path} must use active `{required_prefix}*` typed IDs"
         ));
@@ -1256,6 +1378,79 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 started,
             );
             return;
+        }
+    }
+    // Phase P2 (CXP-0008 / CXP-0009) — route Personal Agent event kinds.
+    //
+    // The SDK exposes seven new `cx.agent.*` kinds. Floria does not
+    // surface any of them onto user-device push by default:
+    //
+    //   * `cx.agent.{pause, resume, deactivate}` — durable lifecycle.
+    //     Silently consumed: 200 OK + zero fanout. The authoritative
+    //     capability-cache invalidation path for these state changes
+    //     is the soland `consent_revoke` fanout
+    //     (`reason=agent_paused` / `agent_deactivated`), not a push.
+    //   * `cx.agent.{draft.propose, action_request, action_approve,
+    //     action_reject}` — actor-private. Dropped: 200 OK + zero
+    //     fanout. A future opt-in subscription gate may upgrade
+    //     specific kinds onto a dedicated agent-runtime endpoint, but
+    //     until that mechanism exists the default is drop.
+    //
+    // Either case answers 200 so the caller's pipeline advances; the
+    // `accepted` count is 0 and the rejected list is empty.
+    if let Some(event_kind_value) = raw.get("event_kind") {
+        match event_kind_value {
+            Value::String(kind) => {
+                if let Some(routing) = classify_agent_event_kind(kind.trim()) {
+                    match routing {
+                        AgentEventRouting::DurableLifecycle => {
+                            tracing::info!(
+                                request_id = %request_id,
+                                event_kind = %kind,
+                                "answering 200 no-fanout ack: durable agent lifecycle \
+                                 event silently consumed (capability cache invalidation \
+                                 flows through consent_revoke)"
+                            );
+                        }
+                        AgentEventRouting::ActorPrivateDrop => {
+                            tracing::info!(
+                                request_id = %request_id,
+                                event_kind = %kind,
+                                "answering 200 no-fanout ack: actor_private agent event \
+                                 dropped by default (no controller-private subscription \
+                                 mechanism wired up yet)"
+                            );
+                        }
+                    }
+                    let response = NotifyResponse {
+                        request_id: request_id.clone(),
+                        accepted: 0,
+                        rejected: Vec::new(),
+                        provider_retries: Vec::new(),
+                        delivery_receipts: Vec::new(),
+                    };
+                    finish_json(res, StatusCode::OK, response, started);
+                    return;
+                }
+                // Any other `event_kind` string falls through — floria
+                // does not gate non-agent kinds at this layer.
+            }
+            Value::Null => {
+                // Tolerate explicit null — the field is optional on the
+                // wire.
+            }
+            _ => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "schema_violation",
+                    "event_kind must be a string when present",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
         }
     }
     // Round 4 — route `cx.audit.policy_access{access_kind=

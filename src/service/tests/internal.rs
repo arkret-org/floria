@@ -270,6 +270,58 @@ async fn consent_revoke_rejects_scoped_revocation() {
 }
 
 #[tokio::test]
+async fn consent_revoke_accepts_agent_paused_reason() {
+    let cache = Arc::new(PushContactCache::in_memory());
+    cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
+
+    let service = test_service_with_internal_state(None, Some(cache.clone()));
+
+    // Phase P2 (CXP-0008) — soland attaches `reason=agent_paused`
+    // when the controller pauses a native Personal Agent so the
+    // downstream capability cache is invalidated. floria treats every
+    // reason identically (full PSI cache evict), but the field must
+    // round-trip cleanly through `serde(deny_unknown_fields)`.
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/internal/consent_revoke")
+        .json(&json!({
+            "broadcast_id": "bcast-agent-paused",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "agent_paused"
+        }))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["entries_evicted"], json!(1));
+}
+
+#[tokio::test]
+async fn consent_revoke_accepts_agent_deactivated_reason() {
+    let cache = Arc::new(PushContactCache::in_memory());
+    cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
+
+    let service = test_service_with_internal_state(None, Some(cache.clone()));
+
+    // Phase P2 (CXP-0009) — agent deactivation invalidates the
+    // capability cache alongside the soland-side agent_key revoke
+    // cascade.
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/internal/consent_revoke")
+        .json(&json!({
+            "broadcast_id": "bcast-agent-deact",
+            "principal_did": "did:web:alice.example",
+            "scope": "any",
+            "reason": "agent_deactivated"
+        }))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["entries_evicted"], json!(1));
+}
+
+#[tokio::test]
 async fn consent_revoke_returns_503_when_cache_unwired() {
     let service = test_service_without_broadcast_bus();
 

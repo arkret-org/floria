@@ -817,7 +817,7 @@ mod sanitize_tests {
                 missed_calls: None,
                 highlight_count: None,
             },
-        ..Default::default()
+            ..Default::default()
         };
         let data = build_blind_provider_data(&notification);
         assert!(data.contains_key("push_target_id"));

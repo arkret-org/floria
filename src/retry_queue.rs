@@ -184,7 +184,11 @@ impl DeadLetterPgOverlay {
         );
         if let Err(error) = client.execute(
             stmt.as_str(),
-            &[&envelope.request_id, &envelope.pushkin, &envelope.last_error],
+            &[
+                &envelope.request_id,
+                &envelope.pushkin,
+                &envelope.last_error,
+            ],
         ) {
             tracing::warn!(error = %error, backend = %self.target_label, request_id = %envelope.request_id, "deadletter PG: insert failed");
         }
@@ -932,11 +936,9 @@ mod tests {
 
     #[test]
     fn deadletter_pg_overlay_accepts_schema_qualified_table() {
-        let overlay = DeadLetterPgOverlay::new(
-            "postgres://localhost/floria",
-            "floria.retry_dead_letter",
-        )
-        .expect("schema.table is valid");
+        let overlay =
+            DeadLetterPgOverlay::new("postgres://localhost/floria", "floria.retry_dead_letter")
+                .expect("schema.table is valid");
         // SqlTableName quotes both identifiers.
         assert_eq!(
             format!("{:?}", overlay).contains("floria"),

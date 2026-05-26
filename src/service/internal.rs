@@ -388,6 +388,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         broadcast_id = %ack.broadcast_id,
         scope = ack.scope,
         entries_evicted = ack.entries_evicted,
+        reason = body.reason_str().unwrap_or("<unset>"),
         "processed consent_revoke scope=any broadcast"
     );
     finish_json(res, StatusCode::OK, ack, started);

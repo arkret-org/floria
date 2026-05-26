@@ -73,7 +73,12 @@ impl NotifyRateLimiter {
         redis_url: &str,
         key_prefix: impl Into<String>,
     ) -> Result<Self> {
-        Self::redis_with_policy(config, redis_url, key_prefix, RedisFailurePolicy::Permissive)
+        Self::redis_with_policy(
+            config,
+            redis_url,
+            key_prefix,
+            RedisFailurePolicy::Permissive,
+        )
     }
 
     pub fn redis_with_policy(
