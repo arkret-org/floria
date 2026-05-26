@@ -1014,8 +1014,25 @@ pub struct NotifyRetryQueueConfig {
     /// Grace period (seconds) the main task waits for the retry worker
     /// to finish in-flight dispatches at shutdown. Default 30s.
     pub grace_period_secs: u64,
+    /// Optional PostgreSQL URL for the dead-letter overlay. When set,
+    /// every envelope that drops into the dead-letter ring is ALSO
+    /// persisted to the `floria_retry_dead_letter` table so it survives
+    /// a process restart. The in-memory ring stays authoritative for
+    /// `dead_letter_snapshot()` — the PG overlay is operator-facing
+    /// audit only. Field name on the wire is `deadletter_pg_url`.
+    #[serde(default, alias = "deadletter_pg_url")]
+    pub deadletter_pg_url: Option<String>,
+    /// Override the PG table the deadletter overlay writes into.
+    /// Defaults to `floria_retry_dead_letter`. Same shape rules as
+    /// `storage.deactivation_queue_table`.
+    #[serde(default = "default_deadletter_pg_table")]
+    pub deadletter_pg_table: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
+}
+
+fn default_deadletter_pg_table() -> String {
+    "floria_retry_dead_letter".to_owned()
 }
 
 impl Default for NotifyRetryQueueConfig {
@@ -1034,6 +1051,8 @@ impl Default for NotifyRetryQueueConfig {
             encryption_key: String::new(),
             encryption_key_file: None,
             grace_period_secs: 30,
+            deadletter_pg_url: None,
+            deadletter_pg_table: default_deadletter_pg_table(),
             extra: Map::new(),
         }
     }
@@ -1086,6 +1105,25 @@ impl NotifyRetryQueueConfig {
         if value.is_empty() { "floria" } else { value }
     }
 
+    /// Returns the trimmed deadletter PG URL when set and non-blank.
+    pub fn deadletter_pg_url(&self) -> Option<&str> {
+        self.deadletter_pg_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    /// Returns the deadletter PG table name (defaults to
+    /// `floria_retry_dead_letter`).
+    pub fn deadletter_pg_table(&self) -> &str {
+        let value = self.deadletter_pg_table.trim();
+        if value.is_empty() {
+            "floria_retry_dead_letter"
+        } else {
+            value
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         if !self.enabled {
             return Ok(());
@@ -1098,6 +1136,18 @@ impl NotifyRetryQueueConfig {
         }
         if self.max_backoff_seconds < self.default_backoff_seconds {
             bail!("http.notify_retry_queue.max_backoff_seconds must be >= default_backoff_seconds");
+        }
+        // Deadletter PG overlay is optional; when set it must be a valid
+        // libpq URL + a valid SQL identifier for the table.
+        if let Some(url) = self.deadletter_pg_url() {
+            crate::postgres_support::validate_postgres_url(
+                url,
+                "http.notify_retry_queue.deadletter_pg_url",
+            )?;
+            crate::postgres_support::SqlTableName::parse(
+                self.deadletter_pg_table(),
+                "http.notify_retry_queue.deadletter_pg_table",
+            )?;
         }
         match self.backend_kind() {
             "memory" => Ok(()),
@@ -1683,7 +1733,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-25.1/floria.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-26.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1810,7 +1860,16 @@ fn http_schema() -> Value {
                     "batch_size": {"type": "integer", "minimum": 1, "default": 32},
                     "encryption_key": {"type": "string", "default": ""},
                     "encryption_key_file": {"type": ["string", "null"]},
-                    "grace_period_secs": {"type": "integer", "minimum": 1, "default": 30}
+                    "grace_period_secs": {"type": "integer", "minimum": 1, "default": 30},
+                    "deadletter_pg_url": {
+                        "type": ["string", "null"],
+                        "description": "Optional PostgreSQL URL for the dead-letter overlay. When set, every dead-lettered envelope is also persisted to `deadletter_pg_table` so it survives a process restart."
+                    },
+                    "deadletter_pg_table": {
+                        "type": "string",
+                        "default": "floria_retry_dead_letter",
+                        "description": "Table the deadletter overlay writes into. Must be `table` or `schema.table` with simple SQL identifiers."
+                    }
                 }
             },
             "metrics_detailed_circle_labels": {
@@ -2043,7 +2102,16 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-25.1";
+    pub const SCHEMA_VERSION: &'static str = "2026-05-26.1";
+
+    /// Parse a KDL config body into the intermediate JSON shape used by
+    /// [`Config::load`]. Exposed for parity tests and ops tooling so
+    /// callers can compare KDL ↔ YAML samples without re-rolling the
+    /// parser. The shape matches what `serde_json::from_value::<Config>`
+    /// expects, so consumers can deserialize directly.
+    pub fn parse_kdl_to_json(body: &str) -> Result<Value> {
+        parse_kdl_to_json(body)
+    }
 }
 
 // --- KDL support ---

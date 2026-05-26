@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-25.1/floria.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-05-26.1/floria.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -490,6 +490,18 @@
               "minimum": 1,
               "type": "integer"
             },
+            "deadletter_pg_table": {
+              "default": "floria_retry_dead_letter",
+              "description": "Table the deadletter overlay writes into. Must be `table` or `schema.table` with simple SQL identifiers.",
+              "type": "string"
+            },
+            "deadletter_pg_url": {
+              "description": "Optional PostgreSQL URL for the dead-letter overlay. When set, every dead-lettered envelope is also persisted to `deadletter_pg_table` so it survives a process restart.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "default_backoff_seconds": {
               "default": 30,
               "minimum": 1,
@@ -742,5 +754,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-25.1"
+  "x-floria-schema-version": "2026-05-26.1"
 }

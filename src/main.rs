@@ -180,24 +180,36 @@ async fn main() -> Result<()> {
                     key_prefix = queue_config.key_prefix(),
                     max_attempts = queue_config.max_attempts,
                     aead_enabled = cipher.is_some(),
+                    deadletter_pg = queue_config.deadletter_pg_url().is_some(),
                     "enabling /notify retry queue"
                 );
-                Arc::new(RetryQueue::redis_with_cipher(
+                RetryQueue::redis_with_cipher(
                     retry_config,
                     &redis_url,
                     queue_config.key_prefix().to_owned(),
                     cipher,
-                )?)
+                )?
             }
             _ => {
                 tracing::info!(
                     backend = "memory",
                     max_attempts = queue_config.max_attempts,
+                    deadletter_pg = queue_config.deadletter_pg_url().is_some(),
                     "enabling /notify retry queue"
                 );
-                Arc::new(RetryQueue::memory(retry_config))
+                RetryQueue::memory(retry_config)
             }
         };
+        let queue = if let Some(pg_url) = queue_config.deadletter_pg_url() {
+            let overlay = floria::retry_queue::DeadLetterPgOverlay::new(
+                pg_url,
+                queue_config.deadletter_pg_table(),
+            )?;
+            queue.with_deadletter_pg(overlay)?
+        } else {
+            queue
+        };
+        let queue = Arc::new(queue);
         state.notify_retry_queue = Some(queue.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let registry_clone = state.registry.clone();

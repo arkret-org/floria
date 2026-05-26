@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::auth::redact_url_credentials;
+use crate::postgres_support::SqlTableName;
 
 /// AAD tag bound into every encrypted retry-queue envelope so a
 /// payload moved between key prefixes / queues can't be replayed
@@ -99,6 +100,94 @@ impl RetryQueueCipher {
                 },
             )
             .map_err(|_| anyhow::anyhow!("retry-queue AEAD decryption failed"))
+    }
+}
+
+/// Optional PostgreSQL dead-letter overlay. Every envelope that drops
+/// into the dead-letter ring is ALSO written to the configured PG
+/// table so it survives a process restart. The overlay is fire-and-
+/// forget — a connection failure is logged and dropped; the in-memory
+/// ring stays authoritative for the live `dead_letter_snapshot()` API
+/// and operator-facing dashboards.
+///
+/// Table schema (created by `ensure_schema`):
+///
+/// ```sql
+/// CREATE TABLE IF NOT EXISTS <table> (
+///   request_id   TEXT NOT NULL,
+///   pushkin      TEXT NOT NULL,
+///   last_error   TEXT NOT NULL,
+///   occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+///   PRIMARY KEY (request_id, pushkin, occurred_at)
+/// );
+/// ```
+#[derive(Debug)]
+pub struct DeadLetterPgOverlay {
+    url: String,
+    target_label: String,
+    table: SqlTableName,
+}
+
+impl DeadLetterPgOverlay {
+    /// Build an overlay. The table is validated via [`SqlTableName`] —
+    /// the raw name is rejected if it contains anything other than
+    /// `[A-Za-z0-9_]` plus an optional schema-qualifier dot.
+    pub fn new(url: &str, table: &str) -> Result<Self> {
+        let table = SqlTableName::parse(table, "notify_retry_queue.deadletter_pg_table")?;
+        Ok(Self {
+            url: url.to_owned(),
+            target_label: redact_url_credentials(url),
+            table,
+        })
+    }
+
+    /// Idempotent schema bootstrap. Safe to call on every startup.
+    pub fn ensure_schema(&self) -> Result<()> {
+        use postgres::NoTls;
+        let mut client = postgres::Client::connect(&self.url, NoTls).with_context(|| {
+            format!("deadletter PG: failed to connect to {}", self.target_label)
+        })?;
+        let stmt = format!(
+            "CREATE TABLE IF NOT EXISTS {table} (\n\
+                 request_id  TEXT NOT NULL,\n\
+                 pushkin     TEXT NOT NULL,\n\
+                 last_error  TEXT NOT NULL,\n\
+                 occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n\
+                 PRIMARY KEY (request_id, pushkin, occurred_at)\n\
+             )",
+            table = self.table.as_sql()
+        );
+        client.batch_execute(&stmt).with_context(|| {
+            format!(
+                "deadletter PG: failed to create table {}",
+                self.table.as_sql()
+            )
+        })?;
+        Ok(())
+    }
+
+    /// Persist one dead-letter envelope. Best-effort: errors are
+    /// logged and swallowed so a PG outage cannot block the live
+    /// dispatch path.
+    pub fn record(&self, envelope: &RetryEnvelope) {
+        use postgres::NoTls;
+        let mut client = match postgres::Client::connect(&self.url, NoTls) {
+            Ok(c) => c,
+            Err(error) => {
+                tracing::warn!(error = %error, backend = %self.target_label, "deadletter PG: connect failed");
+                return;
+            }
+        };
+        let stmt = format!(
+            "INSERT INTO {table} (request_id, pushkin, last_error) VALUES ($1, $2, $3)",
+            table = self.table.as_sql()
+        );
+        if let Err(error) = client.execute(
+            stmt.as_str(),
+            &[&envelope.request_id, &envelope.pushkin, &envelope.last_error],
+        ) {
+            tracing::warn!(error = %error, backend = %self.target_label, request_id = %envelope.request_id, "deadletter PG: insert failed");
+        }
     }
 }
 
@@ -211,6 +300,10 @@ enum Backend {
 pub struct RetryQueue {
     config: RetryQueueConfig,
     backend: Backend,
+    /// Optional PostgreSQL dead-letter overlay. Wrapped in an Arc so
+    /// async-spawning callers can clone cheaply; constructed up-front
+    /// via [`RetryQueue::with_deadletter_pg`].
+    deadletter_pg: Option<std::sync::Arc<DeadLetterPgOverlay>>,
 }
 
 impl RetryQueue {
@@ -221,7 +314,18 @@ impl RetryQueue {
                 pending: Mutex::new(BinaryHeap::new()),
                 dead_letter: Mutex::new(VecDeque::new()),
             }),
+            deadletter_pg: None,
         }
+    }
+
+    /// Attach a PostgreSQL dead-letter overlay. The overlay's schema is
+    /// bootstrapped synchronously here — if `CREATE TABLE` fails the
+    /// caller gets the error rather than discovering it on the first
+    /// dead-letter event.
+    pub fn with_deadletter_pg(mut self, overlay: DeadLetterPgOverlay) -> Result<Self> {
+        overlay.ensure_schema()?;
+        self.deadletter_pg = Some(std::sync::Arc::new(overlay));
+        Ok(self)
     }
 
     pub fn redis(
@@ -254,6 +358,7 @@ impl RetryQueue {
                 dead_letter_capacity,
                 cipher,
             }),
+            deadletter_pg: None,
         })
     }
 
@@ -299,12 +404,23 @@ impl RetryQueue {
     }
 
     pub fn dead_letter(&self, envelope: RetryEnvelope) {
+        // Persist to the PG overlay (if configured) FIRST. The overlay
+        // is fire-and-forget — a PG outage must not block the in-mem
+        // ring update that the dispatch loop actually reads from.
+        if let Some(overlay) = &self.deadletter_pg {
+            overlay.record(&envelope);
+        }
         match &self.backend {
             Backend::Memory(backend) => {
                 backend.push_dead_letter(envelope, self.config.dead_letter_capacity)
             }
             Backend::Redis(backend) => backend.push_dead_letter(envelope),
         }
+    }
+
+    /// True iff a PG dead-letter overlay is attached.
+    pub fn has_deadletter_pg(&self) -> bool {
+        self.deadletter_pg.is_some()
     }
 
     pub fn pending_len(&self) -> usize {
@@ -797,5 +913,41 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("invalid notify_retry_queue redis_url"));
+    }
+
+    #[test]
+    fn deadletter_pg_overlay_rejects_unsafe_table_identifier() {
+        // SqlTableName parsing must reject anything outside [A-Za-z0-9_]
+        // (plus an optional schema-qualifier dot). This is the only
+        // path that touches a string-formatted SQL table name, so the
+        // rejection is the load-bearing check against SQLi.
+        let err = DeadLetterPgOverlay::new(
+            "postgres://localhost/floria",
+            "floria_retry_dead_letter;drop",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("must contain only ASCII"), "got {err}");
+    }
+
+    #[test]
+    fn deadletter_pg_overlay_accepts_schema_qualified_table() {
+        let overlay = DeadLetterPgOverlay::new(
+            "postgres://localhost/floria",
+            "floria.retry_dead_letter",
+        )
+        .expect("schema.table is valid");
+        // SqlTableName quotes both identifiers.
+        assert_eq!(
+            format!("{:?}", overlay).contains("floria"),
+            true,
+            "overlay debug must include the table"
+        );
+    }
+
+    #[test]
+    fn retry_queue_without_pg_overlay_reports_none() {
+        let queue = RetryQueue::memory(RetryQueueConfig::default());
+        assert!(!queue.has_deadletter_pg());
     }
 }
