@@ -158,11 +158,16 @@ pub(super) async fn readyz(depot: &mut Depot, res: &mut Response) {
     let mut dependencies_ok = true;
 
     let (check, ok) = match state.notify_deduplicator.as_ref() {
-        Some(deduplicator) => dependency_check(
-            "notify_dedup",
-            deduplicator.backend_name(),
-            deduplicator.ready(),
-        ),
+        Some(deduplicator) => {
+            if let Some(size) = deduplicator.delivered_devices_len() {
+                crate::metrics::set_device_dedup_cache_size(size as i64);
+            }
+            dependency_check(
+                "notify_dedup",
+                deduplicator.backend_name(),
+                deduplicator.ready(),
+            )
+        }
         None => disabled_dependency_check("notify_dedup"),
     };
     dependencies_ok &= ok;

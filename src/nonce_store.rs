@@ -31,6 +31,39 @@ use crate::auth::redact_url_credentials;
 pub enum NonceCheck {
     Fresh,
     Replayed,
+    /// Backend (Redis) is unreachable and the configured failure policy
+    /// is `strict` — callers must treat this as a fail-closed signal
+    /// (HTTP 503).
+    BackendUnavailable,
+}
+
+/// Behaviour when the Redis backend is unreachable. `Permissive` is the
+/// legacy fail-open semantic so existing deployments keep working; in
+/// `Strict` mode the gateway returns 503 from the calling site rather
+/// than silently bypassing replay protection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedisFailurePolicy {
+    Permissive,
+    Strict,
+}
+
+impl RedisFailurePolicy {
+    pub fn from_str(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "strict" => Self::Strict,
+            _ => Self::Permissive,
+        }
+    }
+
+    pub fn is_strict(self) -> bool {
+        matches!(self, Self::Strict)
+    }
+}
+
+impl Default for RedisFailurePolicy {
+    fn default() -> Self {
+        Self::Permissive
+    }
 }
 
 #[derive(Debug)]
@@ -43,6 +76,7 @@ struct RedisNonceStore {
     client: redis::Client,
     target_label: String,
     key_prefix: String,
+    failure_policy: RedisFailurePolicy,
 }
 
 #[derive(Debug)]
@@ -68,6 +102,15 @@ impl NonceStore {
     }
 
     pub fn redis(ttl: Duration, redis_url: &str, key_prefix: impl Into<String>) -> Result<Self> {
+        Self::redis_with_policy(ttl, redis_url, key_prefix, RedisFailurePolicy::Permissive)
+    }
+
+    pub fn redis_with_policy(
+        ttl: Duration,
+        redis_url: &str,
+        key_prefix: impl Into<String>,
+        failure_policy: RedisFailurePolicy,
+    ) -> Result<Self> {
         let client = redis::Client::open(redis_url).with_context(|| {
             format!(
                 "invalid notify_auth.nonce_store redis_url `{}`",
@@ -80,6 +123,7 @@ impl NonceStore {
                 client,
                 target_label: redact_url_credentials(redis_url),
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
+                failure_policy,
             }),
         })
     }
@@ -152,6 +196,10 @@ impl RedisNonceStore {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
             Err(error) => {
+                if self.failure_policy.is_strict() {
+                    tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis nonce store; failing closed (strict)");
+                    return NonceCheck::BackendUnavailable;
+                }
                 tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis nonce store; failing open");
                 return NonceCheck::Fresh;
             }
@@ -169,6 +217,10 @@ impl RedisNonceStore {
             Ok(Some(_)) => NonceCheck::Fresh,
             Ok(None) => NonceCheck::Replayed,
             Err(error) => {
+                if self.failure_policy.is_strict() {
+                    tracing::warn!(error = %error, backend = %self.target_label, redis_key = %key, "failed to claim Redis nonce; failing closed (strict)");
+                    return NonceCheck::BackendUnavailable;
+                }
                 tracing::warn!(error = %error, backend = %self.target_label, redis_key = %key, "failed to claim Redis nonce; failing open");
                 NonceCheck::Fresh
             }

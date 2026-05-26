@@ -27,7 +27,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Per-Circle (or per-Realm, when no circle is set) breaker config.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct CircuitBreakerConfig {
     /// Number of consecutive failures before the breaker opens.
     pub failure_threshold: u32,
@@ -36,11 +36,23 @@ pub struct CircuitBreakerConfig {
     /// long and rely on the `floria_circuit_breaker_state` metric +
     /// the reset RPC (TODO(circle-rollout-P2C.5)).
     pub open_for: Duration,
+    /// Maximum number of distinct breaker-state slots to keep before
+    /// LRU-evicting the oldest. Bounds memory under high cardinality
+    /// (e.g. a malicious caller cycling through circle ids).
+    pub max_breaker_states: usize,
+    /// Per-provider override of `open_for`. Falls back to the global
+    /// `open_for` when no provider-specific entry is set.
+    pub open_for_by_provider: HashMap<String, Duration>,
 }
 
 impl Default for CircuitBreakerConfig {
     fn default() -> Self {
-        Self { failure_threshold: 5, open_for: Duration::from_secs(30) }
+        Self {
+            failure_threshold: 5,
+            open_for: Duration::from_secs(30),
+            max_breaker_states: 4_096,
+            open_for_by_provider: HashMap::new(),
+        }
     }
 }
 
@@ -70,6 +82,9 @@ impl BreakerKey {
 struct BreakerState {
     consecutive_failures: u32,
     opened_at: Option<Instant>,
+    /// LRU tick — incremented on every access. The oldest tick is
+    /// the next candidate for eviction.
+    last_used_tick: u64,
 }
 
 /// In-process circuit breaker keyed by `(provider, realm, circle)`.
@@ -77,25 +92,55 @@ struct BreakerState {
 #[derive(Debug, Default)]
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
-    state: Mutex<HashMap<BreakerKey, BreakerState>>,
+    inner: Mutex<CircuitBreakerInner>,
+}
+
+#[derive(Debug, Default)]
+struct CircuitBreakerInner {
+    state: HashMap<BreakerKey, BreakerState>,
+    tick: u64,
 }
 
 impl CircuitBreaker {
     pub fn new(config: CircuitBreakerConfig) -> Self {
-        Self { config, state: Mutex::new(HashMap::new()) }
+        Self { config, inner: Mutex::new(CircuitBreakerInner::default()) }
+    }
+
+    fn open_for(&self, provider: &str) -> Duration {
+        self.config
+            .open_for_by_provider
+            .get(provider)
+            .copied()
+            .unwrap_or(self.config.open_for)
+    }
+
+    fn evict_if_needed(&self, inner: &mut CircuitBreakerInner) {
+        let cap = self.config.max_breaker_states.max(1);
+        while inner.state.len() > cap {
+            let Some(oldest_key) = inner
+                .state
+                .iter()
+                .min_by_key(|(_, state)| state.last_used_tick)
+                .map(|(k, _)| k.clone())
+            else {
+                break;
+            };
+            inner.state.remove(&oldest_key);
+        }
     }
 
     /// Returns `true` when the breaker for `key` is currently open and
     /// the caller should short-circuit rather than dispatch.
     pub fn is_open(&self, key: &BreakerKey) -> bool {
-        let mut guard = self.state.lock().expect("circuit breaker mutex poisoned");
-        let Some(state) = guard.get_mut(key) else {
+        let open_for = self.open_for(&key.provider);
+        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        let Some(state) = guard.state.get_mut(key) else {
             return false;
         };
         let Some(opened_at) = state.opened_at else {
             return false;
         };
-        if opened_at.elapsed() >= self.config.open_for {
+        if opened_at.elapsed() >= open_for {
             // Auto-reset on cooldown.
             *state = BreakerState::default();
             false
@@ -107,26 +152,35 @@ impl CircuitBreaker {
     /// Record a successful dispatch. Resets the failure counter so a
     /// short blip doesn't latch the breaker open on the next failure.
     pub fn record_success(&self, key: &BreakerKey) {
-        let mut guard = self.state.lock().expect("circuit breaker mutex poisoned");
-        guard.entry(key.clone()).or_default().consecutive_failures = 0;
+        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        guard.tick = guard.tick.saturating_add(1);
+        let tick = guard.tick;
+        let entry = guard.state.entry(key.clone()).or_default();
+        entry.consecutive_failures = 0;
+        entry.last_used_tick = tick;
+        self.evict_if_needed(&mut guard);
     }
 
     /// Record a failed dispatch. Returns `true` when this failure
     /// caused the breaker to open (so the caller can emit a metric /
     /// log line at that moment).
     pub fn record_failure(&self, key: &BreakerKey) -> bool {
-        let mut guard = self.state.lock().expect("circuit breaker mutex poisoned");
-        let state = guard.entry(key.clone()).or_default();
+        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        guard.tick = guard.tick.saturating_add(1);
+        let tick = guard.tick;
+        let state = guard.state.entry(key.clone()).or_default();
+        state.last_used_tick = tick;
         if state.opened_at.is_some() {
+            self.evict_if_needed(&mut guard);
             return false;
         }
         state.consecutive_failures = state.consecutive_failures.saturating_add(1);
-        if state.consecutive_failures >= self.config.failure_threshold {
+        let opened = state.consecutive_failures >= self.config.failure_threshold;
+        if opened {
             state.opened_at = Some(Instant::now());
-            true
-        } else {
-            false
         }
+        self.evict_if_needed(&mut guard);
+        opened
     }
 }
 
@@ -136,7 +190,50 @@ mod tests {
     use std::thread::sleep;
 
     fn cfg() -> CircuitBreakerConfig {
-        CircuitBreakerConfig { failure_threshold: 3, open_for: Duration::from_millis(50) }
+        CircuitBreakerConfig {
+            failure_threshold: 3,
+            open_for: Duration::from_millis(50),
+            max_breaker_states: 4_096,
+            open_for_by_provider: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn lru_evicts_oldest_when_over_capacity() {
+        let mut config = cfg();
+        config.max_breaker_states = 2;
+        let breaker = CircuitBreaker::new(config);
+        let k1 = BreakerKey::new("fcm", Some("r"), Some("c1"));
+        let k2 = BreakerKey::new("fcm", Some("r"), Some("c2"));
+        let k3 = BreakerKey::new("fcm", Some("r"), Some("c3"));
+        breaker.record_failure(&k1);
+        breaker.record_failure(&k2);
+        // k1 is the oldest — bump k2 so k1 stays oldest.
+        breaker.record_success(&k2);
+        breaker.record_failure(&k3);
+        // k1 should have been evicted; k2 and k3 remain.
+        let guard = breaker.inner.lock().expect("breaker mutex");
+        assert!(!guard.state.contains_key(&k1));
+        assert!(guard.state.contains_key(&k2));
+        assert!(guard.state.contains_key(&k3));
+    }
+
+    #[test]
+    fn per_provider_open_for_override() {
+        let mut config = cfg();
+        config
+            .open_for_by_provider
+            .insert("fcm".to_owned(), Duration::from_millis(200));
+        let breaker = CircuitBreaker::new(config);
+        let key = BreakerKey::new("fcm", Some("r"), Some("c"));
+        breaker.record_failure(&key);
+        breaker.record_failure(&key);
+        breaker.record_failure(&key);
+        assert!(breaker.is_open(&key));
+        // Default cfg.open_for=50ms would have reset by now, but the
+        // per-provider override extends it to 200ms.
+        sleep(Duration::from_millis(75));
+        assert!(breaker.is_open(&key));
     }
 
     #[test]

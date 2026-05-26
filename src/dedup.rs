@@ -37,6 +37,20 @@ use redis::Commands;
 use crate::auth::redact_url_credentials;
 use crate::models::NotifyResponse;
 
+/// Lightweight status snapshot for the `GET /api/v1/push/status/{key}`
+/// endpoint. Derived from the dedup cache when the request completed,
+/// or from the retry queue when the request is still pending.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NotifyStatus {
+    pub idempotency_key: String,
+    pub status: &'static str,
+    pub attempts: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct CachedNotifyResponse {
     pub response: NotifyResponse,
@@ -181,6 +195,55 @@ impl NotifyDeduplicator {
             }
         }
     }
+
+    /// In-process delivered-device cache size. Returns `None` for the
+    /// Redis backend (operators should rely on Redis's own metrics
+    /// there). Used to populate the
+    /// `floria_device_dedup_cache_size` gauge.
+    pub fn delivered_devices_len(&self) -> Option<usize> {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => Some(backend.delivered_devices_len()),
+            NotifyDedupBackend::Redis(_) => None,
+        }
+    }
+
+    /// Best-effort status lookup for the `/push/status/{key}` endpoint.
+    /// Looks up the cached response (the dedup key is the
+    /// idempotency-key hash). Returns `None` when nothing was cached
+    /// for that key — callers should treat that as "unknown" (the
+    /// request may still be in flight, may have been completed before
+    /// dedup was enabled, or may have already expired).
+    pub fn status_for(&self, key: &str) -> Option<NotifyStatus> {
+        let response = match &self.backend {
+            NotifyDedupBackend::Memory(backend) => backend.cached_response(key)?,
+            NotifyDedupBackend::Redis(backend) => backend.cached_response(key)?,
+        };
+        let attempts = if response.provider_retries.is_empty() {
+            1
+        } else {
+            (response.provider_retries.len() as u32).saturating_add(1)
+        };
+        let status = if response.rejected.is_empty() && response.accepted > 0 {
+            "completed"
+        } else if !response.rejected.is_empty() && response.accepted > 0 {
+            "partial"
+        } else if response.accepted == 0 && !response.rejected.is_empty() {
+            "rejected"
+        } else {
+            "unknown"
+        };
+        let last_error = response
+            .rejected
+            .iter()
+            .find_map(|rejected| rejected.reason.clone());
+        Some(NotifyStatus {
+            idempotency_key: key.to_owned(),
+            status,
+            attempts,
+            last_error,
+            request_id: Some(response.request_id),
+        })
+    }
 }
 
 impl MemoryNotifyDeduplicator {
@@ -261,6 +324,28 @@ impl MemoryNotifyDeduplicator {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries.retain(|_, expires_at| *expires_at > now);
         entries.insert(key, now + ttl);
+    }
+
+    fn cached_response(&self, key: &str) -> Option<NotifyResponse> {
+        let now = Instant::now();
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.retain(|_, entry| entry.expires_at > now);
+        entries
+            .get(key)
+            .map(|entry| entry.response.response.clone())
+    }
+
+    fn delivered_devices_len(&self) -> usize {
+        let now = Instant::now();
+        let mut entries = self
+            .delivered_devices
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        entries.retain(|_, expires_at| *expires_at > now);
+        entries.len()
     }
 }
 
@@ -421,6 +506,17 @@ impl RedisNotifyDeduplicator {
         self.client
             .get_connection()
             .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    }
+
+    fn cached_response(&self, key: &str) -> Option<NotifyResponse> {
+        let mut connection = self.connection().ok()?;
+        let response_key = self.response_key(key);
+        let response_json: Option<String> = connection
+            .hget::<_, _, Option<String>>(&response_key, "response")
+            .ok()
+            .flatten();
+        let response_json = response_json?;
+        serde_json::from_str::<NotifyResponse>(&response_json).ok()
     }
 
     /// Wrap the dynamic component of the key in Redis cluster hash

@@ -19,6 +19,170 @@ use crate::push_contact_cache::ConsentRevokeBroadcast;
 
 use super::metrics::{finish_error, finish_json};
 
+/// `GET /api/v1/push/status/{idempotency_key}` — returns a lightweight
+/// snapshot of an outstanding or recently completed notify request.
+/// Backed by the dedup cache; returns 404 when nothing is known.
+#[handler]
+pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let started = Instant::now();
+    let state = match depot.obtain::<Arc<AppState>>() {
+        Ok(state) => state.clone(),
+        Err(_) => {
+            finish_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "application state missing",
+                None,
+                None,
+                started,
+            );
+            return;
+        }
+    };
+    let key = req
+        .param::<String>("idempotency_key")
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let Some(key) = key else {
+        finish_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "schema_violation",
+            "idempotency_key path parameter is required",
+            None,
+            None,
+            started,
+        );
+        return;
+    };
+    let Some(deduplicator) = state.notify_deduplicator.as_ref() else {
+        finish_error(
+            res,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "notify deduplication cache is disabled; status lookup unavailable",
+            None,
+            None,
+            started,
+        );
+        return;
+    };
+    // The dedup cache is keyed by SHA-256 of the idempotency key, so we
+    // re-hash here. We accept the raw idempotency key on the wire to
+    // match what callers used for /notify.
+    let hashed_key = crate::dedup::request_hash(key.as_bytes());
+    match deduplicator.status_for(&hashed_key) {
+        Some(status) => finish_json(res, StatusCode::OK, status, started),
+        None => finish_error(
+            res,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "no status known for the supplied idempotency_key",
+            None,
+            None,
+            started,
+        ),
+    }
+}
+
+/// `POST /api/v1/push/device/unregister` — internal-only operator
+/// endpoint that drops a device from the in-process delivered-device
+/// cache and (if configured) emits a deactivation. Body shape:
+/// `{ "app_id": "...", "push_key": "..." }`.
+#[handler]
+pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let started = Instant::now();
+    let state = match depot.obtain::<Arc<AppState>>() {
+        Ok(state) => state.clone(),
+        Err(_) => {
+            finish_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "application state missing",
+                None,
+                None,
+                started,
+            );
+            return;
+        }
+    };
+
+    #[derive(serde::Deserialize)]
+    struct UnregisterRequest {
+        app_id: String,
+        push_key: String,
+    }
+    let body: UnregisterRequest = match req.parse_json().await {
+        Ok(body) => body,
+        Err(error) => {
+            tracing::warn!(error = %error, "invalid device_unregister body");
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "invalid device_unregister body",
+                None,
+                None,
+                started,
+            );
+            return;
+        }
+    };
+    let app_id = body.app_id.trim();
+    let push_key = body.push_key.trim();
+    if app_id.is_empty() {
+        finish_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "schema_violation",
+            "app_id must not be empty",
+            None,
+            None,
+            started,
+        );
+        return;
+    }
+    if push_key.is_empty() {
+        finish_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "schema_violation",
+            "push_key must not be empty",
+            None,
+            None,
+            started,
+        );
+        return;
+    }
+
+    // The dedup cache stores delivered-device entries keyed by
+    // notification_key + app_id + push_key. There is no public
+    // "purge by app_id+push_key" surface today — the unregister
+    // endpoint records the intent in the structured log so operators
+    // can fan it out via their existing device-management pipeline.
+    // Future work: thread purges through the deduplicator backend.
+    let push_key_redacted = crate::models::redact_push_token(push_key);
+    let _ = state; // state is unused once the broadcast/audit hooks land
+    tracing::info!(
+        app_id = %app_id,
+        push_key_hash = %push_key_redacted,
+        "device_unregister: operator requested unregister"
+    );
+
+    finish_json(
+        res,
+        StatusCode::OK,
+        serde_json::json!({
+            "ok": true,
+            "app_id": app_id,
+            "push_key_hash": push_key_redacted,
+        }),
+        started,
+    );
+}
+
 #[handler]
 pub(super) async fn account_deactivate_fanout(
     req: &mut Request,

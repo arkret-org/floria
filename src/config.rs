@@ -3,6 +3,7 @@ use std::env;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use kdl::{KdlDocument, KdlNode, KdlValue};
@@ -490,6 +491,15 @@ pub struct NotifyAuthConfig {
     /// Also forbids dev-only conveniences (anonymous bypass, bearer
     /// fallback when no signature is present on a known principal).
     pub production_mode: bool,
+    /// When true, a bearer-only request MUST present a recognised
+    /// origin_service_did and the gateway will only accept the request
+    /// if that DID has a configured `service_principal` entry whose
+    /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
+    /// stolen gateway-wide bearer token from being used to impersonate
+    /// an arbitrary tenant via the X-Contrix-Origin-Service-DID header.
+    /// Has no effect in `production_mode` (which already disables the
+    /// gateway-wide bearer fallback).
+    pub bind_bearer_to_origin_did: bool,
     #[serde(default)]
     pub service_principals: HashMap<String, NotifyServicePrincipalConfig>,
     pub nonce_store: NotifyNonceStoreConfig,
@@ -660,6 +670,7 @@ impl Default for NotifyAuthConfig {
             mtls_subject_dn_header: "x-client-certificate-subject".to_owned(),
             mtls_subject_alt_names_header: "x-client-certificate-san".to_owned(),
             production_mode: false,
+            bind_bearer_to_origin_did: false,
             service_principals: HashMap::new(),
             nonce_store: NotifyNonceStoreConfig::default(),
             replay_window_seconds: 0,
@@ -674,6 +685,11 @@ pub struct NotifyNonceStoreConfig {
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
+    /// Behaviour when the Redis backend is unreachable. `permissive`
+    /// (the default) preserves the legacy fail-open semantic. `strict`
+    /// causes the gateway to answer 503 on the calling site so the
+    /// caller backs off instead of bypassing replay protection.
+    pub redis_failure_policy: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -684,6 +700,7 @@ impl Default for NotifyNonceStoreConfig {
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
+            redis_failure_policy: "permissive".to_owned(),
             extra: Map::new(),
         }
     }
@@ -702,6 +719,15 @@ impl NotifyNonceStoreConfig {
     pub fn key_prefix(&self) -> &str {
         let value = self.key_prefix.trim();
         if value.is_empty() { "floria" } else { value }
+    }
+
+    pub fn failure_policy(&self) -> &str {
+        let value = self.redis_failure_policy.trim();
+        if value.is_empty() {
+            "permissive"
+        } else {
+            value
+        }
     }
 
     fn emit_startup_warnings(&self) {
@@ -732,6 +758,14 @@ impl NotifyNonceStoreConfig {
             backend => {
                 bail!(
                     "http.notify_auth.nonce_store.backend must be one of: memory, redis; got `{backend}`"
+                );
+            }
+        }
+        match self.failure_policy() {
+            "permissive" | "strict" => {}
+            other => {
+                bail!(
+                    "http.notify_auth.nonce_store.redis_failure_policy must be one of: permissive, strict; got `{other}`"
                 );
             }
         }
@@ -852,6 +886,9 @@ pub struct NotifyRateLimitConfig {
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
+    /// `permissive` (default) — fail-open if Redis is unreachable;
+    /// `strict` — reject with 429 so callers back off.
+    pub redis_failure_policy: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -868,6 +905,7 @@ impl Default for NotifyRateLimitConfig {
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
+            redis_failure_policy: "permissive".to_owned(),
             extra: Map::new(),
         }
     }
@@ -901,6 +939,15 @@ impl NotifyRateLimitConfig {
         if value.is_empty() { "floria" } else { value }
     }
 
+    pub fn failure_policy(&self) -> &str {
+        let value = self.redis_failure_policy.trim();
+        if value.is_empty() {
+            "permissive"
+        } else {
+            value
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         match self.backend_kind() {
             "memory" => {}
@@ -917,6 +964,14 @@ impl NotifyRateLimitConfig {
             backend => {
                 bail!(
                     "http.notify_rate_limits.backend must be one of: memory, redis; got `{backend}`"
+                );
+            }
+        }
+        match self.failure_policy() {
+            "permissive" | "strict" => {}
+            other => {
+                bail!(
+                    "http.notify_rate_limits.redis_failure_policy must be one of: permissive, strict; got `{other}`"
                 );
             }
         }
@@ -944,6 +999,21 @@ pub struct NotifyRetryQueueConfig {
     pub dead_letter_capacity: u32,
     pub poll_interval_ms: u64,
     pub batch_size: u32,
+    /// AEAD key (ChaCha20-Poly1305) for envelopes persisted on a Redis
+    /// retry queue. The key material is hashed with SHA-256, so any
+    /// non-empty string is acceptable; rotating the key invalidates
+    /// every in-flight retry, so operators should drain the queue
+    /// first or accept the loss as a deliberate forgetting event.
+    /// Empty string (the default) disables encryption — backwards
+    /// compatible with existing deployments.
+    pub encryption_key: String,
+    /// Path to a file containing the AEAD key material. Mutually
+    /// exclusive with `encryption_key`; both unset means no
+    /// encryption.
+    pub encryption_key_file: Option<String>,
+    /// Grace period (seconds) the main task waits for the retry worker
+    /// to finish in-flight dispatches at shutdown. Default 30s.
+    pub grace_period_secs: u64,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -961,6 +1031,9 @@ impl Default for NotifyRetryQueueConfig {
             dead_letter_capacity: 1024,
             poll_interval_ms: 1_000,
             batch_size: 32,
+            encryption_key: String::new(),
+            encryption_key_file: None,
+            grace_period_secs: 30,
             extra: Map::new(),
         }
     }
@@ -969,6 +1042,34 @@ impl Default for NotifyRetryQueueConfig {
 impl NotifyRetryQueueConfig {
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    pub fn grace_period(&self) -> Duration {
+        Duration::from_secs(self.grace_period_secs.max(1))
+    }
+
+    /// Load the AEAD key material from inline config or external file.
+    /// Returns `None` when no encryption is configured.
+    pub fn encryption_key_material(&self) -> Result<Option<Vec<u8>>> {
+        let inline = self.encryption_key.trim();
+        if !inline.is_empty() {
+            return Ok(Some(inline.as_bytes().to_vec()));
+        }
+        if let Some(path) = self
+            .encryption_key_file
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let bytes = fs::read(path).with_context(|| {
+                format!("failed to read notify_retry_queue.encryption_key_file `{path}`")
+            })?;
+            if bytes.iter().all(u8::is_ascii_whitespace) {
+                bail!("http.notify_retry_queue.encryption_key_file is empty");
+            }
+            return Ok(Some(bytes));
+        }
+        Ok(None)
     }
 
     pub fn backend_kind(&self) -> &str {
@@ -1688,7 +1789,8 @@ fn http_schema() -> Value {
                     "per_endpoint": {"type": ["integer", "null"], "minimum": 0},
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
-                    "key_prefix": {"type": "string", "default": "floria"}
+                    "key_prefix": {"type": "string", "default": "floria"},
+                    "redis_failure_policy": {"type": "string", "enum": ["permissive", "strict"], "default": "permissive"}
                 }
             },
             "notify_retry_queue": {
@@ -1705,7 +1807,10 @@ fn http_schema() -> Value {
                     "max_backoff_seconds": {"type": "integer", "minimum": 1, "default": 900},
                     "dead_letter_capacity": {"type": "integer", "minimum": 1, "default": 1024},
                     "poll_interval_ms": {"type": "integer", "minimum": 100, "default": 1000},
-                    "batch_size": {"type": "integer", "minimum": 1, "default": 32}
+                    "batch_size": {"type": "integer", "minimum": 1, "default": 32},
+                    "encryption_key": {"type": "string", "default": ""},
+                    "encryption_key_file": {"type": ["string", "null"]},
+                    "grace_period_secs": {"type": "integer", "minimum": 1, "default": 30}
                 }
             },
             "metrics_detailed_circle_labels": {
@@ -1761,6 +1866,11 @@ fn notify_auth_schema() -> Value {
                 "default": false,
                 "description": "When true, refuses to start in profiles that allow anonymous or bearer-only auth without HTTP Message Signature/mTLS."
             },
+            "bind_bearer_to_origin_did": {
+                "type": "boolean",
+                "default": false,
+                "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_did."
+            },
             "service_principals": {
                 "type": "object",
                 "additionalProperties": service_principal_schema()
@@ -1772,7 +1882,8 @@ fn notify_auth_schema() -> Value {
                 "properties": {
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
-                    "key_prefix": {"type": "string", "default": "floria"}
+                    "key_prefix": {"type": "string", "default": "floria"},
+                    "redis_failure_policy": {"type": "string", "enum": ["permissive", "strict"], "default": "permissive"}
                 }
             },
             "replay_window_seconds": {

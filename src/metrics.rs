@@ -2,8 +2,9 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use prometheus::{
-    Encoder, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec, TextEncoder,
-    register_histogram_vec, register_int_counter, register_int_counter_vec, register_int_gauge_vec,
+    Encoder, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, TextEncoder,
+    register_histogram_vec, register_int_counter, register_int_counter_vec, register_int_gauge,
+    register_int_gauge_vec,
 };
 use salvo::http::StatusCode;
 use salvo::http::header::CONTENT_TYPE;
@@ -219,6 +220,22 @@ static REQUESTS_IN_FLIGHT_GAUGE: LazyLock<IntGaugeVec> = LazyLock::new(|| {
     .expect("register floria_requests_in_flight")
 });
 
+static DEVICE_DEDUP_CACHE_SIZE_GAUGE: LazyLock<IntGauge> = LazyLock::new(|| {
+    register_int_gauge!(
+        "floria_device_dedup_cache_size",
+        "Number of per-device dedup entries currently held in the in-process dedup cache"
+    )
+    .expect("register floria_device_dedup_cache_size")
+});
+
+static RETRY_QUEUE_DEPTH_GAUGE: LazyLock<IntGauge> = LazyLock::new(|| {
+    register_int_gauge!(
+        "floria_retry_queue_depth",
+        "Number of pending notify-dispatch retries currently enqueued"
+    )
+    .expect("register floria_retry_queue_depth")
+});
+
 pub fn init() {
     LazyLock::force(&NOTIFS_RECEIVED_COUNTER);
     LazyLock::force(&NOTIFY_REQUEST_CACHE_HITS_COUNTER);
@@ -242,6 +259,16 @@ pub fn init() {
     LazyLock::force(&PUSHGATEWAY_HTTP_RESPONSES_COUNTER);
     LazyLock::force(&NOTIFY_HANDLE_HISTOGRAM);
     LazyLock::force(&REQUESTS_IN_FLIGHT_GAUGE);
+    LazyLock::force(&DEVICE_DEDUP_CACHE_SIZE_GAUGE);
+    LazyLock::force(&RETRY_QUEUE_DEPTH_GAUGE);
+}
+
+pub fn set_device_dedup_cache_size(value: i64) {
+    DEVICE_DEDUP_CACHE_SIZE_GAUGE.set(value);
+}
+
+pub fn set_retry_queue_depth(value: i64) {
+    RETRY_QUEUE_DEPTH_GAUGE.set(value);
 }
 
 pub fn notification_received() {

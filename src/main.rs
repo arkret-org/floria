@@ -10,12 +10,12 @@ use floria::config::{Config, resolve_path};
 use floria::deactivation::{DeactivationLedger, PostgresDeactivationQueueDrain};
 use floria::dedup::NotifyDeduplicator;
 use floria::metrics;
-use floria::nonce_store::NonceStore;
+use floria::nonce_store::{NonceStore, RedisFailurePolicy};
 use floria::observability::{self, TelemetryGuard};
 use floria::push_contact_cache::PushContactCache;
 use floria::pushkin::PushkinRegistry;
 use floria::rate_limit::NotifyRateLimiter;
-use floria::retry_queue::{RetryQueue, RetryQueueConfig};
+use floria::retry_queue::{RetryQueue, RetryQueueCipher, RetryQueueConfig};
 use floria::service::build_router_with_access_log;
 use salvo::prelude::*;
 use tokio::task::JoinSet;
@@ -90,14 +90,21 @@ async fn main() -> Result<()> {
                     .redis_url
                     .clone()
                     .expect("validated notify_auth.nonce_store.redis_url");
+                let policy = RedisFailurePolicy::from_str(store_config.failure_policy());
                 tracing::info!(
                     ttl_secs = ttl.as_secs(),
                     backend = "redis",
                     redis = %redact_url_credentials(&redis_url),
                     key_prefix = store_config.key_prefix(),
+                    failure_policy = store_config.failure_policy(),
                     "enabling /notify HTTP Message Signature replay protection"
                 );
-                NonceStore::redis(ttl, &redis_url, store_config.key_prefix().to_owned())?
+                NonceStore::redis_with_policy(
+                    ttl,
+                    &redis_url,
+                    store_config.key_prefix().to_owned(),
+                    policy,
+                )?
             }
             _ => {
                 tracing::info!(
@@ -118,15 +125,17 @@ async fn main() -> Result<()> {
                     .redis_url
                     .clone()
                     .expect("validated notify_rate_limits.redis_url");
+                let policy = RedisFailurePolicy::from_str(rate_config.failure_policy());
                 tracing::info!(
                     window_secs = rate_config.window_seconds.max(1),
                     backend = "redis",
                     redis = %redact_url_credentials(&redis_url),
                     key_prefix = rate_config.key_prefix(),
+                    failure_policy = rate_config.failure_policy(),
                     "enabling /notify rate limits"
                 );
                 let key_prefix = rate_config.key_prefix().to_owned();
-                NotifyRateLimiter::redis(rate_config, &redis_url, key_prefix)?
+                NotifyRateLimiter::redis_with_policy(rate_config, &redis_url, key_prefix, policy)?
             }
             _ => {
                 tracing::info!(
@@ -142,6 +151,7 @@ async fn main() -> Result<()> {
     let mut retry_worker_handle: Option<(
         tokio::sync::watch::Sender<bool>,
         tokio::task::JoinHandle<()>,
+        std::time::Duration,
     )> = None;
     if config.http.notify_retry_queue.enabled() {
         let queue_config = config.http.notify_retry_queue.clone();
@@ -150,6 +160,13 @@ async fn main() -> Result<()> {
             default_backoff: std::time::Duration::from_secs(queue_config.default_backoff_seconds),
             max_backoff: std::time::Duration::from_secs(queue_config.max_backoff_seconds),
             dead_letter_capacity: queue_config.dead_letter_capacity as usize,
+        };
+        let cipher = match queue_config.encryption_key_material()? {
+            Some(material) => {
+                tracing::info!("enabling AEAD encryption for notify retry queue envelopes");
+                Some(RetryQueueCipher::new(&material))
+            }
+            None => None,
         };
         let queue = match queue_config.backend_kind() {
             "redis" => {
@@ -162,12 +179,14 @@ async fn main() -> Result<()> {
                     redis = %redact_url_credentials(&redis_url),
                     key_prefix = queue_config.key_prefix(),
                     max_attempts = queue_config.max_attempts,
+                    aead_enabled = cipher.is_some(),
                     "enabling /notify retry queue"
                 );
-                Arc::new(RetryQueue::redis(
+                Arc::new(RetryQueue::redis_with_cipher(
                     retry_config,
                     &redis_url,
                     queue_config.key_prefix().to_owned(),
+                    cipher,
                 )?)
             }
             _ => {
@@ -184,6 +203,7 @@ async fn main() -> Result<()> {
         let registry_clone = state.registry.clone();
         let poll_interval = std::time::Duration::from_millis(queue_config.poll_interval_ms.max(50));
         let batch_size = queue_config.batch_size.max(1) as usize;
+        let grace = queue_config.grace_period();
         retry_worker_handle = Some((
             shutdown_tx,
             tokio::spawn(async move {
@@ -196,6 +216,7 @@ async fn main() -> Result<()> {
                 )
                 .await;
             }),
+            grace,
         ));
     }
     let state = Arc::new(state);
@@ -226,9 +247,18 @@ async fn main() -> Result<()> {
         result.context("server task join failure")??;
     }
 
-    if let Some((shutdown, handle)) = retry_worker_handle {
+    if let Some((shutdown, handle, grace)) = retry_worker_handle {
         let _ = shutdown.send(true);
-        let _ = handle.await;
+        // Bounded wait so a stuck worker can't block shutdown forever.
+        tracing::info!(grace_secs = grace.as_secs(), "waiting for retry-queue worker to drain");
+        match tokio::time::timeout(grace, handle).await {
+            Ok(Ok(())) => tracing::info!("retry-queue worker exited cleanly"),
+            Ok(Err(error)) => tracing::warn!(error = %error, "retry-queue worker join error"),
+            Err(_) => tracing::warn!(
+                grace_secs = grace.as_secs(),
+                "retry-queue worker did not drain within grace period; abandoning"
+            ),
+        }
     }
 
     Ok(())

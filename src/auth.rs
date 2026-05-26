@@ -245,6 +245,81 @@ fn authenticate_bearer_request(
         });
     }
 
+    // Multi-tenant isolation: when `bind_bearer_to_origin_did` is set,
+    // a gateway-wide bearer token is NOT enough — the caller must
+    // declare an origin_service_did and present a bearer credential
+    // configured for THAT principal. This blocks a stolen gateway
+    // bearer token from being used to impersonate an arbitrary tenant
+    // by spoofing the X-Contrix-Origin-Service-DID header.
+    if auth.bind_bearer_to_origin_did {
+        let Some(origin_did) = origin_did else {
+            tracing::warn!(
+                request_id,
+                "rejecting /notify request: bind_bearer_to_origin_did requires origin_service_did"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "origin service DID is required for bearer authentication".to_owned(),
+            });
+        };
+        let Some(principal) = auth.service_principals.get(origin_did) else {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %origin_did,
+                "rejecting /notify request: bind_bearer_to_origin_did requires a configured service_principal for the origin DID"
+            );
+            return Err(AuthFailure {
+                status: StatusCode::UNAUTHORIZED,
+                code: "unauthenticated",
+                message: "origin service DID does not have a configured principal".to_owned(),
+            });
+        };
+        match bearer_state(
+            req,
+            &principal.bearer_tokens,
+            &principal.bearer_token_hashes,
+        ) {
+            BearerState::Valid => {}
+            BearerState::Missing => {
+                tracing::warn!(
+                    request_id,
+                    origin_service_did = %origin_did,
+                    "rejecting /notify request without a bearer credential bound to the origin DID"
+                );
+                return Err(AuthFailure {
+                    status: StatusCode::UNAUTHORIZED,
+                    code: "unauthenticated",
+                    message: "missing bearer service token".to_owned(),
+                });
+            }
+            BearerState::Invalid => {
+                tracing::warn!(
+                    request_id,
+                    origin_service_did = %origin_did,
+                    "rejecting /notify request: bearer credential is not bound to the declared origin DID"
+                );
+                return Err(AuthFailure {
+                    status: StatusCode::UNAUTHORIZED,
+                    code: "unauthenticated",
+                    message: "bearer service token is not bound to the declared origin service DID"
+                        .to_owned(),
+                });
+            }
+        }
+        verify_destination_service_did(req, auth, origin_did, request_id)?;
+        let allow_plaintext_metadata = auth
+            .plaintext_metadata_service_dids
+            .iter()
+            .any(|candidate| candidate == origin_did)
+            || (principal.allow_plaintext_metadata
+                && principal_is_plaintext_eligible(principal));
+        return Ok(AuthenticatedNotifyCaller {
+            origin_service_did: origin_did.to_owned(),
+            allow_plaintext_metadata,
+        });
+    }
+
     match bearer_state(req, &auth.bearer_tokens, &auth.bearer_token_hashes) {
         BearerState::Valid => {}
         BearerState::Missing => {
@@ -869,6 +944,18 @@ fn verify_nonce_freshness(
                 status: StatusCode::UNAUTHORIZED,
                 code: "invalid_signature",
                 message: "HTTP Message Signature has already been observed (replay)".to_owned(),
+            })
+        }
+        NonceCheck::BackendUnavailable => {
+            tracing::warn!(
+                request_id,
+                origin_service_did = %origin_did,
+                "rejecting /notify request: nonce store backend unavailable (strict policy)"
+            );
+            Err(AuthFailure {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: "service_unavailable",
+                message: "replay protection backend is unavailable".to_owned(),
             })
         }
     }

@@ -158,6 +158,11 @@
                 }
               ]
             },
+            "bind_bearer_to_origin_did": {
+              "default": false,
+              "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_did.",
+              "type": "boolean"
+            },
             "gateway_service_did": {
               "type": [
                 "string",
@@ -194,6 +199,14 @@
                 },
                 "key_prefix": {
                   "default": "floria",
+                  "type": "string"
+                },
+                "redis_failure_policy": {
+                  "default": "permissive",
+                  "enum": [
+                    "permissive",
+                    "strict"
+                  ],
                   "type": "string"
                 },
                 "redis_url": {
@@ -433,6 +446,14 @@
                 "null"
               ]
             },
+            "redis_failure_policy": {
+              "default": "permissive",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "type": "string"
+            },
             "redis_url": {
               "type": [
                 "string",
@@ -477,6 +498,21 @@
             "enabled": {
               "default": false,
               "type": "boolean"
+            },
+            "encryption_key": {
+              "default": "",
+              "type": "string"
+            },
+            "encryption_key_file": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "grace_period_secs": {
+              "default": 30,
+              "minimum": 1,
+              "type": "integer"
             },
             "key_prefix": {
               "default": "floria",

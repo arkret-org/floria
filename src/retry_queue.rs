@@ -24,10 +24,83 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use base64::Engine;
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use rand::RngCore;
 use redis::Commands;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::auth::redact_url_credentials;
+
+/// AAD tag bound into every encrypted retry-queue envelope so a
+/// payload moved between key prefixes / queues can't be replayed
+/// against the wrong scope.
+const RETRY_QUEUE_AAD: &[u8] = b"floria:retry_queue:v1";
+const RETRY_NONCE_LEN: usize = 12;
+
+/// Wraps an AEAD key for encrypting on-disk retry envelopes. The wire
+/// shape is `base64(nonce || ciphertext)`; the key material is hashed
+/// with SHA-256 so the caller can pass any byte string.
+#[derive(Clone)]
+pub struct RetryQueueCipher {
+    cipher: ChaCha20Poly1305,
+}
+
+impl std::fmt::Debug for RetryQueueCipher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RetryQueueCipher").finish_non_exhaustive()
+    }
+}
+
+impl RetryQueueCipher {
+    pub fn new(key_material: &[u8]) -> Self {
+        let key = Sha256::digest(key_material);
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key));
+        Self { cipher }
+    }
+
+    fn seal(&self, plaintext: &[u8]) -> Result<String> {
+        let mut nonce_bytes = [0u8; RETRY_NONCE_LEN];
+        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = self
+            .cipher
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext,
+                    aad: RETRY_QUEUE_AAD,
+                },
+            )
+            .map_err(|_| anyhow::anyhow!("retry-queue AEAD encryption failed"))?;
+        let mut envelope = Vec::with_capacity(RETRY_NONCE_LEN + ciphertext.len());
+        envelope.extend_from_slice(&nonce_bytes);
+        envelope.extend_from_slice(&ciphertext);
+        Ok(base64::engine::general_purpose::STANDARD.encode(envelope))
+    }
+
+    fn open(&self, wire: &str) -> Result<Vec<u8>> {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(wire)
+            .context("retry-queue envelope is not valid base64")?;
+        if bytes.len() < RETRY_NONCE_LEN {
+            anyhow::bail!("retry-queue envelope is shorter than the nonce");
+        }
+        let (nonce_bytes, ciphertext) = bytes.split_at(RETRY_NONCE_LEN);
+        let nonce = Nonce::from_slice(nonce_bytes);
+        self.cipher
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: ciphertext,
+                    aad: RETRY_QUEUE_AAD,
+                },
+            )
+            .map_err(|_| anyhow::anyhow!("retry-queue AEAD decryption failed"))
+    }
+}
 
 /// One pending retry attempt.
 ///
@@ -125,6 +198,7 @@ struct RedisQueue {
     target_label: String,
     key_prefix: String,
     dead_letter_capacity: usize,
+    cipher: Option<RetryQueueCipher>,
 }
 
 #[derive(Debug)]
@@ -155,6 +229,15 @@ impl RetryQueue {
         redis_url: &str,
         key_prefix: impl Into<String>,
     ) -> Result<Self> {
+        Self::redis_with_cipher(config, redis_url, key_prefix, None)
+    }
+
+    pub fn redis_with_cipher(
+        config: RetryQueueConfig,
+        redis_url: &str,
+        key_prefix: impl Into<String>,
+        cipher: Option<RetryQueueCipher>,
+    ) -> Result<Self> {
         let client = redis::Client::open(redis_url).with_context(|| {
             format!(
                 "invalid notify_retry_queue redis_url `{}`",
@@ -169,6 +252,7 @@ impl RetryQueue {
                 target_label: redact_url_credentials(redis_url),
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
                 dead_letter_capacity,
+                cipher,
             }),
         })
     }
@@ -241,11 +325,13 @@ impl RetryQueue {
 
     /// Compute the next retry timestamp for an envelope that should
     /// be re-enqueued, applying exponential backoff capped by
-    /// `max_backoff`.
+    /// `max_backoff` and adding ±10% jitter so a stampede of clients
+    /// hitting the same provider doesn't synchronise their retries.
     pub fn next_retry_at(&self, attempts: u32) -> Duration {
         let base = self.config.default_backoff;
         let factor = 1u32 << attempts.min(10);
-        base.saturating_mul(factor).min(self.config.max_backoff)
+        let backoff = base.saturating_mul(factor).min(self.config.max_backoff);
+        apply_jitter(backoff)
     }
 }
 
@@ -323,10 +409,10 @@ impl RedisQueue {
             }
         };
         let key = self.pending_key();
-        let payload = match serde_json::to_string(&envelope) {
+        let payload = match self.serialize_envelope(&envelope) {
             Ok(payload) => payload,
             Err(error) => {
-                tracing::warn!(error = %error, "failed to serialize retry envelope");
+                tracing::warn!(error = %error, "failed to serialize/encrypt retry envelope");
                 return;
             }
         };
@@ -335,6 +421,22 @@ impl RedisQueue {
         if let Err(error) = result {
             tracing::warn!(error = %error, backend = %self.target_label, redis_key = %key, "failed to enqueue retry on Redis");
         }
+    }
+
+    fn serialize_envelope(&self, envelope: &RetryEnvelope) -> Result<String> {
+        let json = serde_json::to_string(envelope).context("serialize retry envelope")?;
+        match &self.cipher {
+            Some(cipher) => cipher.seal(json.as_bytes()),
+            None => Ok(json),
+        }
+    }
+
+    fn deserialize_envelope(&self, payload: &str) -> Result<RetryEnvelope> {
+        let bytes = match &self.cipher {
+            Some(cipher) => cipher.open(payload)?,
+            None => payload.as_bytes().to_vec(),
+        };
+        serde_json::from_slice(&bytes).context("deserialize retry envelope")
     }
 
     fn dequeue_due(&self, limit: usize) -> Vec<RetryEnvelope> {
@@ -369,7 +471,7 @@ impl RedisQueue {
             if !matches!(removed, Ok(1)) {
                 continue;
             }
-            match serde_json::from_str::<RetryEnvelope>(&payload) {
+            match self.deserialize_envelope(&payload) {
                 Ok(envelope) => envelopes.push(envelope),
                 Err(error) => {
                     tracing::warn!(error = %error, "failed to deserialize Redis retry envelope, dropping");
@@ -388,10 +490,10 @@ impl RedisQueue {
             }
         };
         let key = self.dead_letter_key();
-        let payload = match serde_json::to_string(&envelope) {
+        let payload = match self.serialize_envelope(&envelope) {
             Ok(payload) => payload,
             Err(error) => {
-                tracing::warn!(error = %error, "failed to serialize dead-letter envelope");
+                tracing::warn!(error = %error, "failed to serialize/encrypt dead-letter envelope");
                 return;
             }
         };
@@ -432,7 +534,7 @@ impl RedisQueue {
         match payloads {
             Ok(payloads) => payloads
                 .into_iter()
-                .filter_map(|payload| serde_json::from_str::<RetryEnvelope>(&payload).ok())
+                .filter_map(|payload| self.deserialize_envelope(&payload).ok())
                 .collect(),
             Err(error) => {
                 tracing::warn!(error = %error, backend = %self.target_label, redis_key = %key, "failed to read dead-letter snapshot");
@@ -465,6 +567,24 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
     }
 }
 
+/// Apply ±10% jitter to a backoff duration. The implementation uses
+/// `rand::thread_rng` so a fork-bombed process won't pin every retry
+/// to the same `Instant`.
+fn apply_jitter(backoff: Duration) -> Duration {
+    let millis = backoff.as_millis().min(u64::MAX as u128) as u64;
+    if millis == 0 {
+        return backoff;
+    }
+    let jitter_span = millis / 10; // ±10%
+    if jitter_span == 0 {
+        return backoff;
+    }
+    let mut rng = rand::thread_rng();
+    let offset_raw = (rng.next_u64() % (jitter_span * 2 + 1)) as i64 - jitter_span as i64;
+    let adjusted = (millis as i64).saturating_add(offset_raw).max(0) as u64;
+    Duration::from_millis(adjusted)
+}
+
 fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -493,6 +613,11 @@ pub async fn run_worker(
         if shutdown.has_changed().unwrap_or(false) && *shutdown.borrow() {
             break;
         }
+        // Surface the pending queue depth on each loop so the
+        // `floria_retry_queue_depth` gauge tracks the live backlog
+        // rather than only the most recent enqueue. Cheap for memory
+        // backends and a single ZCARD/EXISTS on Redis.
+        crate::metrics::set_retry_queue_depth(queue.pending_len() as i64);
         let due = queue.dequeue_due(batch_size.max(1));
         if due.is_empty() {
             tokio::select! {
@@ -658,8 +783,12 @@ mod tests {
             max_backoff: Duration::from_secs(60),
             ..RetryQueueConfig::default()
         });
+        // ±10% jitter around the 60s cap
         let backoff = queue.next_retry_at(20);
-        assert_eq!(backoff, Duration::from_secs(60));
+        assert!(
+            backoff >= Duration::from_millis(54_000) && backoff <= Duration::from_millis(66_000),
+            "backoff {backoff:?} outside expected jitter window"
+        );
     }
 
     #[test]

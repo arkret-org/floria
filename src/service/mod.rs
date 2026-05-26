@@ -79,6 +79,15 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .push(
             Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
         )
+        // Phase B.4 — status lookup + internal device unregister.
+        .push(
+            Router::with_path("api/v1/push/status/<idempotency_key>")
+                .get(internal::push_status),
+        )
+        .push(
+            Router::with_path("api/v1/push/device/unregister")
+                .post(internal::device_unregister),
+        )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
         .push(Router::with_path("readyz").get(health::readyz))
@@ -105,6 +114,15 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
         )
         .push(
             Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
+        )
+        // Phase B.4 — status lookup + internal device unregister.
+        .push(
+            Router::with_path("api/v1/push/status/<idempotency_key>")
+                .get(internal::push_status),
+        )
+        .push(
+            Router::with_path("api/v1/push/device/unregister")
+                .post(internal::device_unregister),
         )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))

@@ -102,6 +102,18 @@ impl ClientCredentialsGrant {
 }
 
 pub(super) fn header_value(value: &str) -> Result<HeaderValue, DispatchError> {
+    // Defense-in-depth: explicitly reject CRLF / control bytes so HTTP/2 (or
+    // any future HTTP/1.x fallback in reqwest) can never see a smuggled
+    // header. `HeaderValue::from_str` already rejects these but we want the
+    // failure to be auditable and traceable to a request input.
+    if value
+        .bytes()
+        .any(|b| b == b'\r' || b == b'\n' || b == 0 || (b < 0x20 && b != b'\t'))
+    {
+        return Err(DispatchError::internal(
+            "invalid header value: contains CR/LF or control byte",
+        ));
+    }
     reqwest::header::HeaderValue::from_str(value)
         .map_err(|error| DispatchError::internal(format!("invalid header value: {error}")))
 }

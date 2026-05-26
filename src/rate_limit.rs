@@ -7,6 +7,7 @@ use redis::Commands;
 
 use crate::auth::redact_url_credentials;
 use crate::config::NotifyRateLimitConfig;
+use crate::nonce_store::RedisFailurePolicy;
 
 #[derive(Debug, Clone)]
 pub struct NotifyRateLimitCheck {
@@ -40,6 +41,7 @@ struct RedisRateLimiter {
     client: redis::Client,
     target_label: String,
     key_prefix: String,
+    failure_policy: RedisFailurePolicy,
 }
 
 #[derive(Debug)]
@@ -71,6 +73,15 @@ impl NotifyRateLimiter {
         redis_url: &str,
         key_prefix: impl Into<String>,
     ) -> Result<Self> {
+        Self::redis_with_policy(config, redis_url, key_prefix, RedisFailurePolicy::Permissive)
+    }
+
+    pub fn redis_with_policy(
+        config: NotifyRateLimitConfig,
+        redis_url: &str,
+        key_prefix: impl Into<String>,
+        failure_policy: RedisFailurePolicy,
+    ) -> Result<Self> {
         let client = redis::Client::open(redis_url).with_context(|| {
             format!(
                 "invalid notify_rate_limits redis_url `{}`",
@@ -84,6 +95,7 @@ impl NotifyRateLimiter {
                 client,
                 target_label: redact_url_credentials(redis_url),
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
+                failure_policy,
             }),
         })
     }
@@ -227,6 +239,20 @@ impl RedisRateLimiter {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
             Err(error) => {
+                if self.failure_policy.is_strict() {
+                    tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis rate limit cache; failing closed (strict)");
+                    // Use the first check as the rejection subject. The
+                    // strict policy treats backend unavailability as a
+                    // 429 so callers back off instead of overwhelming a
+                    // recovering Redis.
+                    let check = &checks[0];
+                    return Err(NotifyRateLimitRejection {
+                        scope: check.scope,
+                        subject: check.subject.clone(),
+                        limit: check.limit,
+                        retry_after: window.max(Duration::from_secs(1)),
+                    });
+                }
                 tracing::warn!(error = %error, backend = %self.target_label, "failed to connect to Redis rate limit cache; allowing request");
                 return Ok(());
             }
@@ -274,6 +300,16 @@ impl RedisRateLimiter {
                 Ok(())
             }
             Err(error) => {
+                if self.failure_policy.is_strict() {
+                    tracing::warn!(error = %error, backend = %self.target_label, "Redis rate limit script failed; failing closed (strict)");
+                    let check = &checks[0];
+                    return Err(NotifyRateLimitRejection {
+                        scope: check.scope,
+                        subject: check.subject.clone(),
+                        limit: check.limit,
+                        retry_after: window.max(Duration::from_secs(1)),
+                    });
+                }
                 tracing::warn!(error = %error, backend = %self.target_label, "Redis rate limit script failed; allowing request");
                 Ok(())
             }
