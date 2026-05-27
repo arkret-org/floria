@@ -134,10 +134,7 @@ pub fn ensure_issuer_anchored(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaBindingError {
     /// `focus_mismatch` — requested focus_id != committed session_focus.
-    FocusMismatch {
-        requested: String,
-        session: String,
-    },
+    FocusMismatch { requested: String, session: String },
     /// `unknown_focus_type` — backend label not in the v1 enum.
     UnknownFocusType(String),
     /// `token_issuer_unauthorised` — kid not anchored to current
@@ -329,7 +326,10 @@ impl LiveKitVideoGrant {
     /// Recorder is forced to `false`. `metadata` and
     /// `canUpdateOwnMetadata` are absent by construction.
     #[must_use]
-    pub fn for_participant(call_room_hash: impl Into<String>, caps: ContrixNativeMediaCaps) -> Self {
+    pub fn for_participant(
+        call_room_hash: impl Into<String>,
+        caps: ContrixNativeMediaCaps,
+    ) -> Self {
         let mut sources = Vec::new();
         if caps.audio {
             sources.push("microphone".to_owned());
@@ -399,10 +399,7 @@ pub fn participant_binding_canonical_bytes(
     binding: &ParticipantBinding,
 ) -> Result<Vec<u8>, MediaBindingError> {
     let mut map = Map::new();
-    map.insert(
-        "scheme".to_owned(),
-        Value::String(binding.scheme.clone()),
-    );
+    map.insert("scheme".to_owned(), Value::String(binding.scheme.clone()));
     map.insert(
         "issuer_kid".to_owned(),
         Value::String(binding.issuer_kid.clone()),
@@ -494,21 +491,11 @@ mod tests {
     #[test]
     fn issuer_anchored_to_active_service_did() {
         assert!(
-            ensure_issuer_anchored(
-                "did:web:media.example#key-1",
-                "did:web:media.example",
-            )
-            .is_ok()
+            ensure_issuer_anchored("did:web:media.example#key-1", "did:web:media.example",).is_ok()
         );
-        assert!(
-            ensure_issuer_anchored("did:web:media.example", "did:web:media.example")
-                .is_ok()
-        );
-        let err = ensure_issuer_anchored(
-            "did:web:rogue.example#key-1",
-            "did:web:media.example",
-        )
-        .unwrap_err();
+        assert!(ensure_issuer_anchored("did:web:media.example", "did:web:media.example").is_ok());
+        let err = ensure_issuer_anchored("did:web:rogue.example#key-1", "did:web:media.example")
+            .unwrap_err();
         assert_eq!(err.code(), "token_issuer_unauthorised");
     }
 
@@ -537,8 +524,7 @@ mod tests {
             ContrixNativeTokenPayload {
                 call_id: "cx:call:0196441c-0000-7000-8000-000000000000".to_owned(),
                 focus_id: "fra-1".to_owned(),
-                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000"
-                    .to_owned(),
+                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000".to_owned(),
                 issued_at: "2026-05-27T12:29:56Z".to_owned(),
                 expires_at: "2026-05-27T12:34:56Z".to_owned(),
                 media: ContrixNativeMediaCaps {
@@ -562,8 +548,7 @@ mod tests {
             ContrixNativeTokenPayload {
                 call_id: "cx:call:0196441c-0000-7000-8000-000000000000".to_owned(),
                 focus_id: "fra-1".to_owned(),
-                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000"
-                    .to_owned(),
+                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000".to_owned(),
                 issued_at: "2026-05-27T12:29:56Z".to_owned(),
                 expires_at: "2026-05-27T12:34:56Z".to_owned(),
                 media: ContrixNativeMediaCaps {
