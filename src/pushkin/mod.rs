@@ -315,7 +315,7 @@ pub struct PushkinRegistry {
 }
 
 impl PushkinRegistry {
-    pub async fn from_config(config: &Config) -> Result<Self> {
+    pub fn from_config(config: &Config) -> Result<Self> {
         let base_dir = std::env::var("FLORIA_CONF")
             .ok()
             .and_then(|path| {
@@ -327,7 +327,7 @@ impl PushkinRegistry {
 
         let mut pushkins = HashMap::<String, Arc<dyn Pushkin>>::new();
         for (name, app) in &config.apps {
-            let pushkin = create_pushkin(name.clone(), app, config, &base_dir).await?;
+            let pushkin = create_pushkin(name.clone(), app, config, &base_dir)?;
             pushkins.insert(name.clone(), pushkin);
         }
 
@@ -378,7 +378,7 @@ impl PushkinRegistry {
     }
 }
 
-async fn create_pushkin(
+fn create_pushkin(
     name: String,
     app: &AppConfig,
     config: &Config,
@@ -387,9 +387,7 @@ async fn create_pushkin(
     match app.require_kind()? {
         "apns" => Ok(Arc::new(ApnsPushkin::new(name, app, config, base_dir)?)),
         "custom" => Ok(Arc::new(CustomPushkin::new(name, app, config, base_dir)?)),
-        "fcm" => Ok(Arc::new(
-            FcmPushkin::new(name, app, config, base_dir).await?,
-        )),
+        "fcm" => Ok(Arc::new(FcmPushkin::new(name, app, config, base_dir)?)),
         "honor" => Ok(Arc::new(HonorPushkin::new(name, app, config)?)),
         "huawei" => Ok(Arc::new(HuaweiPushkin::new(name, app, config)?)),
         "jpush" => Ok(Arc::new(JpushPushkin::new(name, app, config)?)),

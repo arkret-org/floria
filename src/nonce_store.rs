@@ -41,14 +41,15 @@ pub enum NonceCheck {
 /// legacy fail-open semantic so existing deployments keep working; in
 /// `Strict` mode the gateway returns 503 from the calling site rather
 /// than silently bypassing replay protection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RedisFailurePolicy {
+    #[default]
     Permissive,
     Strict,
 }
 
 impl RedisFailurePolicy {
-    pub fn from_str(value: &str) -> Self {
+    pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "strict" => Self::Strict,
             _ => Self::Permissive,
@@ -57,12 +58,6 @@ impl RedisFailurePolicy {
 
     pub fn is_strict(self) -> bool {
         matches!(self, Self::Strict)
-    }
-}
-
-impl Default for RedisFailurePolicy {
-    fn default() -> Self {
-        Self::Permissive
     }
 }
 

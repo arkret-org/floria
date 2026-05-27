@@ -149,12 +149,12 @@ pub fn build_env_filter(config: &LogSetupConfig) -> EnvFilter {
         .unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()))
 }
 
+type OpenTelemetryLayer =
+    tracing_opentelemetry::OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::Tracer>;
+
 fn init_opentelemetry(
     config: &OpentracingConfig,
-) -> Result<(
-    Option<SdkTracerProvider>,
-    Option<tracing_opentelemetry::OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::Tracer>>,
-)> {
+) -> Result<(Option<SdkTracerProvider>, Option<OpenTelemetryLayer>)> {
     if !config.enabled {
         return Ok((None, None));
     }
@@ -256,8 +256,10 @@ mod tests {
 
     #[test]
     fn build_env_filter_uses_explicit_filter_first() {
-        let mut config = LogSetupConfig::default();
-        config.filter = Some("floria=trace,info".to_owned());
+        let config = LogSetupConfig {
+            filter: Some("floria=trace,info".to_owned()),
+            ..Default::default()
+        };
         let filter = build_env_filter(&config);
         // EnvFilter doesn't expose its directives; use Display.
         let rendered = format!("{filter}");
@@ -303,9 +305,11 @@ mod tests {
 
     #[test]
     fn opentelemetry_enabled_requires_endpoint() {
-        let mut cfg = OpentracingConfig::default();
-        cfg.enabled = true;
-        cfg.endpoint = None;
+        let cfg = OpentracingConfig {
+            enabled: true,
+            endpoint: None,
+            ..Default::default()
+        };
         let error = err_message(init_opentelemetry(&cfg));
         assert!(
             error.contains("requires metrics.opentracing.endpoint"),
@@ -315,10 +319,12 @@ mod tests {
 
     #[test]
     fn opentelemetry_rejects_out_of_range_sample_rate() {
-        let mut cfg = OpentracingConfig::default();
-        cfg.enabled = true;
-        cfg.endpoint = Some("http://127.0.0.1:4317".to_owned());
-        cfg.sample_rate = 2.5;
+        let cfg = OpentracingConfig {
+            enabled: true,
+            endpoint: Some("http://127.0.0.1:4317".to_owned()),
+            sample_rate: 2.5,
+            ..Default::default()
+        };
         let error = err_message(init_opentelemetry(&cfg));
         assert!(error.contains("sample_rate"), "unexpected error: {error}");
     }
@@ -332,9 +338,11 @@ mod tests {
 
     #[test]
     fn sentry_enabled_requires_dsn() {
-        let mut cfg = SentryConfig::default();
-        cfg.enabled = true;
-        cfg.dsn = None;
+        let cfg = SentryConfig {
+            enabled: true,
+            dsn: None,
+            ..Default::default()
+        };
         let error = err_message(init_sentry(&cfg));
         assert!(
             error.contains("requires metrics.sentry.dsn"),
@@ -344,10 +352,12 @@ mod tests {
 
     #[test]
     fn sentry_rejects_out_of_range_sample_rate() {
-        let mut cfg = SentryConfig::default();
-        cfg.enabled = true;
-        cfg.dsn = Some("https://public@sentry.example.com/1".to_owned());
-        cfg.sample_rate = -0.1;
+        let cfg = SentryConfig {
+            enabled: true,
+            dsn: Some("https://public@sentry.example.com/1".to_owned()),
+            sample_rate: -0.1,
+            ..Default::default()
+        };
         let error = err_message(init_sentry(&cfg));
         assert!(error.contains("sample_rate"), "unexpected error: {error}");
     }

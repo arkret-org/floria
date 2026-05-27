@@ -58,6 +58,11 @@ impl std::fmt::Debug for RetryQueueCipher {
 impl RetryQueueCipher {
     pub fn new(key_material: &[u8]) -> Self {
         let key = Sha256::digest(key_material);
+        // `chacha20poly1305 = "0.10"` is pinned to `generic-array = "0.14"`,
+        // but `sha2 = "0.11"` from transitive deps exposes a deprecation
+        // shim on `from_slice`. The chacha20poly1305 API still requires
+        // this call shape until the crate moves to generic-array 1.x.
+        #[allow(deprecated)]
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&key));
         Self { cipher }
     }
@@ -65,6 +70,7 @@ impl RetryQueueCipher {
     fn seal(&self, plaintext: &[u8]) -> Result<String> {
         let mut nonce_bytes = [0u8; RETRY_NONCE_LEN];
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        #[allow(deprecated)]
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = self
             .cipher
@@ -90,6 +96,7 @@ impl RetryQueueCipher {
             anyhow::bail!("retry-queue envelope is shorter than the nonce");
         }
         let (nonce_bytes, ciphertext) = bytes.split_at(RETRY_NONCE_LEN);
+        #[allow(deprecated)]
         let nonce = Nonce::from_slice(nonce_bytes);
         self.cipher
             .decrypt(
@@ -984,9 +991,8 @@ mod tests {
             DeadLetterPgOverlay::new("postgres://localhost/floria", "floria.retry_dead_letter")
                 .expect("schema.table is valid");
         // SqlTableName quotes both identifiers.
-        assert_eq!(
-            format!("{:?}", overlay).contains("floria"),
-            true,
+        assert!(
+            format!("{overlay:?}").contains("floria"),
             "overlay debug must include the table"
         );
     }

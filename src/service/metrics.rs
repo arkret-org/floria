@@ -30,7 +30,7 @@ static DETAILED_CIRCLE_DOWNGRADED: AtomicBool = AtomicBool::new(false);
 /// True iff the cardinality guard has fired. `pub(crate)` so tests
 /// and any future `/admin` introspection inside the crate can confirm
 /// the downgrade.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn detailed_circle_labels_downgraded() -> bool {
     DETAILED_CIRCLE_DOWNGRADED.load(Ordering::Relaxed)
 }

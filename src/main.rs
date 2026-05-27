@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     config.emit_startup_warnings();
     metrics::init();
 
-    let registry = Arc::new(PushkinRegistry::from_config(&config).await?);
+    let registry = Arc::new(PushkinRegistry::from_config(&config)?);
     if registry.is_empty() {
         bail!("no app IDs are configured; define at least one entry under apps");
     }
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
                     .redis_url
                     .clone()
                     .expect("validated notify_auth.nonce_store.redis_url");
-                let policy = RedisFailurePolicy::from_str(store_config.failure_policy());
+                let policy = RedisFailurePolicy::parse(store_config.failure_policy());
                 tracing::info!(
                     ttl_secs = ttl.as_secs(),
                     backend = "redis",
@@ -125,7 +125,7 @@ async fn main() -> Result<()> {
                     .redis_url
                     .clone()
                     .expect("validated notify_rate_limits.redis_url");
-                let policy = RedisFailurePolicy::from_str(rate_config.failure_policy());
+                let policy = RedisFailurePolicy::parse(rate_config.failure_policy());
                 tracing::info!(
                     window_secs = rate_config.window_seconds.max(1),
                     backend = "redis",

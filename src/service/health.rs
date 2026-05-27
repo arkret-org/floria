@@ -121,13 +121,13 @@ pub(super) async fn ready(depot: &mut Depot, res: &mut Response) {
         return;
     };
 
-    if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
-        if let Err(error) = deduplicator.ready() {
-            tracing::warn!(error = %error, "readiness check failed");
-            res.status_code(StatusCode::SERVICE_UNAVAILABLE);
-            res.render(Text::Plain(format!("not ready: {error}")));
-            return;
-        }
+    if let Some(deduplicator) = state.notify_deduplicator.as_ref()
+        && let Err(error) = deduplicator.ready()
+    {
+        tracing::warn!(error = %error, "readiness check failed");
+        res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+        res.render(Text::Plain(format!("not ready: {error}")));
+        return;
     }
     if let Err(error) = state.notify_auth.validate() {
         tracing::warn!(error = %error, "readiness auth config check failed");

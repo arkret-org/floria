@@ -1487,21 +1487,11 @@ impl SentryConfig {
 /// — keeping the underlying config sections separate keeps user-visible
 /// YAML/KDL grouped by domain (logging vs metrics) while still letting
 /// the telemetry initialiser take a single argument.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ObservabilityConfig {
     pub tracing: LogSetupConfig,
     pub opentracing: OpentracingConfig,
     pub sentry: SentryConfig,
-}
-
-impl Default for ObservabilityConfig {
-    fn default() -> Self {
-        Self {
-            tracing: LogSetupConfig::default(),
-            opentracing: OpentracingConfig::default(),
-            sentry: SentryConfig::default(),
-        }
-    }
 }
 
 impl ObservabilityConfig {
@@ -2502,8 +2492,10 @@ apps: {}
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
         config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-        let mut principal = NotifyServicePrincipalConfig::default();
-        principal.bearer_tokens = vec!["principal-token".to_owned()];
+        let principal = NotifyServicePrincipalConfig {
+            bearer_tokens: vec!["principal-token".to_owned()],
+            ..Default::default()
+        };
         config
             .http
             .notify_auth
@@ -2523,9 +2515,11 @@ apps: {}
         config.http.notify_auth.production_mode = true;
         config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
         config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
-        let mut principal = NotifyServicePrincipalConfig::default();
-        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
-        principal.signature_public_key_hex = Some("a".repeat(64));
+        let principal = NotifyServicePrincipalConfig {
+            signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+            signature_public_key_hex: Some("a".repeat(64)),
+            ..Default::default()
+        };
         config
             .http
             .notify_auth
@@ -2544,11 +2538,13 @@ apps: {}
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
         config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-        let mut principal = NotifyServicePrincipalConfig::default();
-        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
-        principal.signature_public_key_hex = Some("b".repeat(64));
-        principal.allow_plaintext_metadata = true;
-        principal.service_type = Some("external_pusher".to_owned());
+        let principal = NotifyServicePrincipalConfig {
+            signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+            signature_public_key_hex: Some("b".repeat(64)),
+            allow_plaintext_metadata: true,
+            service_type: Some("external_pusher".to_owned()),
+            ..Default::default()
+        };
         config
             .http
             .notify_auth
@@ -2567,11 +2563,13 @@ apps: {}
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
         config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-        let mut principal = NotifyServicePrincipalConfig::default();
-        principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
-        principal.signature_public_key_hex = Some("c".repeat(64));
-        principal.allow_plaintext_metadata = true;
-        principal.service_type = Some("sync".to_owned());
+        let principal = NotifyServicePrincipalConfig {
+            signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+            signature_public_key_hex: Some("c".repeat(64)),
+            allow_plaintext_metadata: true,
+            service_type: Some("sync".to_owned()),
+            ..Default::default()
+        };
         config
             .http
             .notify_auth

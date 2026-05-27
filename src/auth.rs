@@ -97,8 +97,8 @@ pub fn authenticate_notify_request(
 
         let mut authenticated = false;
         if has_signature_headers(req) {
-            verify_message_signature(req, body, auth, principal, &origin_did, request_id)?;
-            verify_nonce_freshness(req, nonce_store, &origin_did, request_id)?;
+            verify_message_signature(req, body, auth, principal, origin_did, request_id)?;
+            verify_nonce_freshness(req, nonce_store, origin_did, request_id)?;
             authenticated = true;
         } else if auth.require_message_signatures {
             tracing::warn!(
@@ -147,7 +147,7 @@ pub fn authenticate_notify_request(
             });
         }
 
-        verify_mtls_profile(req, auth, principal, &origin_did, request_id)?;
+        verify_mtls_profile(req, auth, principal, origin_did, request_id)?;
 
         // RFC 9530 Content-Digest is verified inside verify_message_signature
         // when a signature was supplied. When the caller authenticated via
@@ -993,14 +993,9 @@ fn bearer_state(req: &Request, candidates: &[String], candidate_hashes: &[String
 }
 
 fn optional_header(req: &Request, name: &str) -> Option<String> {
-    let Some(token) = req
-        .header::<String>(name)
+    req.header::<String>(name)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-    else {
-        return None;
-    };
-    Some(token)
 }
 
 fn parse_bearer_token(value: &str) -> Option<&str> {

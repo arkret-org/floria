@@ -206,7 +206,7 @@ impl ApnsPushkin {
             ApnsAuth::Token {
                 topic,
                 signer: ApnsTokenSigner {
-                    pushkin_name: pushkin_name.clone(),
+                    pushkin_name,
                     team_id,
                     key_id,
                     key,
@@ -366,45 +366,45 @@ impl ApnsPushkin {
                 let is_image = msgtype == Some("m.image");
 
                 if let Some(room_display) = room_display {
-                    match (is_image, content_display.clone(), action_display.clone()) {
+                    match (is_image, content_display, action_display) {
                         (true, content, _) => {
                             loc_key = Some("IMAGE_FROM_USER_IN_ROOM");
                             loc_args = vec![
-                                from_display.clone(),
+                                from_display,
                                 content.unwrap_or_default(),
                                 room_display,
                             ];
                         }
                         (false, Some(content), _) if msgtype != Some("m.emote") => {
                             loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
-                            loc_args = vec![from_display.clone(), room_display, content];
+                            loc_args = vec![from_display, room_display, content];
                         }
                         (false, _, Some(action)) => {
                             loc_key = Some("ACTION_FROM_USER_IN_ROOM");
-                            loc_args = vec![room_display, from_display.clone(), action];
+                            loc_args = vec![room_display, from_display, action];
                         }
                         _ => {
                             loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                            loc_args = vec![from_display.clone(), room_display];
+                            loc_args = vec![from_display, room_display];
                         }
                     }
                 } else {
-                    match (is_image, content_display.clone(), action_display.clone()) {
+                    match (is_image, content_display, action_display) {
                         (true, content, _) => {
                             loc_key = Some("IMAGE_FROM_USER");
-                            loc_args = vec![from_display.clone(), content.unwrap_or_default()];
+                            loc_args = vec![from_display, content.unwrap_or_default()];
                         }
                         (false, Some(content), _) if msgtype != Some("m.emote") => {
                             loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                            loc_args = vec![from_display.clone(), content];
+                            loc_args = vec![from_display, content];
                         }
                         (false, _, Some(action)) => {
                             loc_key = Some("ACTION_FROM_USER");
-                            loc_args = vec![from_display.clone(), action];
+                            loc_args = vec![from_display, action];
                         }
                         _ => {
                             loc_key = Some("MSG_FROM_USER");
-                            loc_args = vec![from_display.clone()];
+                            loc_args = vec![from_display];
                         }
                     }
                 }
@@ -413,7 +413,7 @@ impl ApnsPushkin {
                 if let Some(push_hint) = notification.push_hint_text() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
                     loc_args = vec![
-                        from_display.clone(),
+                        from_display,
                         trim_chars(push_hint, APNS_MAX_FIELD_LENGTH),
                     ];
                 } else {
@@ -431,7 +431,7 @@ impl ApnsPushkin {
                     } else {
                         "VOICE_CALL_FROM_USER"
                     });
-                    loc_args = vec![from_display.clone()];
+                    loc_args = vec![from_display];
                 }
             }
             Some("member")
@@ -441,12 +441,12 @@ impl ApnsPushkin {
                 if let Some(room_name) = notification.scope_name() {
                     loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
                     loc_args = vec![
-                        from_display.clone(),
+                        from_display,
                         trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
                     ];
                 } else {
                     loc_key = Some("USER_INVITE_TO_CHAT");
-                    loc_args = vec![from_display.clone()];
+                    loc_args = vec![from_display];
                 }
             }
             Some(_) => {
@@ -454,26 +454,26 @@ impl ApnsPushkin {
                     if let Some(body) = notification.content_body() {
                         loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
                         loc_args = vec![
-                            from_display.clone(),
+                            from_display,
                             trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
                             trim_chars(body, APNS_MAX_FIELD_LENGTH),
                         ];
                     } else {
                         loc_key = Some("MSG_FROM_USER_IN_ROOM");
                         loc_args = vec![
-                            from_display.clone(),
+                            from_display,
                             trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
                         ];
                     }
                 } else if let Some(body) = notification.content_body() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
                     loc_args = vec![
-                        from_display.clone(),
+                        from_display,
                         trim_chars(body, APNS_MAX_FIELD_LENGTH),
                     ];
                 } else {
                     loc_key = Some("MSG_FROM_USER");
-                    loc_args = vec![from_display.clone()];
+                    loc_args = vec![from_display];
                 }
             }
             None => {}

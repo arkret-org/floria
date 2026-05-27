@@ -208,9 +208,8 @@ fn coshape(a: &mut Value, b: &mut Value) {
             let keys: std::collections::BTreeSet<String> =
                 am.keys().chain(bm.keys()).cloned().collect();
             for k in keys {
-                match (am.get_mut(&k), bm.get_mut(&k)) {
-                    (Some(av), Some(bv)) => coshape(av, bv),
-                    _ => {}
+                if let (Some(av), Some(bv)) = (am.get_mut(&k), bm.get_mut(&k)) {
+                    coshape(av, bv);
                 }
             }
         }
@@ -219,19 +218,21 @@ fn coshape(a: &mut Value, b: &mut Value) {
                 coshape(x, y);
             }
         }
-        (a_val @ _, b_val @ _) => {
+        (a_val, b_val) => {
             // scalar ↔ 1-element-array: promote the scalar
-            if let Value::Array(arr) = b_val {
-                if arr.len() == 1 && !matches!(a_val, Value::Array(_) | Value::Object(_)) {
-                    *a_val = Value::Array(vec![a_val.take()]);
-                    return;
-                }
+            if let Value::Array(arr) = b_val
+                && arr.len() == 1
+                && !matches!(a_val, Value::Array(_) | Value::Object(_))
+            {
+                *a_val = Value::Array(vec![a_val.take()]);
+                return;
             }
-            if let Value::Array(arr) = a_val {
-                if arr.len() == 1 && !matches!(b_val, Value::Array(_) | Value::Object(_)) {
-                    *b_val = Value::Array(vec![b_val.take()]);
-                    return;
-                }
+            if let Value::Array(arr) = a_val
+                && arr.len() == 1
+                && !matches!(b_val, Value::Array(_) | Value::Object(_))
+            {
+                *b_val = Value::Array(vec![b_val.take()]);
+                return;
             }
             // string-integer ↔ number: coerce the string to a number
             if let (Value::String(s), Value::Number(_)) = (&*a_val, &*b_val) {

@@ -91,7 +91,7 @@ impl CustomPushkin {
                 "inflight_request_limit",
             ],
         );
-        let matcher = AppMatcher::new(name.clone())?;
+        let matcher = AppMatcher::new(name)?;
         let gate = ConcurrencyGate::new(inflight_limit(app)?);
         let connection_semaphore = Arc::new(Semaphore::new(max_connections(app)?.max(1)));
 

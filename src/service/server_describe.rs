@@ -131,7 +131,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let development_mode = false;
     let verified_profiles: Vec<VerifiedProfile> = Vec::new();
     debug_assert!(
-        !(development_mode && !verified_profiles.is_empty()),
+        !development_mode || verified_profiles.is_empty(),
         "development_mode=true requires verified_profiles=[] (service-surface.md §3.0)"
     );
 

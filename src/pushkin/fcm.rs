@@ -123,7 +123,7 @@ struct CachedAccessToken {
 }
 
 impl FcmPushkin {
-    pub async fn new(
+    pub fn new(
         name: String,
         app: &AppConfig,
         config: &Config,
