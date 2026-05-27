@@ -292,7 +292,12 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
     .unwrap();
 
     let data = build_blind_provider_data(&notification);
-    for forbidden in ["circle_id", "effective_scope", "scope_circle_id", "realm_id"] {
+    for forbidden in [
+        "circle_id",
+        "effective_scope",
+        "scope_circle_id",
+        "realm_id",
+    ] {
         assert!(
             data.get(forbidden).is_none(),
             "blind provider data must never carry `{forbidden}`"

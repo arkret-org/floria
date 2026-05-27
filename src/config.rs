@@ -883,6 +883,13 @@ pub struct NotifyRateLimitConfig {
     pub per_provider: Option<u64>,
     pub per_push_key_hash: Option<u64>,
     pub per_endpoint: Option<u64>,
+    /// P5 — per-provider concurrent in-flight cap. Limits how many
+    /// notify dispatches can be simultaneously running against any
+    /// single provider (e.g. "apns_prod", "fcm_internal"). Defaults
+    /// to 100 to prevent a single misbehaving provider from
+    /// monopolising the dispatch worker pool. `Some(0)` disables the
+    /// cap; `None` falls back to the 100 default.
+    pub per_provider_concurrency: Option<u64>,
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
@@ -902,6 +909,7 @@ impl Default for NotifyRateLimitConfig {
             per_provider: None,
             per_push_key_hash: None,
             per_endpoint: None,
+            per_provider_concurrency: Some(100),
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
@@ -1837,6 +1845,12 @@ fn http_schema() -> Value {
                     "per_provider": {"type": ["integer", "null"], "minimum": 0},
                     "per_push_key_hash": {"type": ["integer", "null"], "minimum": 0},
                     "per_endpoint": {"type": ["integer", "null"], "minimum": 0},
+                    "per_provider_concurrency": {
+                        "type": ["integer", "null"],
+                        "minimum": 0,
+                        "default": 100,
+                        "description": "Max concurrent in-flight notify dispatches per provider. 0 disables; null falls back to the 100 default."
+                    },
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
                     "key_prefix": {"type": "string", "default": "floria"},

@@ -436,6 +436,34 @@ impl RetryQueue {
         }
     }
 
+    /// P5 — best-effort per-(provider, app_id) breakdown of the
+    /// pending depth. Used to feed `floria_notify_retry_queue_depth`
+    /// when the operator opts in to per-provider labels. Memory
+    /// backend reports an exact snapshot; the Redis backend returns
+    /// an empty map — accurate per-provider depth would require
+    /// scanning every envelope in the sorted set, which we explicitly
+    /// avoid on the dispatcher poll loop. Operators running Redis
+    /// can read the aggregate `floria_retry_queue_depth` gauge AND
+    /// reconstruct provider deltas from `floria_notify_retry_*_total`
+    /// counters.
+    pub fn pending_breakdown_by_provider(&self) -> std::collections::HashMap<String, usize> {
+        match &self.backend {
+            Backend::Memory(backend) => {
+                let guard = backend
+                    .pending
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut counts: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
+                for entry in guard.iter() {
+                    *counts.entry(entry.0.pushkin.clone()).or_default() += 1;
+                }
+                counts
+            }
+            Backend::Redis(_) => std::collections::HashMap::new(),
+        }
+    }
+
     pub fn dead_letter_snapshot(&self, limit: usize) -> Vec<RetryEnvelope> {
         match &self.backend {
             Backend::Memory(backend) => backend.dead_letter_snapshot(limit),
@@ -738,6 +766,22 @@ pub async fn run_worker(
         // rather than only the most recent enqueue. Cheap for memory
         // backends and a single ZCARD/EXISTS on Redis.
         crate::metrics::set_retry_queue_depth(queue.pending_len() as i64);
+        // P5 — labelled breakdown. Memory backend reports exact
+        // per-provider counts; Redis backend returns an empty map
+        // (and the labelled metric simply stops getting updated for
+        // that interval — operators read the aggregate gauge instead).
+        // Scope label is always `realm` here because retry envelopes
+        // do not currently carry circle_id; circle-keyed breakdown is
+        // gated behind a future enhancement once that field flows
+        // through the envelope.
+        for (provider, depth) in queue.pending_breakdown_by_provider() {
+            crate::metrics::set_notify_retry_queue_depth_labelled(
+                &provider,
+                "realm",
+                None,
+                depth as i64,
+            );
+        }
         let due = queue.dequeue_due(batch_size.max(1));
         if due.is_empty() {
             tokio::select! {

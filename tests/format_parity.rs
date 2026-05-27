@@ -33,7 +33,10 @@ fn every_sample_kdl_has_matching_yaml_pair() {
         }
     }
     if !missing.is_empty() {
-        panic!("sample KDL files missing YAML siblings:\n{}", missing.join("\n"));
+        panic!(
+            "sample KDL files missing YAML siblings:\n{}",
+            missing.join("\n")
+        );
     }
 }
 
@@ -86,10 +89,8 @@ fn sample_kdl_and_yaml_parse_to_equivalent_config() {
 
         // Smoke check: at least one side should typecheck — if both
         // fail, the samples are simply broken.
-        let kdl_typed: std::result::Result<Config, _> =
-            serde_json::from_value(kdl_norm.clone());
-        let yaml_typed: std::result::Result<Config, _> =
-            serde_json::from_value(yaml_norm.clone());
+        let kdl_typed: std::result::Result<Config, _> = serde_json::from_value(kdl_norm.clone());
+        let yaml_typed: std::result::Result<Config, _> = serde_json::from_value(yaml_norm.clone());
         if let (Err(ke), Err(ye)) = (&kdl_typed, &yaml_typed) {
             mismatches.push(format!(
                 "{} / {}: both sides fail Config deserialization\n  KDL : {ke}\n  YAML: {ye}",
@@ -249,7 +250,6 @@ fn coshape(a: &mut Value, b: &mut Value) {
         }
     }
 }
-
 
 /// Recursively sort object keys and JSON-stringify so the comparison is
 /// order-independent. `serde_json::Value` already implements `PartialEq`

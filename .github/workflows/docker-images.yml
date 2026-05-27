@@ -61,8 +61,13 @@ jobs:
           exit-code: "1"
           vuln-type: os,library
 
+      # Push steps are gated off — floria is a local-only project per
+       # _todos_all.md (no crates.io / Docker Hub / GHCR publish).
+       # Build + scan still run on every push and PR; the registry
+       # publish job is intentionally kept around but disabled so the
+       # opt-in path stays a one-line flip rather than a re-add.
       - name: Log in to GHCR
-        if: github.event_name == 'push'
+        if: false # local-only per _todos_all.md
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -70,7 +75,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push scanned image
-        if: github.event_name == 'push'
+        if: false # local-only per _todos_all.md
         env:
           DOCKER_METADATA_OUTPUT_TAGS: ${{ steps.meta.outputs.tags }}
         run: |

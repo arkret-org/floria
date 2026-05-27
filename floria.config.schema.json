@@ -439,6 +439,15 @@
                 "null"
               ]
             },
+            "per_provider_concurrency": {
+              "default": 100,
+              "description": "Max concurrent in-flight notify dispatches per provider. 0 disables; null falls back to the 100 default.",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "per_push_key_hash": {
               "minimum": 0,
               "type": [

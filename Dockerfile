@@ -53,6 +53,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # nghttp2/zlib pair pulled in by reqwest's HTTP/2 support. `curl` is shipped
 # only because the HEALTHCHECK relies on it; everything else (including
 # `tini`, build tools, package indexes) is stripped.
+#
+# HEALTHCHECK strategy: the default probe is a TCP-level liveness check
+# via `nc -z` so we do not have to pay a full TLS / HTTP roundtrip on
+# every interval. The HTTP `/ready` probe via wget is left available as
+# a fallback (commented out) for environments that need richer signal.
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
@@ -66,9 +71,10 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
         apt-get update \
         && apt-get install --yes --no-install-recommends \
             ca-certificates \
-            curl \
             libnghttp2-14 \
             libssl3 \
+            netcat-openbsd \
+            wget \
             zlib1g \
         && break || (echo "apt retry $i" && sleep 10); \
     done \
@@ -85,8 +91,11 @@ ENV FLORIA_CONF=/app/floria.kdl
 
 EXPOSE 5000 8000
 
+# TCP probe — fastest signal that the listener is up. To switch to the
+# richer `/ready` HTTP probe, replace the CMD line with:
+#   CMD wget --quiet --spider --tries=1 --timeout=4 http://127.0.0.1:5000/ready || exit 1
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl --fail --silent http://127.0.0.1:5000/ready || exit 1
+  CMD nc -z 127.0.0.1 5000 || exit 1
 
 USER floria:floria
 

@@ -152,6 +152,7 @@ http {
 | `notify_rate_limits.per_provider` | u64 | — | Max `/notify` requests per resolved provider per window |
 | `notify_rate_limits.per_push_key_hash` | u64 | — | Max `/notify` requests per push token hash per window |
 | `notify_rate_limits.per_endpoint` | u64 | — | Max `/notify` requests per HTTP endpoint path per window |
+| `notify_rate_limits.per_provider_concurrency` | u64 | `100` | Max concurrent in-flight notify dispatches per resolved provider. `0` disables; defends against a single provider monopolising the fanout worker pool |
 
 `push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
 
@@ -194,6 +195,15 @@ http {
 ```
 
 In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
+
+> **Production-mode recommendation (P5)**: configure
+> `bearer_token_hashes` ONLY in production. The plaintext
+> `bearer_tokens` field is supported for compatibility but is treated
+> as deprecated for production deployments — a leaked plaintext token
+> is immediately reusable, whereas a leaked SHA-256 hash is not. Roll
+> the deployment with the hashed form, verify `/ready` returns 200,
+> then remove the plaintext field. Hashes may be specified bare-hex or
+> with a `sha256:` prefix.
 
 For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
 
@@ -250,6 +260,43 @@ Recommended workflow:
 
 This keeps secret retrieval outside the gateway binary while matching the
 current configuration surface.
+
+### Audit log rotation
+
+When `audit.backend = "file"`, floria writes one JSONL audit record per
+event to `audit.file_path`. floria does not rotate the file itself —
+operators are expected to manage rotation through the platform's
+standard log rotation tooling.
+
+Recommended approach: use `logrotate` (or the systemd `journal` if you
+have switched the audit backend to `systemd-cat`) with a
+copy-truncate strategy so floria does not need to reopen the file
+descriptor.
+
+An example logrotate config ships in
+`examples/logrotate-floria.conf`. The shape is roughly:
+
+```
+/var/log/floria/audit.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 floria floria
+    copytruncate
+    sharedscripts
+    postrotate
+        # No SIGHUP needed — floria keeps the FD open and the
+        # copytruncate strategy preserves writes during rotation.
+    endscript
+}
+```
+
+If you need rotation on a size threshold rather than a daily cadence,
+add `size 100M` and drop `daily`. For deployments using systemd, a
+matching `systemd.timer` can invoke `logrotate -f` on the same cadence;
+the timer file is left to the operator since unit paths vary.
 
 ### `metrics`
 

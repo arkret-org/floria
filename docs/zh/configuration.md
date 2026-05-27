@@ -133,6 +133,7 @@ http {
 | `notify_rate_limits.per_provider` | u64 | — | 每个 resolved provider 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_push_key_hash` | u64 | — | 每个 push token hash 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_endpoint` | u64 | — | 每个 HTTP endpoint path 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_provider_concurrency` | u64 | `100` | 单个 provider 的并发派发上限。`0` 关闭；默认 100，避免单一 provider 拖垮 fanout 工作池 |
 
 `push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
 
@@ -176,7 +177,36 @@ http {
 
 生产部署时，应让 `/api/v1/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
 
+> **生产模式建议（P5）**：生产环境**仅**配置
+> `bearer_token_hashes`。明文的 `bearer_tokens` 字段保留是为了兼容，但在生产场景中被视为 deprecated —
+> 明文 token 一旦泄漏即可被重放使用，而 SHA-256 hash 不能直接被重放。先以 hash 形式滚动部署，
+> 确认 `/ready` 返回 200 后再移除明文字段。hash 可以是纯 hex，也可以带 `sha256:` 前缀。
+
 启用 mTLS 入口时，TLS 终结的反向代理负责用固化的信任根链校验客户端证书，并把上表中的 4 条 `X-Client-Certificate-*` header 转发给 gateway。详见 [docs/zh/reverse-proxy.md](./reverse-proxy.md) 与 `examples/reverse-proxy/` 中的 nginx / Caddy 参考配置。
+
+### Audit 日志轮转
+
+当 `audit.backend = "file"` 时，floria 把每条审计事件作为一行 JSONL 写入
+`audit.file_path`。floria 自身不做轮转，请使用平台标准的日志轮转工具
+（`logrotate`、systemd `journal` 等）。
+
+推荐 copy-truncate 策略，floria 无需重新打开文件描述符。完整示例见
+`examples/logrotate-floria.conf`，大致结构：
+
+```
+/var/log/floria/audit.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 floria floria
+    copytruncate
+}
+```
+
+如需按文件大小触发轮转，添加 `size 100M` 并去掉 `daily`。systemd 部署可以用
+`systemd.timer` 在同一周期内调用 `logrotate -f`，timer 文件路径因发行版而异，留给运维自行配置。
 
 ### `metrics`
 

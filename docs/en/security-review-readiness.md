@@ -70,3 +70,61 @@ As of the local v1.0.0 milestone record, floria has local evidence for auth,
 replay protection, sanitizer coverage, readiness probes, audit divert metrics,
 and supply-chain artifact generation. External review is still a separate
 approval step and should be recorded outside this repository when complete.
+
+## Threat Model Scope
+
+The review focuses on the following adversaries and capabilities:
+
+1. **Untrusted /notify caller** — can craft arbitrary JSON / headers; goal is
+   to bypass auth, replay a notification, smuggle plaintext metadata, or
+   inject forbidden Round R2/R3/CXP-0007 keys into the provider wire.
+2. **Compromised provider credential** — has access to a single APNs key,
+   FCM service account, or VAPID private key; goal is to widen the blast
+   radius through floria's caches or rate-limit state.
+3. **Compromised Redis instance** — can read/modify the dedup, nonce,
+   rate-limit, and retry-queue keyspaces; goal is to forge idempotency
+   responses, replay nonces, or surface dead-letter content.
+4. **In-cluster eavesdropper** — can observe `/api/v1/internal/*`
+   traffic; goal is to read PII from broadcast events or learn
+   account-deactivation timing.
+
+Out of scope for the threat model:
+
+1. Compromise of the host kernel / container runtime — defense delegated
+   to the platform's image baseline and SBOM gate.
+2. Side-channel attacks against AEAD primitives (ChaCha20-Poly1305 for
+   the retry-queue envelopes); the upstream crate is audited and
+   floria does not implement its own AEAD.
+3. Mobile-app compromise — covered by chime's threat model.
+
+## Known Limitations
+
+Documented for transparency; reviewers may treat these as accepted risks
+or open follow-up tickets:
+
+1. **Per-provider concurrency is process-local** — the limiter caps
+   in-flight dispatches per pod but does not coordinate across
+   replicas. Operators sizing a clustered floria deployment must
+   set per-pod budgets accordingly.
+2. **Cardinality guard is process-local and sticky** — when
+   `metrics_detailed_circle_labels=true` and unique circle_ids exceed
+   5,000, floria auto-downgrades to realm-keyed labels for the rest
+   of the process lifetime. The downgrade is per-replica and is
+   logged once at the warn level.
+3. **Retry-queue per-Circle metric is realm-keyed** — the
+   `floria_notify_retry_queue_depth` labelled gauge always uses
+   `scope_kind=realm` because retry envelopes do not currently carry
+   circle_id. Operators reconstruct per-Circle retry health from the
+   counter deltas (`floria_notify_retry_enqueued_total`,
+   `floria_notify_retry_replayed_total`).
+4. **Plaintext bearer tokens are still accepted** — the
+   `notify_auth.bearer_tokens` field is supported for compatibility,
+   but production deployments SHOULD configure
+   `bearer_token_hashes` instead. See `docs/en/configuration.md`.
+5. **Takedown notification path is not implemented** — the
+   `floria_takedown_notification_failures_total` counter is wired but
+   the underlying handler is a TODO(P5-impl) placeholder. The metric
+   stays at zero until the handler lands.
+6. **Internal endpoints have no built-in auth** — see
+   `docs/en/internal-endpoints.md`. Auth is delegated to the
+   deployment topology (private bind / service-mesh mTLS).

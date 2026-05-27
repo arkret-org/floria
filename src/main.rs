@@ -262,7 +262,10 @@ async fn main() -> Result<()> {
     if let Some((shutdown, handle, grace)) = retry_worker_handle {
         let _ = shutdown.send(true);
         // Bounded wait so a stuck worker can't block shutdown forever.
-        tracing::info!(grace_secs = grace.as_secs(), "waiting for retry-queue worker to drain");
+        tracing::info!(
+            grace_secs = grace.as_secs(),
+            "waiting for retry-queue worker to drain"
+        );
         match tokio::time::timeout(grace, handle).await {
             Ok(Ok(())) => tracing::info!("retry-queue worker exited cleanly"),
             Ok(Err(error)) => tracing::warn!(error = %error, "retry-queue worker join error"),

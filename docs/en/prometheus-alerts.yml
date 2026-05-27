@@ -1,0 +1,54 @@
+# Default Prometheus alert rules for floria.
+#
+# Drop this into your Prometheus rules directory and import alongside
+# the dashboard in docs/en/grafana-dashboard.json. Severity labels
+# follow the floria deployment convention: `page` triggers on-call,
+# `ticket` opens a follow-up but does not page.
+#
+# Tune thresholds per environment — the defaults below match a
+# medium-traffic single-region deployment (~1–10k notify/s).
+
+groups:
+  - name: floria.rules
+    interval: 30s
+    rules:
+      - alert: FloriaCircuitBreakerOpen
+        expr: max by (pushkin) (floria_circuit_breaker_state) == 2
+        for: 5m
+        labels: { severity: page, service: floria }
+        annotations:
+          summary: "floria circuit breaker open for {{ $labels.pushkin }} (>5m)"
+          runbook: docs/en/troubleshooting.md#circuit-breaker-open
+
+      - alert: FloriaRetryQueueBackedUp
+        expr: floria_retry_queue_depth > 10000
+        for: 10m
+        labels: { severity: page, service: floria }
+        annotations:
+          summary: "floria retry queue depth >10k for 10m"
+          runbook: docs/en/troubleshooting.md#retry-queue-backlog
+
+      - alert: FloriaRedisDisconnect
+        expr: increase(floria_redis_disconnect_total[5m]) > 5
+        for: 2m
+        labels: { severity: page, service: floria }
+        annotations:
+          summary: "floria seeing repeated Redis disconnects (>5 in 5m)"
+          runbook: docs/en/troubleshooting.md#redis-disconnect
+
+      - alert: FloriaRateLimitRejectionStorm
+        expr: |
+          sum by (scope) (rate(floria_notify_rate_limit_reject_total[5m])) > 50
+        for: 5m
+        labels: { severity: ticket, service: floria }
+        annotations:
+          summary: "floria rate limit rejecting >50 req/s on scope={{ $labels.scope }}"
+          description: "Sustained rejection pressure usually means a misbehaving caller; check origin DIDs."
+
+      - alert: FloriaDeadLetterGrowing
+        expr: increase(floria_notify_dead_letter_total[1h]) > 100
+        for: 30m
+        labels: { severity: ticket, service: floria }
+        annotations:
+          summary: "floria dead-letter ring grew >100 entries in 1h"
+          description: "Inspect /admin/retry/dead-letter or the PG overlay."
