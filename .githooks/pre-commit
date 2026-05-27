@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+staged_paths=$(git diff --cached --name-only --diff-filter=ACMR)
+rust_touched=$(printf '%s\n' "$staged_paths" | grep -E '(\.rs$|Cargo\.toml$|Cargo\.lock$)' || true)
+
+if [ -z "$rust_touched" ]; then
+    exit 0
+fi
+
+cargo fmt --all -- --check
+cargo clippy --no-deps -- -D warnings
