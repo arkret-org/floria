@@ -1,5 +1,7 @@
 # floria
 
+> **Spec target**: [contrix-spec @ b47ff6ec](../contrix-spec) (R3 sync 2026-05-27)
+
 Push gateway service in Rust.
 
 ## Realm vs Space

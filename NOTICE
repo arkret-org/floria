@@ -1,0 +1,11 @@
+floria
+Copyright 2025-2026 The Contrix Project Authors
+
+This product includes software developed by the Contrix Project
+(https://contrix.dev).
+
+This project depends on third-party Rust crates whose licenses are
+listed in `LICENSES.third-party.md` (generated via cargo-about or
+cargo-deny) and reproduced where required.
+
+For source license, see LICENSE.

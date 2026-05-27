@@ -4,6 +4,16 @@ All notable changes to floria (Contrix push gateway) will be documented in this
 file. The format is loosely based on [Keep a Changelog]; floria follows the
 parent Contrix spec's round-numbering for grouping wire-breaking changes.
 
+## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+
+- MEDIA-1: documented floria's `cx.call.media.token_exchange` role — proxy-to-soland for the v1 cycle; self-issue (option b) deferred to R3.1. Role decision lives in `src/media.rs` module docs.
+- MEDIA-2: Contrix-native binding token scaffolding (`ContrixNativeBackendToken`, `ContrixNativeTokenPayload`, `ContrixNativeMediaCaps`) per `bindings/contrix-native.md` §2; signing path fails closed until R3.1.
+- MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
+- MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
+- CARD-1: `bridge_describe` failure-codes now advertise `agent_paused`, `agent_deactivated`, `recording_artifact_pipeline_bypassed` sourced from `contrix::error::ERROR_CODE_*` so spec renames force a recompile.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+
 ## [Unreleased]
 
 ### CXP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
