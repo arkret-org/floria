@@ -6,6 +6,13 @@ pub mod config;
 pub mod deactivation;
 pub mod dedup;
 pub mod error;
+// CXP-0010 (R3 spec-sync 2026-05-27) — media-service token-exchange
+// scaffolds. floria's v1 role is **proxy** (forward to soland); the
+// self-issue path lives behind `TODO(R3.1)` stubs in this module so the
+// wire shapes are pinned without committing to a full media-service
+// keystore in the v1 cycle. See `media.rs` module docs for the role
+// decision (MEDIA-1) and the corresponding entries in `_floria_todos.md`.
+pub mod media;
 pub mod metrics;
 pub mod models;
 pub mod nonce_store;

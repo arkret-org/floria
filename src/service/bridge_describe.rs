@@ -193,6 +193,39 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 retryable: false,
                 description: "The caller requested a non-canonical notify operation or unsupported contract feature.",
             },
+            // CARD-1 (R3 spec-sync 2026-05-27, `_before_todos.md` §0.7,
+            // CXP-0008 / CXP-0009 / CXP-0010) — push surface
+            // failure codes for Personal Agent lifecycle state and the
+            // recording-artifact pipeline. Floria's notify pipeline
+            // already silently consumes the durable `cx.agent.*` event
+            // kinds and flushes the PSI cache when soland broadcasts
+            // `consent_revoke{reason=agent_paused|agent_deactivated}`;
+            // these descriptors expose the wire-form error codes so
+            // operator dashboards and SDK callers can surface the
+            // fail-closed shape in the rare path where floria itself
+            // emits the code (e.g. a future push policy gate that
+            // rejects fan-out for a deactivated controller, or the
+            // recording-artifact destination check on a token-exchange
+            // proxy hop). The strings are pinned to the SDK error-code
+            // constants so a spec-side rename forces a recompile here.
+            PushBridgeFailureCodeDescriptor {
+                code: contrix::error::ERROR_CODE_AGENT_PAUSED,
+                http_status: StatusCode::FORBIDDEN.as_u16(),
+                retryable: false,
+                description: "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
+            },
+            PushBridgeFailureCodeDescriptor {
+                code: contrix::error::ERROR_CODE_AGENT_DEACTIVATED,
+                http_status: StatusCode::FORBIDDEN.as_u16(),
+                retryable: false,
+                description: "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
+            },
+            PushBridgeFailureCodeDescriptor {
+                code: contrix::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                http_status: StatusCode::FORBIDDEN.as_u16(),
+                retryable: false,
+                description: "A media-service token-exchange or recording artifact reference would route through a destination outside the Contrix blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
+            },
         ],
         examples: PushBridgeDescribeExamples {
             notify_headers: serde_json::json!({
