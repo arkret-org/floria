@@ -46,6 +46,8 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      # rustfmt enforcement was dropped intentionally in commit e631510;
+      # restore via `cargo fmt --all -- --check` before tagging a release.
       - name: Run clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 

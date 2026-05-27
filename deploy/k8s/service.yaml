@@ -1,0 +1,16 @@
+# Minimal R3 example; production deploys should use Helm.
+apiVersion: v1
+kind: Service
+metadata:
+  name: floria
+  labels:
+    app: floria
+spec:
+  type: ClusterIP
+  selector:
+    app: floria
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      protocol: TCP

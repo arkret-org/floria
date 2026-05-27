@@ -1,0 +1,36 @@
+# Minimal R3 example; production deploys should use Helm.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: floria
+  labels:
+    app: floria
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floria
+  template:
+    metadata:
+      labels:
+        app: floria
+    spec:
+      containers:
+        - name: floria
+          image: ghcr.io/contrix-dev/floria:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
