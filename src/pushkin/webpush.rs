@@ -70,13 +70,9 @@ static WEBPUSH_VAPID_ACTIVE_KEY: LazyLock<prometheus::IntGaugeVec> = LazyLock::n
 });
 
 const DEFAULT_WEBPUSH_TTL_SECS: u32 = 15 * 60;
-// Constants are kept (rather than removed entirely) because the
-// existing test fixtures reference them and because a future
-// visible-profile build can switch back to emitting plaintext content
-// at WebPush, in which case we'll want the same truncation policy.
-#[allow(dead_code)]
+#[cfg(test)]
 const MAX_BODY_LENGTH: usize = 1000;
-#[allow(dead_code)]
+#[cfg(test)]
 const MAX_CIPHERTEXT_LENGTH: usize = 2000;
 
 pub struct WebpushPushkin {
@@ -218,11 +214,6 @@ impl WebpushPushkin {
     /// / sender / names / body / content / membership / user_is_target
     /// are all dropped: the SW pulls them server-side from an e2ee
     /// envelope keyed on `push_target_id`.
-    ///
-    /// `truncate_chars` / `MAX_BODY_LENGTH` / `MAX_CIPHERTEXT_LENGTH`
-    /// remain unused by `build_payload` because nothing user-visible
-    /// is embedded; they are still exposed as constants in case a
-    /// visible-profile build wants to opt back in later.
     fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
         use contrix::blind_payload_sanitizer as sdk;
 
@@ -478,18 +469,6 @@ impl Pushkin for WebpushPushkin {
 
         self.send_message(&subscription, notification, device).await
     }
-}
-
-#[allow(dead_code)]
-fn truncate_chars(input: &str, max_chars: usize) -> String {
-    let count = input.chars().count();
-    if count <= max_chars {
-        return input.to_owned();
-    }
-    let keep = max_chars.saturating_sub(3);
-    let mut output = input.chars().take(keep).collect::<String>();
-    output.push_str("...");
-    output
 }
 
 fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: &str) -> bool {
