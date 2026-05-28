@@ -101,6 +101,9 @@ impl CustomPushkin {
         if !(url.starts_with("https://") || url.starts_with("http://")) {
             bail!("custom pushkin url must be http(s): `{url}`");
         }
+        let validation_url = url.replace(PUSH_KEY_PLACEHOLDER, "probe");
+        crate::egress::validate_http_url_for_egress(&validation_url, "custom pushkin url")
+            .map_err(anyhow::Error::msg)?;
 
         let auth_kind = app.get_string("auth")?.unwrap_or_else(|| "none".to_owned());
         let auth = match auth_kind.as_str() {
@@ -215,6 +218,9 @@ impl CustomPushkin {
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let url = self.resolve_url(device)?;
+        let parsed_url =
+            crate::egress::validate_http_url_for_egress(&url, "custom pushkin request")
+                .map_err(DispatchError::remote)?;
         let body = self.build_body(notification, device)?;
         let body_bytes = serde_json::to_vec(&body)
             .map_err(|error| DispatchError::internal(format!("failed to encode body: {error}")))?;
@@ -249,7 +255,7 @@ impl CustomPushkin {
         let started = Instant::now();
         let response = self
             .client
-            .post(&url)
+            .post(parsed_url)
             .headers(headers)
             .body(body_bytes)
             .send()
@@ -330,7 +336,8 @@ impl Pushkin for CustomPushkin {
 fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Result<Client> {
     let mut builder = Client::builder()
         .user_agent("floria")
-        .http2_adaptive_window(true);
+        .http2_adaptive_window(true)
+        .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = proxy {
         builder =
             builder.proxy(Proxy::all(proxy).with_context(|| {

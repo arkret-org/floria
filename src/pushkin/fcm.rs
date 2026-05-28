@@ -123,12 +123,7 @@ struct CachedAccessToken {
 }
 
 impl FcmPushkin {
-    pub fn new(
-        name: String,
-        app: &AppConfig,
-        config: &Config,
-        base_dir: &Path,
-    ) -> Result<Self> {
+    pub fn new(name: String, app: &AppConfig, config: &Config, base_dir: &Path) -> Result<Self> {
         app.warn_unknown_fields(
             &name,
             &[

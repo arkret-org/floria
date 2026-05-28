@@ -369,11 +369,8 @@ impl ApnsPushkin {
                     match (is_image, content_display, action_display) {
                         (true, content, _) => {
                             loc_key = Some("IMAGE_FROM_USER_IN_ROOM");
-                            loc_args = vec![
-                                from_display,
-                                content.unwrap_or_default(),
-                                room_display,
-                            ];
+                            loc_args =
+                                vec![from_display, content.unwrap_or_default(), room_display];
                         }
                         (false, Some(content), _) if msgtype != Some("m.emote") => {
                             loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
@@ -412,10 +409,7 @@ impl ApnsPushkin {
             Some("incoming_call") => {
                 if let Some(push_hint) = notification.push_hint_text() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                    loc_args = vec![
-                        from_display,
-                        trim_chars(push_hint, APNS_MAX_FIELD_LENGTH),
-                    ];
+                    loc_args = vec![from_display, trim_chars(push_hint, APNS_MAX_FIELD_LENGTH)];
                 } else {
                     let is_video = notification
                         .content
@@ -440,10 +434,7 @@ impl ApnsPushkin {
             {
                 if let Some(room_name) = notification.scope_name() {
                     loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
-                    loc_args = vec![
-                        from_display,
-                        trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
-                    ];
+                    loc_args = vec![from_display, trim_chars(room_name, APNS_MAX_FIELD_LENGTH)];
                 } else {
                     loc_key = Some("USER_INVITE_TO_CHAT");
                     loc_args = vec![from_display];
@@ -460,17 +451,11 @@ impl ApnsPushkin {
                         ];
                     } else {
                         loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                        loc_args = vec![
-                            from_display,
-                            trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
-                        ];
+                        loc_args = vec![from_display, trim_chars(room_name, APNS_MAX_FIELD_LENGTH)];
                     }
                 } else if let Some(body) = notification.content_body() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                    loc_args = vec![
-                        from_display,
-                        trim_chars(body, APNS_MAX_FIELD_LENGTH),
-                    ];
+                    loc_args = vec![from_display, trim_chars(body, APNS_MAX_FIELD_LENGTH)];
                 } else {
                     loc_key = Some("MSG_FROM_USER");
                     loc_args = vec![from_display];

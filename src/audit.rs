@@ -113,7 +113,10 @@ pub struct HttpAuditSink {
 impl HttpAuditSink {
     pub fn new(endpoint: impl Into<String>, bearer_token: Option<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("build audit HTTP client"),
             endpoint: endpoint.into(),
             bearer_token,
         }
@@ -127,7 +130,10 @@ impl HttpAuditSink {
 #[async_trait]
 impl AuditSink for HttpAuditSink {
     async fn record(&self, event: &AuditEvent) -> Result<()> {
-        let mut request = self.client.post(&self.endpoint).json(event);
+        let endpoint =
+            crate::egress::validate_http_url_for_egress(&self.endpoint, "audit endpoint")
+                .map_err(|error| anyhow!(error))?;
+        let mut request = self.client.post(endpoint).json(event);
         if let Some(token) = self.bearer_token.as_deref() {
             request = request.bearer_auth(token);
         }

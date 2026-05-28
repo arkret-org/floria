@@ -5,6 +5,7 @@ pub mod circuit_breaker;
 pub mod config;
 pub mod deactivation;
 pub mod dedup;
+pub mod egress;
 pub mod error;
 // CXP-0010 (R3 spec-sync 2026-05-27) — media-service token-exchange
 // scaffolds. floria's v1 role is **proxy** (forward to soland); the

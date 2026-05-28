@@ -11,7 +11,9 @@ use crate::config::Config;
 use crate::error::DispatchError;
 
 pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<Client> {
-    let mut builder = Client::builder().user_agent(user_agent);
+    let mut builder = Client::builder()
+        .user_agent(user_agent)
+        .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = config.outbound_proxy() {
         builder =
             builder.proxy(Proxy::all(proxy).with_context(|| {
@@ -61,8 +63,12 @@ impl ClientCredentialsGrant {
             }
         }
 
+        let token_url =
+            crate::egress::validate_http_url_for_egress(&self.token_url, "push token endpoint")
+                .map_err(DispatchError::remote)?;
+
         let token: AccessTokenResponse = client
-            .post(&self.token_url)
+            .post(token_url)
             .form(&[
                 ("grant_type", "client_credentials"),
                 ("client_id", self.client_id.as_str()),
