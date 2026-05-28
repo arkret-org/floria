@@ -4,6 +4,12 @@ All notable changes to floria (Contrix push gateway) will be documented in this
 file. The format is loosely based on [Keep a Changelog]; floria follows the
 parent Contrix spec's round-numbering for grouping wire-breaking changes.
 
+## R3.2 — Spec sync 2026-05-28 (contrix-spec @ b56cab1)
+
+- Audited for mention-reference wire fields: none present (push gateway routes by DID actor lists; `deny_unknown_fields` rejects stray legacy fields). No wire change required for the §3.8 mention shape v2.
+- Synced to contrix-spec @ b56cab1; media token signing remains `TODO(R3.2.1)`.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
 
 - MEDIA-1: documented floria's `cx.call.media.token_exchange` role — proxy-to-soland for the v1 cycle; self-issue (option b) deferred to R3.1. Role decision lives in `src/media.rs` module docs.
