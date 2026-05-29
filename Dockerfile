@@ -12,6 +12,7 @@ FROM rust:1.92-bookworm AS deps
 
 WORKDIR /app
 
+COPY --from=contrix-rust-sdk . /contrix-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 
 RUN mkdir -p src \
@@ -35,6 +36,7 @@ FROM rust:1.92-bookworm AS builder
 WORKDIR /app
 
 COPY --from=deps /usr/local/cargo /usr/local/cargo
+COPY --from=contrix-rust-sdk . /contrix-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 

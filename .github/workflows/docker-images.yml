@@ -25,6 +25,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check out Contrix Rust SDK
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -43,6 +51,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          build-contexts: |
+            contrix-rust-sdk=contrix-rust-sdk
           load: true
           tags: |
             ${{ env.LOCAL_IMAGE }}
