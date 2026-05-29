@@ -47,19 +47,13 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Build local image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          build-contexts: |
-            contrix-rust-sdk=contrix-rust-sdk
-          load: true
-          tags: |
-            ${{ env.LOCAL_IMAGE }}
-            ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          docker buildx build \
+            --build-context contrix-rust-sdk=contrix-rust-sdk \
+            --file Dockerfile \
+            --load \
+            --tag "${LOCAL_IMAGE}" \
+            .
 
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
