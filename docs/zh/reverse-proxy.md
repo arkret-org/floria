@@ -60,9 +60,10 @@ CA bundle 直接当成信任池。
   器把 SAN 列表拼接为逗号分隔后再转发。
 - **production_mode 联动**：开启
   `http.notify_auth.production_mode = true` 后，每一个 principal 都
-  必须通过 HTTP Message Signature **或** mTLS 完成认证。配合本代理
-  方案后，绕过代理的请求即使到达 gateway 也无法伪造已验证的 mTLS 上
-  下文 —— 因为指纹、DN、SAN 都不会与 principal allowlist 匹配。
+  必须通过 HTTP Message Signature **或** mTLS 完成认证，并且配置中
+  的明文 notify bearer token 会被拒绝。配合本代理方案后，绕过代理的
+  请求即使到达 gateway 也无法伪造已验证的 mTLS 上下文 —— 因为指纹、
+  DN、SAN 都不会与 principal allowlist 匹配。
 - **自定义 header 名**：若代理使用非默认 header 名，请在 floria 配
   置 `http.notify_auth.mtls_verified_header` /
   `mtls_fingerprint_header` / `mtls_subject_dn_header` /

@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
         Some(push_contact_cache),
     )));
     state.notify_auth = config.http.notify_auth.clone();
+    state.internal_auth = config.http.internal_auth.clone();
     if config.http.notify_auth.replay_window_seconds() > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_auth.replay_window_seconds());
         let store_config = config.http.notify_auth.nonce_store.clone();

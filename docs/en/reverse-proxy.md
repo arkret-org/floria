@@ -72,10 +72,11 @@ upstream caller cannot forge their own context.
   the SAN list into a comma-joined string before forwarding.
 - **Production-mode coupling**:
   `http.notify_auth.production_mode = true` requires every principal
-  to authenticate via HTTP Message Signature *or* mTLS. Combined with
-  this proxy, it means an unauthenticated request that bypasses the
-  proxy still cannot forge a verified mTLS context — floria's
-  per-principal allowlist won't match without a real fingerprint.
+  to authenticate via HTTP Message Signature *or* mTLS and rejects
+  plaintext notify bearer tokens in config. Combined with this proxy,
+  it means an unauthenticated request that bypasses the proxy still
+  cannot forge a verified mTLS context — floria's per-principal
+  allowlist won't match without a real fingerprint.
 - **Header rename**: if your proxy uses non-standard header names,
   override them in floria's config under
   `http.notify_auth.mtls_verified_header`,

@@ -74,18 +74,23 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
             Router::with_path("api/v1/internal/account_deactivate_fanout")
+                .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
+            Router::with_path("api/v1/internal/consent_revoke")
+                .hoop(internal::require_internal_auth)
+                .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("api/v1/push/status/<idempotency_key>")
+            Router::with_path("api/v1/push/status/{idempotency_key}")
+                .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
             Router::with_path("api/v1/push/device/unregister")
+                .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )
         .push(Router::with_path("health").get(health::health))
@@ -110,18 +115,23 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
             Router::with_path("api/v1/internal/account_deactivate_fanout")
+                .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("api/v1/internal/consent_revoke").post(internal::consent_revoke),
+            Router::with_path("api/v1/internal/consent_revoke")
+                .hoop(internal::require_internal_auth)
+                .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("api/v1/push/status/<idempotency_key>")
+            Router::with_path("api/v1/push/status/{idempotency_key}")
+                .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
             Router::with_path("api/v1/push/device/unregister")
+                .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )
         .push(Router::with_path("health").get(health::health))

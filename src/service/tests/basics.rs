@@ -145,6 +145,61 @@ async fn describe_separates_claim_levels() {
 }
 
 #[tokio::test]
+async fn describe_does_not_advertise_media_token_self_issue() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response.take_json::<Value>().await.unwrap();
+
+    for field in [
+        "implemented_features",
+        "experimental_features",
+        "compat_surfaces",
+    ] {
+        let encoded = serde_json::to_string(&body[field]).unwrap();
+        assert!(
+            !encoded.contains("rtc")
+                && !encoded.contains("media.token")
+                && !encoded.contains("self_issue"),
+            "{field} must not expose floria media-token self-issue surfaces: {encoded}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
+    let mut auth = production_notify_auth_config();
+    auth.service_principals
+        .get_mut("did:web:sync.example.com")
+        .unwrap()
+        .bearer_token_hashes = vec![crate::auth::bearer_token_sha256_hex("fallback-token")];
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        auth,
+    );
+
+    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response.take_json::<Value>().await.unwrap();
+    let modes = body["auth_modes"].as_array().expect("auth_modes array");
+
+    assert!(!modes.contains(&json!("bearer")));
+    assert!(modes.contains(&json!("http-message-signature")));
+    assert!(modes.contains(&json!("service-did")));
+}
+
+#[tokio::test]
 async fn server_describe_alias_matches_push_describe() {
     let service = test_service(vec![(
         "com.example.app",

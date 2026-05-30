@@ -194,6 +194,30 @@ async fn mention_redirect_rejects_malformed_did_in_allow_list() {
 }
 
 #[tokio::test]
+async fn mention_reference_v2_fields_are_not_push_payload_fields() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    // ROST-FLO-1..3 N/A for floria: mention reference v2 is a Message
+    // AST concern and MUST NOT be accepted by the push notification
+    // wire model.
+    let mut body = payload(vec![device("com.example.app", "alice-token")]);
+    body["notification"]["subject_id"] = json!("cx:message:01JS0MSG0000000000000000");
+    body["notification"]["display_name_at_time"] = json!("Alice");
+
+    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        .json(&body)
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body = response.take_json::<Value>().await.unwrap();
+    assert_eq!(body["error"]["code"], json!("schema_violation"));
+}
+
+#[tokio::test]
 async fn historical_only_reason_code_short_circuits_without_fanout() {
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
     let calls = pushkin.calls.clone();

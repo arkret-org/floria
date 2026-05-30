@@ -97,6 +97,27 @@ Out of scope for the threat model:
    floria does not implement its own AEAD.
 3. Mobile-app compromise — covered by chime's threat model.
 
+## R3.2 Spec-Sync Closures
+
+These items are intentionally closed as floria-local N/A rather than
+implemented:
+
+1. **ROST-FLO-1..3 mention reference v2** — floria is a push gateway,
+   not the Message AST authoring or rendering layer. The public
+   `cx.push.notify` payload must not carry mention-preview fields such
+   as `subject_id` or `display_name_at_time`; the typed wire model uses
+   `serde(deny_unknown_fields)` and the round4 test
+   `mention_reference_v2_fields_are_not_push_payload_fields` proves the
+   gateway rejects them with `schema_violation`. The only mention field
+   floria accepts is the push-routing allow-list
+   `mention_redirect_target_actor_ids`, which carries DID targets only.
+2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
+   tokens. The local `media.rs` helpers pin wire shapes and fail closed;
+   `/api/v1/push/describe` does not advertise an RTC/media token
+   self-issue feature, and the production router does not expose a
+   public `/rtc/token` minting route. The canonical issuer remains
+   soland unless a future release wires a real media-service keystore.
+
 ## Known Limitations
 
 Documented for transparency; reviewers may treat these as accepted risks
@@ -117,14 +138,28 @@ or open follow-up tickets:
    circle_id. Operators reconstruct per-Circle retry health from the
    counter deltas (`floria_notify_retry_enqueued_total`,
    `floria_notify_retry_replayed_total`).
-4. **Plaintext bearer tokens are still accepted** — the
-   `notify_auth.bearer_tokens` field is supported for compatibility,
-   but production deployments SHOULD configure
-   `bearer_token_hashes` instead. See `docs/en/configuration.md`.
+4. **Plaintext bearer tokens are development-only** — the
+   `notify_auth.bearer_tokens` field is still supported for
+   non-production compatibility, but `production_mode=true` rejects
+   both gateway-wide and per-principal plaintext bearer tokens at
+   config validation. Production callers must use HTTP Message
+   Signatures or mTLS; bearer hashes are retained only as non-production
+   fallback material. See `docs/en/configuration.md`.
 5. **Takedown notification path is not implemented** — the
    `floria_takedown_notification_failures_total` counter is wired but
    the underlying handler is a TODO(P5-impl) placeholder. The metric
-   stays at zero until the handler lands.
-6. **Internal endpoints have no built-in auth** — see
-   `docs/en/internal-endpoints.md`. Auth is delegated to the
-   deployment topology (private bind / service-mesh mTLS).
+   stays at zero unless an explicit stub call increments one of the
+   documented `enqueue` / `dispatch` / `confirm` stages during local
+   testing; production alerts should remain disabled until the handler
+   lands.
+6. **Internal endpoints share the public listener** — see
+   `docs/en/internal-endpoints.md`. They now require
+   `http.internal_auth` and fail closed when it is unset; private
+   binds / service-mesh mTLS remain recommended defense-in-depth.
+7. **Visible notification payloads are intentionally plaintext** — the
+   visible-notification profile can place title/body metadata in
+   provider-visible payload fields. floria gates this through
+   `allow_plaintext_metadata` plus the reviewed
+   `is_plaintext_eligible_service_kind` allow-list; widening that
+   allow-list or adding a new visible field requires a fresh privacy
+   review.

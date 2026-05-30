@@ -83,10 +83,11 @@ http {
     plaintext_metadata_service_dids "did:web:sync.example.com"
     gateway_service_did "did:web:push.example.com"
     // require_message_signatures true
+    // production_mode true
     // service_principals {
     //   "did:web:sync.example.com" {
     //     allow_plaintext_metadata true
-    //     bearer_tokens "replace-me"
+    //     // bearer_tokens 仅限非生产；production_mode 会拒绝
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
@@ -95,6 +96,10 @@ http {
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
     // }
+  }
+  internal_auth {
+    // bearer_tokens "replace-me-internal"
+    bearer_token_hashes "sha256:<hex-digest>"
   }
   notify_rate_limits {
     window_seconds 60
@@ -115,18 +120,21 @@ http {
 | `notify_dedup.backend` | string | `"memory"` | 去重后端：`"memory"` 或 `"redis"` |
 | `notify_dedup.redis_url` | string | — | 当 `notify_dedup.backend=redis` 时使用的 Redis 连接 URL |
 | `notify_dedup.key_prefix` | string | `"floria"` | Redis 去重键前缀 |
-| `notify_auth.bearer_tokens` | string/string[] | — | `/notify` 允许的 bearer service token |
+| `notify_auth.bearer_tokens` | string/string[] | — | 非生产 `/notify` 允许的 bearer service token；`production_mode=true` 时会被拒绝 |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
 | `notify_auth.trusted_service_dids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
 | `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | 允许发送 `sender_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
 | `notify_auth.gateway_service_did` | string | — | 期望的 destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
+| `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
 | `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | 由入口层注入、表示 mTLS 已校验通过的 header |
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | 由入口层注入、携带客户端证书指纹的 header |
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | 由入口层注入、携带客户端证书 Subject DN 的 header |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | 由入口层注入、携带逗号分隔 SAN 列表的 header |
 | `notify_auth.service_principals` | object | — | 以 origin service DID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
+| `internal_auth.bearer_tokens` | string/string[] | — | `/api/v1/internal/*`、`/api/v1/push/status/*`、`/api/v1/push/device/unregister` 使用的内部/运维 bearer token |
+| `internal_auth.bearer_token_hashes` | string/string[] | — | 内部 bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀；两组内部凭据都为空时内部/运维路由 fail-closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
 | `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service DID 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_app_id` | u64 | — | 每个 target app ID 在单窗口内允许的 `/notify` 次数 |
@@ -151,6 +159,7 @@ http {
   }
   notify_auth {
     gateway_service_did "did:web:push.example.com"
+    production_mode true
     require_message_signatures true
     service_principals {
       "did:web:sync.example.com" {
@@ -177,10 +186,12 @@ http {
 
 生产部署时，应让 `/api/v1/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
 
-> **生产模式建议（P5）**：生产环境**仅**配置
-> `bearer_token_hashes`。明文的 `bearer_tokens` 字段保留是为了兼容，但在生产场景中被视为 deprecated —
-> 明文 token 一旦泄漏即可被重放使用，而 SHA-256 hash 不能直接被重放。先以 hash 形式滚动部署，
-> 确认 `/ready` 返回 200 后再移除明文字段。hash 可以是纯 hex，也可以带 `sha256:` 前缀。
+> **生产模式要求（P5）**：生产环境不要配置明文
+> `bearer_tokens`。开启 `production_mode=true` 后，floria 会在配置校验阶段拒绝
+> gateway-wide `notify_auth.bearer_tokens` 和逐 principal 的
+> `service_principals.*.bearer_tokens`。生产调用方必须使用 HTTP Message
+> Signature 或 mTLS；`bearer_token_hashes` 仅作为非生产 bearer 回退材料保留。
+> hash 可以是纯 hex，也可以带 `sha256:` 前缀。
 
 启用 mTLS 入口时，TLS 终结的反向代理负责用固化的信任根链校验客户端证书，并把上表中的 4 条 `X-Client-Certificate-*` header 转发给 gateway。详见 [docs/zh/reverse-proxy.md](./reverse-proxy.md) 与 `examples/reverse-proxy/` 中的 nginx / Caddy 参考配置。
 
@@ -589,14 +600,14 @@ com.example.web {
 |------|------|--------|------|
 | `vapid_private_key` | string | *必填* | VAPID 私钥 PEM 文件路径 |
 | `vapid_contact_email` | string | *必填* | VAPID 联系邮箱 |
-| `allowed_endpoints` | string[] | — | 允许的订阅端点 glob 模式 |
+| `allowed_endpoints` | string[] | — | 允许的订阅端点 glob 模式；未配置时 fail-closed，不发起 WebPush 出站请求 |
 | `ttl` | u64 | `900` | 消息存活时间（秒） |
 
 **设备数据字段**（客户端 `data` 对象中）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `endpoint` | string | WebPush 订阅端点 URL（不得包含 query string） |
+| `endpoint` | string | WebPush 订阅端点 URL（不得包含 query string，且必须通过 floria HTTP egress 策略） |
 | `auth` | string | 认证密钥（base64） |
 | `default_payload` | object | 合并到所有消息的默认载荷 |
 | `events_only` | bool | 仅在存在 `event_id` 时发送 |

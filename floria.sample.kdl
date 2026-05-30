@@ -32,11 +32,12 @@ http {
     // gateway_service_did "did:web:push.example.com"
     //
     // Stronger production profile:
+    // production_mode #true
     // require_message_signatures #true
     // service_principals {
     //   "did:web:sync.example.com" {
     //     allow_plaintext_metadata #true
-    //     bearer_tokens "replace-me"
+    //     // bearer_tokens is non-production only; production_mode rejects it.
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
@@ -61,6 +62,13 @@ http {
     //   // backend "redis"
     //   // redis_url "redis://127.0.0.1:6379/2"
     // }
+  }
+  internal_auth {
+    // Internal/operator routes (`/api/v1/internal/*`,
+    // `/api/v1/push/status/*`, `/api/v1/push/device/unregister`) fail
+    // closed unless one of these credentials is configured.
+    // bearer_tokens "replace-me-internal"
+    // bearer_token_hashes "sha256:<hex-digest>"
   }
   notify_rate_limits {
     window_seconds 60

@@ -467,12 +467,24 @@ impl Pushkin for WebpushPushkin {
             return Ok(vec![]);
         }
 
+        if let Err(error) =
+            crate::egress::validate_http_url_for_egress(&subscription.endpoint, "webpush endpoint")
+        {
+            tracing::error!(
+                push_key_hash = %device.redacted_push_key(),
+                endpoint = %endpoint_domain,
+                error = %error,
+                "webpush endpoint rejected by egress policy"
+            );
+            return Ok(vec![]);
+        }
+
         self.send_message(&subscription, notification, device).await
     }
 }
 
 fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: &str) -> bool {
-    allowed_endpoints.is_none_or(|patterns| {
+    allowed_endpoints.is_some_and(|patterns| {
         patterns
             .iter()
             .any(|pattern| pattern.is_match(endpoint_domain))
@@ -757,11 +769,34 @@ mod tests {
     fn webpush_endpoint_allowlist_matches_domain() {
         let patterns = vec![Glob::new("*.push.example.test").unwrap().compile_matcher()];
 
+        assert!(!endpoint_allowed(None, "updates.push.example.test"));
         assert!(endpoint_allowed(
             Some(&patterns),
             "updates.push.example.test"
         ));
         assert!(!endpoint_allowed(Some(&patterns), "fcm.googleapis.com"));
+    }
+
+    #[tokio::test]
+    async fn webpush_dispatch_blocks_private_endpoint_even_when_allowlisted() {
+        let patterns = vec![Glob::new("*").unwrap().compile_matcher()];
+        let pushkin = pushkin_with_allowed_endpoints(Some(patterns));
+        let device = network_device("http://127.0.0.1/push");
+        let notification = notification("hello");
+
+        let rejected = pushkin
+            .dispatch_notification(
+                &notification,
+                &device,
+                &NotificationContext {
+                    request_id: "test".to_owned(),
+                    start_time: Instant::now(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(rejected.is_empty());
     }
 
     #[test]

@@ -961,7 +961,7 @@ fn verify_nonce_freshness(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BearerState {
+pub(crate) enum BearerState {
     Missing,
     Invalid,
     Valid,
@@ -974,7 +974,11 @@ fn bearer_matches(req: &Request, candidates: &[String], candidate_hashes: &[Stri
     )
 }
 
-fn bearer_state(req: &Request, candidates: &[String], candidate_hashes: &[String]) -> BearerState {
+pub(crate) fn bearer_state(
+    req: &Request,
+    candidates: &[String],
+    candidate_hashes: &[String],
+) -> BearerState {
     let Some(raw) = req.header::<String>("authorization") else {
         return BearerState::Missing;
     };
@@ -1036,12 +1040,11 @@ fn required_header(
         })
 }
 
-fn authority(req: &Request) -> Result<&str, AuthFailure> {
+fn authority(req: &Request) -> Result<String, AuthFailure> {
     req.header::<String>("host")
         .or_else(|| req.uri().authority().map(|value| value.to_string()))
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-        .map(|value| Box::leak(value.into_boxed_str()) as &str)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "invalid_signature",

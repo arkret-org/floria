@@ -3,10 +3,11 @@
 //! # Role decision (MEDIA-1)
 //!
 //! Per `_before_todos.md` §1.5 and `_floria_todos.md` MEDIA-1, floria's v1
-//! role for `cx.call.media.token_exchange` is **proxy**: floria forwards
-//! the inbound `POST /rtc/token` request to the canonical principal
-//! server (soland) and relays its `MediaTokenResponse`. floria is **not**
-//! the token issuer in the v1 cycle.
+//! role for `cx.call.media.token_exchange` is **not an issuer**. The
+//! production binary does not advertise a media-token minting surface in
+//! `describe` and does not register a public `/rtc/token` route; if a
+//! deployment adds a proxy in front of soland, floria must relay the
+//! `MediaTokenResponse` without re-signing or mutating it.
 //!
 //! Self-issuing (option (b) in the todo: floria itself signs the
 //! `participant_binding` and issues `backend_token` when co-located with
@@ -23,14 +24,14 @@
 //!
 //! The scaffolds below cover the wire shapes (MEDIA-2, MEDIA-3), TTL +
 //! issuer anchoring + focus matching guards (MEDIA-4), and the
-//! participant-binding signing helper signature (MEDIA-5) so the
-//! self-issue path can be filled in later without changing the public
-//! API surface.
+//! participant-binding signing helper signature (MEDIA-5). The local
+//! signing methods are fail-closed scaffolds, not a public v1 HTTP
+//! surface.
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 // Re-export the SDK types so call sites (and the future self-issue
 // path) speak a single vocabulary with the rest of the contrix stack.
@@ -398,42 +399,33 @@ impl LiveKitBackendToken {
 pub fn participant_binding_canonical_bytes(
     binding: &ParticipantBinding,
 ) -> Result<Vec<u8>, MediaBindingError> {
-    let mut map = Map::new();
-    map.insert("scheme".to_owned(), Value::String(binding.scheme.clone()));
-    map.insert(
-        "issuer_kid".to_owned(),
-        Value::String(binding.issuer_kid.clone()),
-    );
-    map.insert(
-        "realm_id".to_owned(),
-        Value::String(binding.realm_id.as_str().to_owned()),
-    );
-    map.insert(
-        "call_id".to_owned(),
-        Value::String(binding.call_id.as_str().to_owned()),
-    );
-    map.insert(
-        "focus_id".to_owned(),
-        Value::String(binding.focus_id.clone()),
-    );
-    map.insert(
-        "actor_id".to_owned(),
-        Value::String(binding.actor_id.as_str().to_owned()),
-    );
-    map.insert(
-        "device_id".to_owned(),
-        Value::String(binding.device_id.as_str().to_owned()),
-    );
-    map.insert(
-        "participant_identity".to_owned(),
-        Value::String(binding.participant_identity.clone()),
-    );
-    map.insert(
-        "expires_at".to_owned(),
-        Value::String(binding.expires_at.to_rfc3339()),
-    );
-    // serde_json::Map preserves insertion order; we inserted alphabetically.
-    serde_json::to_vec(&Value::Object(map)).map_err(|e| {
+    let map = BTreeMap::from([
+        (
+            "actor_id",
+            Value::String(binding.actor_id.as_str().to_owned()),
+        ),
+        (
+            "call_id",
+            Value::String(binding.call_id.as_str().to_owned()),
+        ),
+        (
+            "device_id",
+            Value::String(binding.device_id.as_str().to_owned()),
+        ),
+        ("expires_at", Value::String(binding.expires_at.to_rfc3339())),
+        ("focus_id", Value::String(binding.focus_id.clone())),
+        ("issuer_kid", Value::String(binding.issuer_kid.clone())),
+        (
+            "participant_identity",
+            Value::String(binding.participant_identity.clone()),
+        ),
+        (
+            "realm_id",
+            Value::String(binding.realm_id.as_str().to_owned()),
+        ),
+        ("scheme", Value::String(binding.scheme.clone())),
+    ]);
+    serde_json::to_vec(&map).map_err(|e| {
         MediaBindingError::ParticipantBindingInvalid(format!(
             "failed to canonicalize participant_binding: {e}"
         ))
@@ -579,6 +571,30 @@ mod tests {
         });
         let err = lk.sign("APIabc", &[]).unwrap_err();
         assert_eq!(err.code(), "participant_binding_invalid");
+    }
+
+    #[test]
+    fn participant_binding_canonical_bytes_sort_keys() {
+        let binding: ParticipantBinding = serde_json::from_value(serde_json::json!({
+            "scheme": ParticipantBinding::SCHEME,
+            "sig": "ignored-by-canonical-body",
+            "issuer_kid": "did:web:media.example#key-1",
+            "realm_id": "cx:realm:01904100-0000-7000-8000-000000000001",
+            "call_id": "cx:call:01904100-0000-7000-8000-000000000002",
+            "focus_id": "fra-1",
+            "actor_id": "did:web:alice.example",
+            "device_id": "cx:device:01904100-0000-7000-8000-000000000004",
+            "participant_identity": "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000",
+            "expires_at": "2026-05-27T12:34:56Z"
+        }))
+        .unwrap();
+
+        let bytes = participant_binding_canonical_bytes(&binding).unwrap();
+
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            "{\"actor_id\":\"did:web:alice.example\",\"call_id\":\"cx:call:01904100-0000-7000-8000-000000000002\",\"device_id\":\"cx:device:01904100-0000-7000-8000-000000000004\",\"expires_at\":\"2026-05-27T12:34:56+00:00\",\"focus_id\":\"fra-1\",\"issuer_kid\":\"did:web:media.example#key-1\",\"participant_identity\":\"cx:rtcpart:0198c2f4-0000-7000-8000-000000000000\",\"realm_id\":\"cx:realm:01904100-0000-7000-8000-000000000001\",\"scheme\":\"cx.media.participant_binding.v1\"}"
+        );
     }
 
     #[test]

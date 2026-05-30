@@ -18,23 +18,22 @@ as `/notify` but never touch the public dedup cache or rate limiter.
 
 ## Auth posture
 
-floria deliberately does NOT enforce its own bearer / HTTP Message
-Signature check on `/api/v1/internal/*`. The expectation is:
+floria enforces `http.internal_auth` bearer/shared-secret
+authentication on `/api/v1/internal/*` and the operator-only
+`/api/v1/push/status/*` / `/api/v1/push/device/unregister` routes. If
+no internal bearer token or token hash is configured, these routes fail
+closed with `503 service_unavailable`; missing or invalid credentials
+return `401 unauthenticated`.
 
-1. **Network isolation** — bind the gateway to an internal-only
-   listener (e.g. a separate `bind_addresses` entry on a private
-   interface), or front it with a service mesh that terminates mTLS.
-2. **mTLS at the mesh layer** — if your deployment uses Linkerd /
-   Istio / Consul Connect, the mesh's mTLS already covers
-   intra-cluster auth; floria treats the request as trusted.
-3. **No public exposure** — `/api/v1/internal/*` MUST NOT be exposed
-   through the public ingress. Reject these paths at the edge proxy
-   (see `examples/reverse-proxy/` for nginx / Caddy snippets).
+Prefer `bearer_token_hashes` in production configs and rotate the
+shared secret independently from `/api/v1/push/notify` caller
+credentials. Network isolation and service-mesh mTLS are still
+recommended defense-in-depth controls, but the handlers no longer rely
+on ingress topology for their only authorization boundary.
 
-The handlers themselves validate only request shape. Wire-level
-schema violations return `400 schema_violation`; missing application
-state returns `500 internal_error`; unknown / drained broadcast
-channels return `503 service_unavailable`.
+Wire-level schema violations return `400 schema_violation`; missing
+application state returns `500 internal_error`; unknown / drained
+broadcast channels return `503 service_unavailable`.
 
 ## Rate limit posture
 
@@ -58,6 +57,12 @@ dispatch failure.
 | `floria_audit_rejected_devices_total{reason}` | both |
 | `floria_notify_dead_letter_total{pushkin, reason}` | both — when fanout retries exhaust |
 | `floria_takedown_notification_failures_total{stage}` | future (TODO(P5-impl)) |
+
+`floria_takedown_notification_failures_total` is a reserved
+placeholder, not evidence that takedown notifications are currently
+implemented. The only intended stage values are `enqueue`, `dispatch`,
+and `confirm`; production alerts should stay disabled until the
+TODO(P5-impl) handler exists.
 
 Trace spans are emitted with `service.name=floria`,
 `http.target=/api/v1/internal/<route>`, and the broadcast event id

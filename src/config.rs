@@ -114,6 +114,7 @@ pub struct HttpConfig {
     pub notify_dedup_ttl_seconds: u64,
     pub notify_dedup: NotifyDedupConfig,
     pub notify_auth: NotifyAuthConfig,
+    pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
     /// CXP-0007 Circle primitive — when `true`, the per-(provider,
@@ -193,6 +194,7 @@ impl Default for HttpConfig {
             notify_dedup_ttl_seconds: 0,
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
             metrics_detailed_circle_labels: false,
@@ -220,6 +222,7 @@ impl HttpConfig {
         );
         self.notify_dedup.emit_startup_warnings();
         self.notify_auth.emit_startup_warnings();
+        self.internal_auth.emit_startup_warnings();
         self.notify_rate_limits.emit_startup_warnings();
         self.notify_retry_queue.emit_startup_warnings();
     }
@@ -228,9 +231,59 @@ impl HttpConfig {
         let _ = self.listen_addrs()?;
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
+        self.internal_auth.validate()?;
         self.notify_rate_limits.validate()?;
         self.notify_retry_queue.validate()?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct InternalAuthConfig {
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_tokens: Vec<String>,
+    #[serde(default, deserialize_with = "string_or_vec")]
+    pub bearer_token_hashes: Vec<String>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+impl InternalAuthConfig {
+    pub fn enabled(&self) -> bool {
+        !self.bearer_tokens.is_empty() || !self.bearer_token_hashes.is_empty()
+    }
+
+    fn emit_startup_warnings(&self) {
+        warn_unknown_fields(
+            "http.internal_auth",
+            self.extra.keys().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self
+            .bearer_tokens
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
+            bail!("http.internal_auth.bearer_tokens must not contain empty values");
+        }
+        validate_bearer_token_hashes(
+            "http.internal_auth.bearer_token_hashes",
+            &self.bearer_token_hashes,
+        )?;
+        Ok(())
+    }
+}
+
+impl Default for InternalAuthConfig {
+    fn default() -> Self {
+        Self {
+            bearer_tokens: Vec::new(),
+            bearer_token_hashes: Vec::new(),
+            extra: Map::new(),
+        }
     }
 }
 
@@ -621,6 +674,11 @@ impl NotifyAuthConfig {
             if !has_signature && !principal.require_mtls {
                 bail!(
                     "http.notify_auth.production_mode requires service_principals.{did} to set HTTP Message Signature or require_mtls"
+                );
+            }
+            if !principal.bearer_tokens.is_empty() {
+                bail!(
+                    "http.notify_auth.production_mode rejects plaintext bearer_tokens on service_principals.{did}; production callers must use HTTP Message Signature or mTLS"
                 );
             }
             if principal.allow_plaintext_metadata {
@@ -1739,7 +1797,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-26.1/floria.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-05-31.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1833,6 +1891,7 @@ fn http_schema() -> Value {
                 }
             },
             "notify_auth": notify_auth_schema(),
+            "internal_auth": internal_auth_schema(),
             "notify_rate_limits": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1905,6 +1964,24 @@ fn http_schema() -> Value {
                         "description": "Max in-flight notify dispatches for a single Circle."
                     }
                 }
+            }
+        }
+    })
+}
+
+fn internal_auth_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Bearer/shared-secret authentication for internal and operator-only endpoints. When no token or hash is configured, those endpoints fail closed.",
+        "properties": {
+            "bearer_tokens": string_or_string_list_schema(),
+            "bearer_token_hashes": {
+                "description": "Plain or `sha256:`-prefixed 32-byte hex digests of internal bearer tokens.",
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}}
+                ]
             }
         }
     })
@@ -2114,7 +2191,7 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-26.1";
+    pub const SCHEMA_VERSION: &'static str = "2026-05-31.1";
 
     /// Parse a KDL config body into the intermediate JSON shape used by
     /// [`Config::load`]. Exposed for parity tests and ops tooling so
@@ -2244,6 +2321,7 @@ apps: {}
             "floria_push_delivery_queue"
         );
         assert!(!config.http.notify_rate_limits.enabled());
+        assert!(!config.http.internal_auth.enabled());
         assert!(!config.metrics.prometheus.enabled);
         assert_eq!(config.metrics.prometheus.address, "127.0.0.1");
         assert_eq!(config.metrics.prometheus.port, 8000);
@@ -2270,6 +2348,7 @@ apps: {}
             notify_dedup_ttl_seconds: 0,
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
             metrics_detailed_circle_labels: false,
@@ -2291,6 +2370,7 @@ apps: {}
             notify_dedup_ttl_seconds: 0,
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
             metrics_detailed_circle_labels: false,
@@ -2496,6 +2576,34 @@ apps: {}
     }
 
     #[test]
+    fn validate_rejects_malformed_internal_bearer_token_hash() {
+        let mut config = Config::default();
+        config.http.internal_auth.bearer_token_hashes = vec!["not-hex".to_owned()];
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("http.internal_auth.bearer_token_hashes"));
+    }
+
+    #[test]
+    fn parses_internal_auth_hashes() {
+        let config: Config = serde_saphyr::from_str(
+            r#"
+http:
+  internal_auth:
+    bearer_token_hashes: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps: {}
+"#,
+        )
+        .unwrap();
+
+        assert!(config.http.internal_auth.enabled());
+        assert_eq!(
+            config.http.internal_auth.bearer_token_hashes,
+            vec!["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        );
+    }
+
+    #[test]
     fn production_mode_requires_signed_or_mtls_principal() {
         let mut config = Config::default();
         config.http.notify_auth.production_mode = true;
@@ -2537,6 +2645,32 @@ apps: {}
         let error = config.validate().unwrap_err().to_string();
         assert!(
             error.contains("rejects gateway-wide bearer_tokens"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
+        let mut config = Config::default();
+        config.http.notify_auth.production_mode = true;
+        config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+        let principal = NotifyServicePrincipalConfig {
+            bearer_tokens: vec!["principal-token".to_owned()],
+            signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+            signature_public_key_hex: Some("d".repeat(64)),
+            ..Default::default()
+        };
+        config
+            .http
+            .notify_auth
+            .service_principals
+            .insert("did:web:sync.example.com".to_owned(), principal);
+
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.contains(
+                "rejects plaintext bearer_tokens on service_principals.did:web:sync.example.com"
+            ),
             "unexpected error: {error}"
         );
     }

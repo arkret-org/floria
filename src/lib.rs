@@ -8,11 +8,11 @@ pub mod dedup;
 pub mod egress;
 pub mod error;
 // CXP-0010 (R3 spec-sync 2026-05-27) — media-service token-exchange
-// scaffolds. floria's v1 role is **proxy** (forward to soland); the
-// self-issue path lives behind `TODO(R3.1)` stubs in this module so the
-// wire shapes are pinned without committing to a full media-service
-// keystore in the v1 cycle. See `media.rs` module docs for the role
-// decision (MEDIA-1) and the corresponding entries in `_floria_todos.md`.
+// scaffolds. floria's v1 binary does not expose a media token minting
+// route; any deployment-level proxy must forward to soland without
+// re-signing. The self-issue path lives behind fail-closed `TODO(R3.1)`
+// stubs so the wire shapes are pinned without committing to a full
+// media-service keystore in the v1 cycle.
 pub mod media;
 pub mod metrics;
 pub mod models;
@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use audit::AuditSink;
 use broadcast::InProcessBroadcastBus;
-use config::NotifyAuthConfig;
+use config::{InternalAuthConfig, NotifyAuthConfig};
 use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
 use nonce_store::NonceStore;
@@ -60,6 +60,7 @@ pub struct AppState {
     pub audit_sink: Option<Arc<dyn AuditSink>>,
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
     pub notify_auth: NotifyAuthConfig,
+    pub internal_auth: InternalAuthConfig,
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
     pub notify_nonce_store: Option<Arc<NonceStore>>,
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
@@ -79,6 +80,7 @@ impl AppState {
             audit_sink: None,
             notify_deduplicator: None,
             notify_auth: NotifyAuthConfig::default(),
+            internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,
@@ -98,6 +100,7 @@ impl AppState {
             audit_sink: None,
             notify_deduplicator: Some(notify_deduplicator),
             notify_auth: NotifyAuthConfig::default(),
+            internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,

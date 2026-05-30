@@ -191,11 +191,12 @@ pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> 
     }
 
     let mut modes = Vec::new();
-    if !auth.bearer_tokens.is_empty()
-        || !auth.bearer_token_hashes.is_empty()
-        || auth.service_principals.values().any(|principal| {
-            !principal.bearer_tokens.is_empty() || !principal.bearer_token_hashes.is_empty()
-        })
+    if !auth.production_mode
+        && (!auth.bearer_tokens.is_empty()
+            || !auth.bearer_token_hashes.is_empty()
+            || auth.service_principals.values().any(|principal| {
+                !principal.bearer_tokens.is_empty() || !principal.bearer_token_hashes.is_empty()
+            }))
     {
         modes.push("bearer");
     }

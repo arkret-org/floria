@@ -6,8 +6,9 @@
 ## 决策摘要
 
 在 Contrix v1 中，`cx.call.media.token_exchange` 的**规范签发者**是
-**soland**。floria 在 v1 中只承担**透明代理**角色：从客户端转发请求到
-soland，再将 soland 返回的字节原样回传给客户端。
+**soland**。当前 floria 二进制不在公开 router 或 describe 响应中暴露
+`/rtc/token` 本地签发面；如果部署层未来在 floria 前后接入代理，也只能作为
+**透明代理**把请求交给 soland，并将 soland 返回的字节原样回传给客户端。
 
 | 角色 | soland | floria |
 |---|---|---|
@@ -16,7 +17,7 @@ soland，再将 soland 返回的字节原样回传给客户端。
 | 签 `participant_binding` | **是** | 否 |
 | 签 `service_signature` | **是** | 否 |
 | 轮换 `issuer_kid` | **是** | 否 |
-| 对外暴露 `POST /rtc/token` | 是（直连） | 是（v1 代理） |
+| 对外暴露 `POST /rtc/token` | 是（直连） | 否（当前二进制未挂路由；未来若接入也只能透明代理） |
 
 ## 为什么 floria 在 v1 中只代理
 
@@ -26,9 +27,9 @@ soland，再将 soland 返回的字节原样回传给客户端。
 2. **kid 轮换的单点权威**。轮换 `service_signature.kid` 是一个需要严格
    时序的运维操作；让一个权威节点负责轮换，避免多节点 kid 视图不一致
    造成的 `token_issuer_unauthorised` 故障。
-3. **canonical bytes 一致性**。`participant_binding` 的规范字节（RFC
-   8785 JCS）由 SDK + soland 共同维护；floria 没有参与 JCS 序列化，避
-   免引入第三处可能漂移的序列化实现。
+3. **canonical bytes 一致性**。`participant_binding` 的规范字节由 SDK
+   + soland 共同维护；floria 只保留 fail-closed 的本地 scaffold，并用排序
+   map 固定字段顺序，避免未来签名路径落地前发生序列化漂移。
 4. **审计明确性**。所有签发都源自 soland，审计日志只需要在一处采集。
 
 ## floria 代理的不变量
@@ -45,7 +46,8 @@ soland，再将 soland 返回的字节原样回传给客户端。
 `cx.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
 在受控的部署里（如 soland 与 floria 同主同时部署，且签发密钥已落在
 floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不是 v1 行
-为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。
+为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。`media.rs`
+中的三处签名 helper 是 fail-closed 占位，不是公开 HTTP/API 能力。
 
 ## 排错快查
 

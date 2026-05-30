@@ -3,9 +3,9 @@
 //! These routes are intended for the soland-broadcast channel (or an
 //! equivalent in-process message bus). They are exposed under
 //! `/api/v1/internal/...` and intentionally do NOT share the public
-//! `/api/v1/push/notify` request shape. Auth is delegated to the
-//! deployment (typically a private listener + service mesh mTLS); the
-//! handlers themselves only validate wire shape.
+//! `/api/v1/push/notify` request shape. They are protected by the
+//! `http.internal_auth` bearer/shared-secret profile and fail closed
+//! when no internal credential is configured.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -14,10 +14,93 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 
 use crate::AppState;
+use crate::auth::{BearerState, bearer_state};
 use crate::deactivation::AccountDeactivateFanoutBroadcast;
 use crate::push_contact_cache::ConsentRevokeBroadcast;
 
 use super::metrics::{finish_error, finish_json};
+
+#[handler]
+pub(super) async fn require_internal_auth(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let started = Instant::now();
+    let state = match depot.obtain::<Arc<AppState>>() {
+        Ok(state) => state.clone(),
+        Err(_) => {
+            finish_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "application state missing",
+                None,
+                None,
+                started,
+            );
+            return;
+        }
+    };
+
+    if !state.internal_auth.enabled() {
+        tracing::error!(
+            path = %req.uri().path(),
+            "rejecting internal endpoint request: http.internal_auth is not configured"
+        );
+        finish_error(
+            res,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "internal endpoint authentication is not configured",
+            None,
+            None,
+            started,
+        );
+        return;
+    }
+
+    match bearer_state(
+        req,
+        &state.internal_auth.bearer_tokens,
+        &state.internal_auth.bearer_token_hashes,
+    ) {
+        BearerState::Valid => {
+            ctrl.call_next(req, depot, res).await;
+        }
+        BearerState::Missing => {
+            tracing::warn!(
+                path = %req.uri().path(),
+                "rejecting internal endpoint request without bearer token"
+            );
+            finish_error(
+                res,
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+                "missing internal bearer token",
+                None,
+                None,
+                started,
+            );
+        }
+        BearerState::Invalid => {
+            tracing::warn!(
+                path = %req.uri().path(),
+                "rejecting internal endpoint request with invalid bearer token"
+            );
+            finish_error(
+                res,
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+                "invalid internal bearer token",
+                None,
+                None,
+                started,
+            );
+        }
+    }
+}
 
 /// `GET /api/v1/push/status/{idempotency_key}` — returns a lightweight
 /// snapshot of an outstanding or recently completed notify request.

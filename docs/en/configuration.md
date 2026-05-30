@@ -102,10 +102,11 @@ http {
     plaintext_metadata_service_dids "did:web:sync.example.com"
     gateway_service_did "did:web:push.example.com"
     // require_message_signatures true
+    // production_mode true
     // service_principals {
     //   "did:web:sync.example.com" {
     //     allow_plaintext_metadata true
-    //     bearer_tokens "replace-me"
+    //     // bearer_tokens is non-production only; production_mode rejects it.
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
@@ -114,6 +115,10 @@ http {
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
     // }
+  }
+  internal_auth {
+    // bearer_tokens "replace-me-internal"
+    bearer_token_hashes "sha256:<hex-digest>"
   }
   notify_rate_limits {
     window_seconds 60
@@ -134,18 +139,21 @@ http {
 | `notify_dedup.backend` | string | `"memory"` | Dedup backend: `"memory"` or `"redis"` |
 | `notify_dedup.redis_url` | string | — | Redis connection URL when `notify_dedup.backend=redis` |
 | `notify_dedup.key_prefix` | string | `"floria"` | Prefix used for dedup keys in Redis |
-| `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for `/notify` |
+| `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for non-production `/notify`; rejected when `production_mode=true` |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
 | `notify_auth.trusted_service_dids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
 | `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_display_name` and `space_name` |
 | `notify_auth.gateway_service_did` | string | — | Expected destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
+| `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
 | `notify_auth.mtls_verified_header` | string | `"x-client-certificate-verified"` | Ingress-provided header used to signal verified mTLS client auth |
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | Ingress-provided header carrying the client certificate fingerprint |
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | Ingress-provided header carrying the client certificate Subject DN |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | Ingress-provided header carrying the comma-joined SAN list |
 | `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service DID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
+| `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/api/v1/internal/*`, `/api/v1/push/status/*`, and `/api/v1/push/device/unregister` |
+| `internal_auth.bearer_token_hashes` | string/string[] | — | SHA-256 internal bearer token digests, optionally prefixed with `sha256:`; when both internal credential lists are empty, internal/operator routes fail closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
 | `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service DID per window |
 | `notify_rate_limits.per_app_id` | u64 | — | Max `/notify` requests per target app ID per window |
@@ -170,6 +178,7 @@ http {
   }
   notify_auth {
     gateway_service_did "did:web:push.example.com"
+    production_mode true
     require_message_signatures true
     service_principals {
       "did:web:sync.example.com" {
@@ -196,14 +205,13 @@ http {
 
 In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
-> **Production-mode recommendation (P5)**: configure
-> `bearer_token_hashes` ONLY in production. The plaintext
-> `bearer_tokens` field is supported for compatibility but is treated
-> as deprecated for production deployments — a leaked plaintext token
-> is immediately reusable, whereas a leaked SHA-256 hash is not. Roll
-> the deployment with the hashed form, verify `/ready` returns 200,
-> then remove the plaintext field. Hashes may be specified bare-hex or
-> with a `sha256:` prefix.
+> **Production-mode requirement (P5)**: do not configure plaintext
+> `bearer_tokens` in production. With `production_mode=true`, floria
+> rejects gateway-wide `notify_auth.bearer_tokens` and per-principal
+> `service_principals.*.bearer_tokens` during config validation.
+> Production callers must satisfy HTTP Message Signature or mTLS; bearer
+> hashes may be kept only as non-production fallback material. Hashes may
+> be specified bare-hex or with a `sha256:` prefix.
 
 For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
 
@@ -250,9 +258,10 @@ Recommended workflow:
    floria service account. Prefer file path fields for provider credentials:
    APNs `keyfile` / `certfile`, FCM `service_account_file`, WebPush
    `vapid_private_key`, and custom push `client_certfile`.
-3. For service bearer fallback, prefer `bearer_token_hashes` over raw
-   `bearer_tokens` so the gateway config does not contain reusable bearer
-   material.
+3. For non-production service bearer fallback, prefer
+   `bearer_token_hashes` over raw `bearer_tokens` so the gateway config
+   does not contain reusable bearer material. Production mode rejects raw
+   notify bearer tokens entirely.
 4. Render any config that needs environment-specific values before startup; do
    not rely on `${ENV_VAR}` strings being expanded by floria.
 5. Roll the deployment and verify `/ready` returns `200` before revoking the old
@@ -681,14 +690,14 @@ com.example.web {
 |-------|------|---------|-------------|
 | `vapid_private_key` | string | *required* | Path to VAPID private key PEM |
 | `vapid_contact_email` | string | *required* | Contact email for VAPID |
-| `allowed_endpoints` | string[] | — | Glob patterns for allowed subscription endpoints |
+| `allowed_endpoints` | string[] | — | Glob patterns for allowed subscription endpoints; unset means fail-closed/no WebPush egress |
 | `ttl` | u64 | `900` | Message TTL in seconds |
 
 **Device data fields** (in the client's `data` object):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `endpoint` | string | WebPush subscription endpoint URL (must not contain a query string) |
+| `endpoint` | string | WebPush subscription endpoint URL (must not contain a query string and must pass floria's HTTP egress policy) |
 | `auth` | string | Authentication secret (base64) |
 | `default_payload` | object | Default payload merged into all messages |
 | `events_only` | bool | Only send if `event_id` is present |

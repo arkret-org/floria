@@ -572,6 +572,7 @@ mod tests {
         notify_dedup_lookup("hit");
         audit_divert("policy_access", "success");
         audit_rejected_devices(Some("mention_redirect_not_targeted"), 1);
+        takedown_notification_failure("enqueue");
         observe_pushkin_dispatch("apns", "accepted", Duration::from_millis(12));
 
         let service = Service::new(build_router());
@@ -594,6 +595,8 @@ mod tests {
         assert!(body.contains("floria_notify_dedup_lookup_total"));
         assert!(body.contains("floria_audit_divert_total"));
         assert!(body.contains("floria_audit_rejected_devices_total"));
+        assert!(body.contains("floria_takedown_notification_failures_total"));
+        assert!(body.contains("Takedown notification failures per stage (placeholder"));
         assert!(body.contains("floria_pushkin_dispatch_seconds"));
     }
 }

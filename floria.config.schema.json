@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-26.1/floria.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-05-31.1/floria.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -118,6 +118,40 @@
               "type": [
                 "integer",
                 "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "internal_auth": {
+          "additionalProperties": false,
+          "description": "Bearer/shared-secret authentication for internal and operator-only endpoints. When no token or hash is configured, those endpoints fail closed.",
+          "properties": {
+            "bearer_token_hashes": {
+              "description": "Plain or `sha256:`-prefixed 32-byte hex digests of internal bearer tokens.",
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "bearer_tokens": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
               ]
             }
           },
@@ -763,5 +797,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-26.1"
+  "x-floria-schema-version": "2026-05-31.1"
 }

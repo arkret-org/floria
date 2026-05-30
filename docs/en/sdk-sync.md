@@ -36,6 +36,16 @@ The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
 `data.payload`).
 
+## Mention Reference v2 N/A
+
+ROST-FLO-1..3 mention reference v2 fields are intentionally not part of
+floria's push wire model. `subject_id`, `display_name_at_time`, and
+related Message AST preview fields belong to chime / principal-service
+message rendering, not to `cx.push.notify`. floria keeps the typed
+payload closed with `serde(deny_unknown_fields)`; the round4 service
+test `mention_reference_v2_fields_are_not_push_payload_fields` rejects
+those fields with `schema_violation`.
+
 ## Upgrade Gate
 
 Do not remove the local sweep until all of these are true:

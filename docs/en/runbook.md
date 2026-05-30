@@ -145,6 +145,12 @@ Rules:
    forces visible. Metric:
    `floria_delivery_profile_total{profile="visible", reason="low_power_fallback"}`.
 
+Privacy boundary: visible notifications are provider- and OS-visible by
+design. Only callers with `allow_plaintext_metadata=true` and a reviewed
+eligible `service_type` may supply displayable title/body metadata. Any
+change to `is_plaintext_eligible_service_kind` or any newly accepted
+visible plaintext field needs a fresh privacy review before rollout.
+
 Operational signals:
 
 - `floria_delivery_profile_total{profile, reason}` — counter of every
@@ -161,11 +167,24 @@ Operational signals:
 
 ## Media token issuer role in v1 (proxy posture)
 
-floria's role in the `cx.call.media.token_exchange` flow is **proxy only**
-in v1. The canonical issuer is soland. floria forwards requests
-byte-for-byte and does NOT cache, re-sign, or mutate tokens. See
+floria's role in the `cx.call.media.token_exchange` flow is **not an
+issuer** in v1. The current floria HTTP router and describe endpoints do
+not expose a public `/rtc/token` minting surface. If a deployment adds a
+separate proxy in front of soland, the canonical issuer is still soland
+and floria must relay responses byte-for-byte without caching,
+re-signing, or mutating tokens. See
 [`docs/zh/media-token-issuer-cn.md`](../zh/media-token-issuer-cn.md) for
 the Chinese summary of this decision and the rationale.
 
-If you see floria attempting to mint a token locally, that is a bug — file
-against the wire layer.
+The local `media.rs` signing helpers are fail-closed scaffolds. If you
+see floria attempting to mint a token locally, or `/api/v1/push/describe`
+advertising an RTC/media token self-issue feature, that is a bug.
+
+## Takedown notification metric placeholder
+
+`floria_takedown_notification_failures_total{stage}` is reserved for the
+future takedown-notification handler. Its allowed stage labels are
+`enqueue`, `dispatch`, and `confirm`; no production handler increments it
+today. Keep alerts for this metric disabled until TODO(P5-impl) wires the
+real handler, otherwise a flat zero is expected rather than healthy
+takedown coverage.
