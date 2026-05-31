@@ -4,6 +4,12 @@ All notable changes to floria (Contrix push gateway) will be documented in this
 file. The format is loosely based on [Keep a Changelog]; floria follows the
 parent Contrix spec's round-numbering for grouping wire-breaking changes.
 
+## R3.4 — Spec sync 2026-05-31 (contrix-spec @ c2848a4)
+
+- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `cx:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+
 ## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
 
 - R3.3 spec sync — pin to contrix-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).

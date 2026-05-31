@@ -516,7 +516,8 @@ mod tests {
             ContrixNativeTokenPayload {
                 call_id: "cx:call:0196441c-0000-7000-8000-000000000000".to_owned(),
                 focus_id: "fra-1".to_owned(),
-                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000".to_owned(),
+                participant_identity: "cx:rtc_participant:0198c2f4-0000-7000-8000-000000000000"
+                    .to_owned(),
                 issued_at: "2026-05-27T12:29:56Z".to_owned(),
                 expires_at: "2026-05-27T12:34:56Z".to_owned(),
                 media: ContrixNativeMediaCaps {
@@ -540,7 +541,8 @@ mod tests {
             ContrixNativeTokenPayload {
                 call_id: "cx:call:0196441c-0000-7000-8000-000000000000".to_owned(),
                 focus_id: "fra-1".to_owned(),
-                participant_identity: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000".to_owned(),
+                participant_identity: "cx:rtc_participant:0198c2f4-0000-7000-8000-000000000000"
+                    .to_owned(),
                 issued_at: "2026-05-27T12:29:56Z".to_owned(),
                 expires_at: "2026-05-27T12:34:56Z".to_owned(),
                 media: ContrixNativeMediaCaps {
@@ -555,7 +557,7 @@ mod tests {
 
         let mut lk = LiveKitBackendToken::unsigned(LiveKitClaims {
             iss: "APIabc".to_owned(),
-            sub: "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000".to_owned(),
+            sub: "cx:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned(),
             iat: 0,
             nbf: 0,
             exp: 300,
@@ -584,7 +586,7 @@ mod tests {
             "focus_id": "fra-1",
             "actor_id": "did:web:alice.example",
             "device_id": "cx:device:01904100-0000-7000-8000-000000000004",
-            "participant_identity": "cx:rtcpart:0198c2f4-0000-7000-8000-000000000000",
+            "participant_identity": "cx:rtc_participant:0198c2f4-0000-7000-8000-000000000000",
             "expires_at": "2026-05-27T12:34:56Z"
         }))
         .unwrap();
@@ -593,7 +595,7 @@ mod tests {
 
         assert_eq!(
             String::from_utf8(bytes).unwrap(),
-            "{\"actor_id\":\"did:web:alice.example\",\"call_id\":\"cx:call:01904100-0000-7000-8000-000000000002\",\"device_id\":\"cx:device:01904100-0000-7000-8000-000000000004\",\"expires_at\":\"2026-05-27T12:34:56+00:00\",\"focus_id\":\"fra-1\",\"issuer_kid\":\"did:web:media.example#key-1\",\"participant_identity\":\"cx:rtcpart:0198c2f4-0000-7000-8000-000000000000\",\"realm_id\":\"cx:realm:01904100-0000-7000-8000-000000000001\",\"scheme\":\"cx.media.participant_binding.v1\"}"
+            "{\"actor_id\":\"did:web:alice.example\",\"call_id\":\"cx:call:01904100-0000-7000-8000-000000000002\",\"device_id\":\"cx:device:01904100-0000-7000-8000-000000000004\",\"expires_at\":\"2026-05-27T12:34:56+00:00\",\"focus_id\":\"fra-1\",\"issuer_kid\":\"did:web:media.example#key-1\",\"participant_identity\":\"cx:rtc_participant:0198c2f4-0000-7000-8000-000000000000\",\"realm_id\":\"cx:realm:01904100-0000-7000-8000-000000000001\",\"scheme\":\"cx.media.participant_binding.v1\"}"
         );
     }
 
