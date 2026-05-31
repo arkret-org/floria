@@ -347,46 +347,12 @@ fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Resul
     if let Some(path) = identity_path {
         let pem =
             std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
-        let (cert, key) = split_identity_pem(&pem, path)?;
-        let identity =
-            Identity::from_pkcs8_pem(&cert, &key).context("invalid client certificate bundle")?;
+        let identity = Identity::from_pem(&pem).context("invalid client certificate bundle")?;
         builder = builder.identity(identity);
     }
     builder
         .build()
         .context("failed to build custom HTTP client")
-}
-
-fn split_identity_pem(pem: &[u8], path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
-    let body = std::str::from_utf8(pem)
-        .with_context(|| format!("client_certfile {} must be UTF-8 PEM", path.display()))?;
-    let mut cert = String::new();
-    let mut key = String::new();
-    let mut current = None;
-    for line in body.lines() {
-        if line.starts_with("-----BEGIN CERTIFICATE") {
-            current = Some(&mut cert);
-        } else if line.starts_with("-----BEGIN PRIVATE KEY")
-            || line.starts_with("-----BEGIN EC PRIVATE KEY")
-            || line.starts_with("-----BEGIN RSA PRIVATE KEY")
-        {
-            current = Some(&mut key);
-        }
-        if let Some(buffer) = current.as_deref_mut() {
-            buffer.push_str(line);
-            buffer.push('\n');
-        }
-        if line.starts_with("-----END") {
-            current = None;
-        }
-    }
-    if cert.is_empty() || key.is_empty() {
-        bail!(
-            "client_certfile {} must contain both a CERTIFICATE and a PRIVATE KEY",
-            path.display()
-        );
-    }
-    Ok((cert.into_bytes(), key.into_bytes()))
 }
 
 fn urlencoding_encode(value: &str) -> String {

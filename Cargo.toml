@@ -24,7 +24,7 @@ kdl = "6.5.0"
 jsonwebtoken = "10.3.0"
 md-5 = "0.10.6"
 redis = "0.32.7"
-reqwest = { version = "0.13.2", default-features = false, features = ["form", "http2", "json", "native-tls"] }
+reqwest = { version = "0.13.2", default-features = false, features = ["form", "http2", "json", "rustls"] }
 salvo = { version = "0.89.3", features = ["affix-state", "logging"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
@@ -43,8 +43,12 @@ postgres = "0.19.12"
 sentry = { version = "0.48.1", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 sentry-tracing = "0.48.1"
 uuid = { version = "1.22.0", features = ["serde", "v4"] }
-web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"] }
+web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"], optional = true }
 x509-parser = "0.18.1"
+
+[features]
+default = []
+webpush-provider = ["dep:web-push"]
 
 [dev-dependencies]
 # T8.2 — property tests for the provider-payload sanitizer.

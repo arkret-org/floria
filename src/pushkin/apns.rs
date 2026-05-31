@@ -750,7 +750,7 @@ fn is_provider_token_failure(error: &DispatchError) -> Option<&'static str> {
 
 fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Result<Client> {
     let mut builder = Client::builder()
-        .tls_backend_native()
+        .tls_backend_rustls()
         .http2_adaptive_window(true);
     if let Some(proxy) = proxy {
         builder =
@@ -761,9 +761,7 @@ fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Resul
     if let Some(identity_path) = identity_path {
         let pem = std::fs::read(identity_path)
             .with_context(|| format!("failed to read {}", identity_path.display()))?;
-        let (cert, key) = split_identity_pem(&pem)?;
-        let identity =
-            Identity::from_pkcs8_pem(&cert, &key).context("invalid PEM certificate bundle")?;
+        let identity = Identity::from_pem(&pem).context("invalid PEM certificate bundle")?;
         builder = builder.identity(identity);
     }
     builder.build().context("failed to build APNS HTTP client")
@@ -839,52 +837,6 @@ fn epoch_now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-fn split_identity_pem(pem: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
-    let pem = String::from_utf8_lossy(pem);
-
-    let cert = collect_pem_blocks(&pem, "CERTIFICATE");
-    if cert.is_empty() {
-        bail!("certificate PEM does not contain any CERTIFICATE blocks");
-    }
-
-    for label in ["PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY"] {
-        if let Some(key) = first_pem_block(&pem, label) {
-            return Ok((cert.into_bytes(), key.into_bytes()));
-        }
-    }
-
-    bail!("certificate PEM does not contain a supported private key block")
-}
-
-fn collect_pem_blocks(pem: &str, label: &str) -> String {
-    let mut blocks = String::new();
-    let begin = format!("-----BEGIN {label}-----");
-    let end = format!("-----END {label}-----");
-    let mut start = 0usize;
-
-    while let Some(begin_index) = pem[start..].find(&begin) {
-        let block_start = start + begin_index;
-        let Some(end_index) = pem[block_start..].find(&end) else {
-            break;
-        };
-        let block_end = block_start + end_index + end.len();
-        blocks.push_str(&pem[block_start..block_end]);
-        blocks.push('\n');
-        start = block_end;
-    }
-
-    blocks
-}
-
-fn first_pem_block(pem: &str, label: &str) -> Option<String> {
-    let begin = format!("-----BEGIN {label}-----");
-    let end = format!("-----END {label}-----");
-    let start = pem.find(&begin)?;
-    let end_index = pem[start..].find(&end)?;
-    let block_end = start + end_index + end.len();
-    Some(format!("{}\n", &pem[start..block_end]))
 }
 
 #[cfg(test)]
