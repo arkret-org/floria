@@ -36,7 +36,7 @@ Expected blind-wakeup fields:
 | Field | Meaning |
 |-------|---------|
 | `push_target_id` | Opaque server-issued target pseudonym |
-| `wakeup_kind` | Small snake_case wakeup type such as `message` or `incoming_call` |
+| `wakeup_kind` | Closed wakeup type: `message`, `mention`, `reaction`, or `call_invite` |
 | `push_hint` | Optional body-free hint for local routing |
 | `badge` / `unread_count` | Optional platform count hints |
 

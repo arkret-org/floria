@@ -639,12 +639,11 @@ fn validate_wakeup_kind(value: Option<&Value>) -> Result<(), String> {
     if value.is_empty() {
         return Err("notification.wakeup_kind must not be empty".to_owned());
     }
-    if value.len() > 32
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        return Err("notification.wakeup_kind must be an opaque snake_case token".to_owned());
+    if !contrix::blind_payload_sanitizer::is_valid_wakeup_kind(value) {
+        return Err(
+            "notification.wakeup_kind must be one of message, mention, reaction, call_invite"
+                .to_owned(),
+        );
     }
     Ok(())
 }

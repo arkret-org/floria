@@ -41,9 +41,8 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "cx:circle:";
 // in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
 // durable Event-kind path. There is intentionally no code here that
 // branches on those kind strings — `wakeup_kind` on a `cx.push.notify`
-// is a closed enum (`message` / `incoming_call` / `mention` / …) plus
-// a snake_case custom token form, and the validator in `notify.rs`
-// rejects anything containing `did:` / `cx:` substrings, so an
+// is a closed enum (`message` / `mention` / `reaction` / `call_invite`),
+// so an
 // ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
 // future caller ever pipes an ephemeral as a durable Event, the
 // `validate_active_notification_refs` ID-prefix gate (`cx:event:` /

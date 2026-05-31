@@ -221,7 +221,12 @@
           },
           "wakeup_kind": {
             "type": "string",
-            "pattern": "^[a-z0-9_]{1,32}$"
+            "enum": [
+              "message",
+              "mention",
+              "reaction",
+              "call_invite"
+            ]
           },
           "push_hint": {
             "type": "string",

@@ -7,7 +7,7 @@
     "space_id": "cx:space:01964000-0000-7000-8000-000000000000",
     "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",
-    "push_hint": "new_activity",
+    "push_hint": "new_message",
     "counts": {
       "unread": 1
     },
