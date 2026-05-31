@@ -722,6 +722,34 @@ mod sanitize_tests {
         assert_eq!(out.get("client"), Some(&json!("android")));
     }
 
+    #[test]
+    fn sanitized_provider_payload_strips_audience_mention_expansion_metadata() {
+        let payload = json!({
+            "client": "android",
+            "wakeup_kind": "mention",
+            "audience": "flow_engaged",
+            "audience_mentions": [{ "audience": "flow_watchers" }],
+            "audience_mention_routing_hint": { "recipient_count": 2 },
+            "recipient_count": 2,
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let out = sanitized_provider_payload(payload).unwrap();
+        for forbidden in [
+            "audience",
+            "audience_mentions",
+            "audience_mention_routing_hint",
+            "recipient_count",
+        ] {
+            assert!(
+                out.get(forbidden).is_none(),
+                "audience mention expansion field `{forbidden}` survived sanitization"
+            );
+        }
+        assert_eq!(out.get("wakeup_kind"), Some(&json!("mention")));
+    }
+
     /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
     /// policy-frontier-hash / trust-domain / reset-event-id field names
     /// added by rounds 2+3 MUST be stripped from any provider payload
