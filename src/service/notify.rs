@@ -64,6 +64,16 @@ const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
     "flow_body",
     "message_body",
     "body_only",
+    // Spec 9dabf26 — content ciphertext and metadata moved to the
+    // typed message/flow carriers. None of those carriers belong on
+    // the push wire; fail closed for both legacy and current names.
+    "encrypted_payload",
+    "encrypted_content",
+    "encrypted_metadata",
+    "metadata",
+    "fields",
+    "track",
+    "track_name",
 ];
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
@@ -747,7 +757,20 @@ fn validate_notification_contract(
     // we surface a more specific reason code first so operators can
     // tell the two failure classes apart.
     if !caller.allow_plaintext_metadata {
-        for forbidden in ["title", "body", "subtitle", "alert", "preview", "summary"] {
+        for forbidden in [
+            "title",
+            "body",
+            "subtitle",
+            "alert",
+            "preview",
+            "summary",
+            "metadata",
+            "encrypted_metadata",
+            "encrypted_content",
+            "fields",
+            "track",
+            "track_name",
+        ] {
             if content.contains_key(forbidden) {
                 return Err(format!(
                     "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \

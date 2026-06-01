@@ -593,6 +593,15 @@ const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
     "circle_id",
     "effective_scope",
     "scope_circle_id",
+    // Spec 9dabf26 message/flow carrier split. Provider payloads stay
+    // blind and must not leak protocol content or track selectors.
+    "encrypted_payload",
+    "encrypted_content",
+    "encrypted_metadata",
+    "metadata",
+    "fields",
+    "track",
+    "track_name",
 ];
 
 /// Returns `true` if `key` matches a round R2/R3 locally-stripped

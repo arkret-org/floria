@@ -61,6 +61,12 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "provider_data",
     "ciphertext",
     "encrypted_payload",
+    "encrypted_content",
+    "encrypted_metadata",
+    "metadata",
+    "fields",
+    "track",
+    "track_name",
     "sdp",
     "offer",
     "candidate",
@@ -84,6 +90,12 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "circle_id",
     "effective_scope",
     "scope_circle_id",
+    "encrypted_content",
+    "encrypted_metadata",
+    "metadata",
+    "fields",
+    "track",
+    "track_name",
 ];
 
 fn arb_forbidden_key() -> impl Strategy<Value = &'static str> {
