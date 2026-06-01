@@ -171,7 +171,7 @@ pub struct Notification {
     #[serde(default)]
     pub membership: Option<String>,
     #[serde(default)]
-    pub sender_display_name: Option<String>,
+    pub sender_actor_display_name: Option<String>,
     #[serde(default)]
     pub content: Option<Map<String, Value>>,
     #[serde(default)]
@@ -286,7 +286,7 @@ impl Notification {
     }
 
     pub fn sender_label(&self) -> Option<&str> {
-        non_empty(self.sender_display_name.as_deref()).or(non_empty(self.sender.as_deref()))
+        non_empty(self.sender_actor_display_name.as_deref()).or(non_empty(self.sender.as_deref()))
     }
 
     pub fn wakeup_kind(&self) -> Option<&str> {

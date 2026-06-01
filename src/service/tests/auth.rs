@@ -228,8 +228,8 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
         "expected plaintext_in_blind_profile reason code, got: {msg}"
     );
     assert!(
-        msg.contains("sender_display_name") || msg.contains("flow/realm name"),
-        "expected sender_display_name / flow/realm mention, got: {msg}"
+        msg.contains("sender_actor_display_name") || msg.contains("flow/realm name"),
+        "expected sender_actor_display_name / flow/realm mention, got: {msg}"
     );
 }
 
@@ -245,7 +245,7 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
     request_body["notification"]["flow_name"] = Value::Null;
     request_body["notification"]["realm_name"] = Value::Null;
-    request_body["notification"]["sender_display_name"] = Value::Null;
+    request_body["notification"]["sender_actor_display_name"] = Value::Null;
     request_body["notification"]["sender"] = json!("@alice:example.com");
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
@@ -288,7 +288,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
     request_body["notification"]["flow_name"] = Value::Null;
     request_body["notification"]["realm_name"] = Value::Null;
-    request_body["notification"]["sender_display_name"] = Value::Null;
+    request_body["notification"]["sender_actor_display_name"] = Value::Null;
     request_body["notification"]["sender"] = Value::Null;
     request_body["notification"]["content"] = json!({
         "target_did": "did:web:bob.example.com"
@@ -332,7 +332,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
     request_body["notification"]["flow_name"] = Value::Null;
     request_body["notification"]["realm_name"] = Value::Null;
-    request_body["notification"]["sender_display_name"] = Value::Null;
+    request_body["notification"]["sender_actor_display_name"] = Value::Null;
     request_body["notification"]["sender"] = Value::Null;
     request_body["notification"]["content"] = json!({
         "call_wakeup": {
@@ -589,7 +589,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
 
     // The principal is allowed to push, but its declared service_type is not in
     // the plaintext-eligible kind list, so the plaintext metadata in the
-    // payload (sender_display_name etc.) is rejected as a
+    // payload (sender_actor_display_name etc.) is rejected as a
     // `failed_precondition` — the caller is on the default blind
     // profile (`cx.profile.push_gateway.blind_wakeup.v1`) and the
     // visible-notification profile is not in its supported set.

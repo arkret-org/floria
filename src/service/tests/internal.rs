@@ -89,7 +89,7 @@ async fn internal_routes_fail_closed_when_auth_unconfigured() {
         TestClient::post("http://127.0.0.1/api/v1/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_did": "did:web:alice.example",
+                "actor_id": "did:web:alice.example",
                 "devices": []
             }))
             .send(&service)
@@ -115,7 +115,7 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
         TestClient::post("http://127.0.0.1/api/v1/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_did": "did:web:alice.example",
+                "actor_id": "did:web:alice.example",
                 "devices": []
             }))
             .send(&service)
@@ -133,7 +133,7 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
             .bearer_auth("wrong-token")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_did": "did:web:alice.example",
+                "actor_id": "did:web:alice.example",
                 "devices": []
             }))
             .send(&service)
@@ -158,7 +158,7 @@ async fn internal_routes_accept_hashed_bearer_token() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": []
     }))
     .send(&service)
@@ -209,7 +209,7 @@ async fn account_deactivate_fanout_completes_for_drained_devices() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": [
             {"device_id": "device-a"},
             {"device_id": "device-b"}
@@ -234,7 +234,7 @@ async fn account_deactivate_fanout_is_idempotent_across_retries() {
 
     let payload = json!({
         "fanout_id": "fanout-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": [{"device_id": "device-a"}]
     });
 
@@ -272,7 +272,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
 
     let payload = json!({
         "fanout_id": "fanout-drain-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": [
             {"device_id": "device-a", "push_key_hash": "hash-a"},
             {"device_id": "device-b"}
@@ -317,7 +317,7 @@ async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": [
             {"device_id": "device-a"},
             {"device_id": "device-b"}
@@ -336,7 +336,7 @@ async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
 }
 
 #[tokio::test]
-async fn account_deactivate_fanout_rejects_missing_actor_did() {
+async fn account_deactivate_fanout_rejects_missing_actor_id() {
     let ledger = Arc::new(DeactivationLedger::new());
     let service = test_service_with_internal_state(Some(ledger), None);
 
@@ -345,7 +345,7 @@ async fn account_deactivate_fanout_rejects_missing_actor_did() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_did": "",
+        "actor_id": "",
         "devices": []
     }))
     .send(&service)
@@ -365,7 +365,7 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_did": "did:web:alice.example",
+        "actor_id": "did:web:alice.example",
         "devices": []
     }))
     .send(&service)
@@ -393,7 +393,7 @@ async fn consent_revoke_scope_any_invalidates_principal_entries() {
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",
-        "principal_did": "did:web:alice.example",
+        "principal_id": "did:web:alice.example",
         "scope": "any"
     }))
     .send(&service)
@@ -422,7 +422,7 @@ async fn consent_revoke_rejects_scoped_revocation() {
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",
-        "principal_did": "did:web:alice.example",
+        "principal_id": "did:web:alice.example",
         "scope": "realm"
     }))
     .send(&service)
@@ -450,7 +450,7 @@ async fn consent_revoke_accepts_agent_paused_reason() {
     ))
     .json(&json!({
         "broadcast_id": "bcast-agent-paused",
-        "principal_did": "did:web:alice.example",
+        "principal_id": "did:web:alice.example",
         "scope": "any",
         "reason": "agent_paused"
     }))
@@ -477,7 +477,7 @@ async fn consent_revoke_accepts_agent_deactivated_reason() {
     ))
     .json(&json!({
         "broadcast_id": "bcast-agent-deact",
-        "principal_did": "did:web:alice.example",
+        "principal_id": "did:web:alice.example",
         "scope": "any",
         "reason": "agent_deactivated"
     }))
@@ -498,7 +498,7 @@ async fn consent_revoke_returns_503_when_cache_unwired() {
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",
-        "principal_did": "did:web:alice.example",
+        "principal_id": "did:web:alice.example",
         "scope": "any"
     }))
     .send(&service)

@@ -271,7 +271,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             "realm_id": "cx:realm:01JS0SP000000000000000000",
             "flow_name": "Engineering",
             "sender": "did:web:alice.example.com",
-            "sender_display_name": "Alice",
+            "sender_actor_display_name": "Alice",
             "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "push_hint": "new_message",

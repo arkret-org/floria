@@ -623,7 +623,7 @@ mod tests {
             realm_name: None,
             prio: Some("low".to_owned()),
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
                 json!({
                     "body": body,
@@ -699,7 +699,7 @@ mod tests {
             "event_id",
             "message_id",
             "sender",
-            "sender_display_name",
+            "sender_actor_display_name",
             "flow_name",
             "realm_name",
             "content",

@@ -123,7 +123,7 @@ http {
 | `notify_auth.bearer_tokens` | string/string[] | — | 非生产 `/notify` 允许的 bearer service token；`production_mode=true` 时会被拒绝 |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
 | `notify_auth.trusted_service_dids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
-| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | 允许发送 `sender_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
+| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
 | `notify_auth.gateway_service_did` | string | — | 期望的 destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
 | `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
@@ -143,7 +143,7 @@ http {
 | `notify_rate_limits.per_endpoint` | u64 | — | 每个 HTTP endpoint path 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_provider_concurrency` | u64 | `100` | 单个 provider 的并发派发上限。`0` 关闭；默认 100，避免单一 provider 拖垮 fanout 工作池 |
 
-`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
+`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_actor_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
 
 生产环境 `/notify` 配置示例：
 

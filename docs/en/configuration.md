@@ -142,7 +142,7 @@ http {
 | `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for non-production `/notify`; rejected when `production_mode=true` |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
 | `notify_auth.trusted_service_dids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
-| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_display_name` and `space_name` |
+| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
 | `notify_auth.gateway_service_did` | string | — | Expected destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
 | `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
@@ -162,7 +162,7 @@ http {
 | `notify_rate_limits.per_endpoint` | u64 | — | Max `/notify` requests per HTTP endpoint path per window |
 | `notify_rate_limits.per_provider_concurrency` | u64 | `100` | Max concurrent in-flight notify dispatches per resolved provider. `0` disables; defends against a single provider monopolising the fanout worker pool |
 
-`push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
+`push_hint` is a body-free wakeup hint. floria treats push delivery as a derived wakeup surface, not canonical truth for events or unread state. When plaintext metadata permission is absent, `sender_actor_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, and nested `did:` literals in notification/default payload content are rejected. Notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model. The `memory` dedup backend is single-instance only; use Redis-backed dedup for multi-instance deployment.
 
 Production `/notify` profile example:
 
@@ -232,13 +232,13 @@ storage {
 | `deactivation_queue_table` | string | `"floria_push_delivery_queue"` | Queue table drained by `account_deactivate_fanout`; accepts `table` or `schema.table` |
 | `push_contact_cache_table` | string | `"floria_push_contact_cache"` | Persistent PSI cache table used by `consent_revoke`; accepts `table` or `schema.table` |
 
-The deactivation queue table is expected to contain `actor_did`, `device_id`,
+The deactivation queue table is expected to contain `actor_id`, `device_id`,
 and `push_key_hash` text columns. floria drains it with `DELETE` statements for
 the broadcast actor and, when present, the listed device ids / push-key hashes.
 
-The push-contact cache table is expected to contain `principal_did`,
+The push-contact cache table is expected to contain `principal_id`,
 `peer_psi_token`, `verdict`, and `updated_at` columns, with a unique constraint
-on `(principal_did, peer_psi_token)`. `verdict` stores `allowed` or `denied`.
+on `(principal_id, peer_psi_token)`. `verdict` stores `allowed` or `denied`.
 When `postgres_url` is unset, the same broadcast bus runs with process-local
 state only.
 

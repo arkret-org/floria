@@ -51,7 +51,7 @@ fn sanitizer_strips_apns_correlation_identifiers() {
         "flow_id":  "cx:flow:01JS0FLOW000000000000000",
         "message_id": "cx:message:01JS0MSG0000000000000000",
         "sender": "@alice:example.com",
-        "sender_display_name": "Alice",
+        "sender_actor_display_name": "Alice",
         "flow_name": "Project Apollo",
         "space_name": "Mission Control",
         "wakeup_kind": "message",
@@ -66,7 +66,7 @@ fn sanitizer_strips_apns_correlation_identifiers() {
         "flow_id",
         "message_id",
         "sender",
-        "sender_display_name",
+        "sender_actor_display_name",
         "flow_name",
         "space_name",
     ] {
@@ -149,7 +149,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "flow_name": "Mission Control",
         // Realm/Space reversal — security-boundary name is now `realm_name`.
         "realm_name": "Apollo",
-        "sender_display_name": "Major Tom",
+        "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
         "event_id":   "cx:event:01JS0EV000000000000000000",
         "message_id": "cx:message:01JS0MSG0000000000000000",
@@ -184,7 +184,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "effective_scope",
         "scope_circle_id",
         "sender",
-        "sender_display_name",
+        "sender_actor_display_name",
         "flow_name",
         "space_name",
         "realm_name",
@@ -436,10 +436,10 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
 }
 
 #[tokio::test]
-async fn notify_blind_profile_rejects_plaintext_sender_display_name() {
+async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
     let service = blind_profile_service();
     let body = blind_payload(
-        json!({"sender_display_name": "Major Tom"})
+        json!({"sender_actor_display_name": "Major Tom"})
             .as_object()
             .unwrap()
             .clone(),
@@ -460,7 +460,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_display_name() {
     assert_eq!(
         response.status_code.unwrap(),
         StatusCode::PRECONDITION_FAILED,
-        "blind profile + plaintext sender_display_name must be 412 failed_precondition"
+        "blind profile + plaintext sender_actor_display_name must be 412 failed_precondition"
     );
     let body_text = response.take_string().await.unwrap();
     assert!(
@@ -512,7 +512,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
     let body = blind_payload(
         json!({
             "flow_name": "Mission Control",
-            "sender_display_name": "Major Tom",
+            "sender_actor_display_name": "Major Tom",
         })
         .as_object()
         .unwrap()

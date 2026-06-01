@@ -686,7 +686,7 @@ mod tests {
             realm_name: None,
             prio: Some("low".to_owned()),
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
                 json!({
                     "msgtype": "m.text",
@@ -727,7 +727,7 @@ mod tests {
 
         // T4.3 — provider payload now carries only allowed blind
         // fields. event_id / message_id / flow_id / realm_id /
-        // sender / flow_name / sender_display_name / content_* are
+        // sender / flow_name / sender_actor_display_name / content_* are
         // all stripped at the gateway.
         assert_eq!(
             payload.get("push_target_id"),
@@ -764,7 +764,7 @@ mod tests {
             "effective_scope",
             "scope_circle_id",
             "sender",
-            "sender_display_name",
+            "sender_actor_display_name",
             "flow_name",
             "realm_name",
             "content_body",
@@ -813,7 +813,7 @@ mod tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: None,
+            sender_actor_display_name: None,
             content: None,
             event_id: None,
             message_id: None,

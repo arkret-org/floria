@@ -719,7 +719,7 @@ fn validate_notification_contract(
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
-        && (notification.sender_display_name.is_some()
+        && (notification.sender_actor_display_name.is_some()
             || notification.flow_name.is_some()
             || notification.realm_name.is_some())
     {
@@ -731,7 +731,7 @@ fn validate_notification_contract(
         // the access-policy schema lands the corresponding split.
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-             sender_display_name or flow/realm name metadata under the default \
+             sender_actor_display_name or flow/realm name metadata under the default \
              `cx.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
@@ -2436,9 +2436,9 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.membership.as_ref() {
         normalized.insert("membership".to_owned(), Value::String(value.clone()));
     }
-    if let Some(value) = notification.sender_display_name.as_ref() {
+    if let Some(value) = notification.sender_actor_display_name.as_ref() {
         normalized.insert(
-            "sender_display_name".to_owned(),
+            "sender_actor_display_name".to_owned(),
             Value::String(value.clone()),
         );
     }

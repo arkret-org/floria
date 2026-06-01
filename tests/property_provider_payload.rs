@@ -35,7 +35,7 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "correlation_id",
     "sender",
     "sender_did",
-    "sender_display_name",
+    "sender_actor_display_name",
     "from",
     "to",
     "target_did",

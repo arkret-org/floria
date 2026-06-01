@@ -318,12 +318,12 @@ pub(super) async fn account_deactivate_fanout(
         );
         return;
     }
-    if body.actor_did.trim().is_empty() {
+    if body.actor_id.trim().is_empty() {
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
             "schema_violation",
-            "actor_did must not be empty",
+            "actor_id must not be empty",
             None,
             None,
             started,

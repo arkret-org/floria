@@ -67,7 +67,7 @@ struct VerifiedProfile {
     signature: String,
     timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    valid_until: Option<String>,
+    expires_at: Option<String>,
 }
 
 /// T6.1 — compat / external-interop surface entry. `kind` ∈ schema enum.

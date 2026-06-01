@@ -17,10 +17,10 @@
 //!     the sentinel and forces a refresh.
 //!   * PostgreSQL overlay (`PushContactCache::with_postgres_overlay`) —
 //!     verdicts are read through / written through a table with
-//!     `(principal_did, peer_psi_token, verdict, updated_at)` columns
-//!     and a unique key on `(principal_did, peer_psi_token)`.
+//!     `(principal_id, peer_psi_token, verdict, updated_at)` columns
+//!     and a unique key on `(principal_id, peer_psi_token)`.
 //!
-//! The cache is intentionally tiny — keys are `(principal_did,
+//! The cache is intentionally tiny — keys are `(principal_id,
 //! peer_psi_token)` pairs and values are a single `verdict` byte
 //! (`allowed` / `denied`). floria never stores plaintext contacts.
 //
@@ -74,7 +74,7 @@ pub struct ConsentRevokeBroadcast {
     /// DID of the principal whose consent footprint is being torn
     /// down. floria never stores realm content; only this opaque
     /// identifier and its PSI cache entries.
-    pub principal_did: String,
+    pub principal_id: String,
     /// MUST be `"any"`. Any other value is a wire-shape violation —
     /// floria responds with `unsupported_feature`.
     pub scope: String,
@@ -168,7 +168,7 @@ pub struct PushContactCache {
 
 #[derive(Debug)]
 struct PushContactCacheInner {
-    /// `(principal_did, peer_psi_token)` -> verdict
+    /// `(principal_id, peer_psi_token)` -> verdict
     entries: HashMap<(String, String), PsiVerdict>,
     /// Optional path to a disk-overlay sentinel file. When set, every
     /// `invalidate_principal` / `clear_all` call also writes / removes
@@ -206,17 +206,17 @@ impl PostgresPushContactOverlay {
         })
     }
 
-    fn insert(&self, principal_did: &str, peer_psi_token: &str, verdict: PsiVerdict) -> Result<()> {
+    fn insert(&self, principal_id: &str, peer_psi_token: &str, verdict: PsiVerdict) -> Result<()> {
         let mut client = self.connect()?;
         let sql = format!(
-            "INSERT INTO {} (principal_did, peer_psi_token, verdict, updated_at) \
+            "INSERT INTO {} (principal_id, peer_psi_token, verdict, updated_at) \
              VALUES ($1, $2, $3, NOW()) \
-             ON CONFLICT (principal_did, peer_psi_token) \
+             ON CONFLICT (principal_id, peer_psi_token) \
              DO UPDATE SET verdict = EXCLUDED.verdict, updated_at = NOW()",
             self.table.as_sql()
         );
         client
-            .execute(&sql, &[&principal_did, &peer_psi_token, &verdict.as_str()])
+            .execute(&sql, &[&principal_id, &peer_psi_token, &verdict.as_str()])
             .with_context(|| {
                 format!(
                     "failed to upsert PostgreSQL push contact cache table {}",
@@ -226,14 +226,14 @@ impl PostgresPushContactOverlay {
         Ok(())
     }
 
-    fn get(&self, principal_did: &str, peer_psi_token: &str) -> Result<Option<PsiVerdict>> {
+    fn get(&self, principal_id: &str, peer_psi_token: &str) -> Result<Option<PsiVerdict>> {
         let mut client = self.connect()?;
         let sql = format!(
-            "SELECT verdict FROM {} WHERE principal_did = $1 AND peer_psi_token = $2",
+            "SELECT verdict FROM {} WHERE principal_id = $1 AND peer_psi_token = $2",
             self.table.as_sql()
         );
         let row = client
-            .query_opt(&sql, &[&principal_did, &peer_psi_token])
+            .query_opt(&sql, &[&principal_id, &peer_psi_token])
             .with_context(|| {
                 format!(
                     "failed to read PostgreSQL push contact cache table {}",
@@ -245,14 +245,14 @@ impl PostgresPushContactOverlay {
             .and_then(|value| PsiVerdict::from_str(&value)))
     }
 
-    fn invalidate_principal(&self, principal_did: &str) -> Result<usize> {
+    fn invalidate_principal(&self, principal_id: &str) -> Result<usize> {
         let mut client = self.connect()?;
         let sql = format!(
-            "DELETE FROM {} WHERE principal_did = $1",
+            "DELETE FROM {} WHERE principal_id = $1",
             self.table.as_sql()
         );
         client
-            .execute(&sql, &[&principal_did])
+            .execute(&sql, &[&principal_id])
             .with_context(|| {
                 format!(
                     "failed to invalidate PostgreSQL push contact cache table {}",
@@ -314,39 +314,39 @@ impl PushContactCache {
         })
     }
 
-    pub fn insert(&self, principal_did: &str, peer_psi_token: &str, verdict: PsiVerdict) {
+    pub fn insert(&self, principal_id: &str, peer_psi_token: &str, verdict: PsiVerdict) {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
         inner.entries.insert(
-            (principal_did.to_owned(), peer_psi_token.to_owned()),
+            (principal_id.to_owned(), peer_psi_token.to_owned()),
             verdict,
         );
         if let Some(overlay) = inner.postgres_overlay.as_ref()
-            && let Err(err) = overlay.insert(principal_did, peer_psi_token, verdict)
+            && let Err(err) = overlay.insert(principal_id, peer_psi_token, verdict)
         {
             tracing::warn!(
                 error = %err,
-                principal_did,
+                principal_id,
                 "postgres push contact cache write-through failed"
             );
         }
     }
 
-    pub fn get(&self, principal_did: &str, peer_psi_token: &str) -> Option<PsiVerdict> {
+    pub fn get(&self, principal_id: &str, peer_psi_token: &str) -> Option<PsiVerdict> {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
         if let Some(verdict) = inner
             .entries
-            .get(&(principal_did.to_owned(), peer_psi_token.to_owned()))
+            .get(&(principal_id.to_owned(), peer_psi_token.to_owned()))
             .copied()
         {
             return Some(verdict);
         }
         let verdict = inner.postgres_overlay.as_ref().and_then(|overlay| {
-            match overlay.get(principal_did, peer_psi_token) {
+            match overlay.get(principal_id, peer_psi_token) {
                 Ok(verdict) => verdict,
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
-                        principal_did,
+                        principal_id,
                         "postgres push contact cache read-through failed"
                     );
                     None
@@ -355,23 +355,23 @@ impl PushContactCache {
         });
         if let Some(verdict) = verdict {
             inner.entries.insert(
-                (principal_did.to_owned(), peer_psi_token.to_owned()),
+                (principal_id.to_owned(), peer_psi_token.to_owned()),
                 verdict,
             );
         }
         verdict
     }
 
-    /// Drop every cached PSI entry for `principal_did`. Returns the
+    /// Drop every cached PSI entry for `principal_id`. Returns the
     /// number of entries that were evicted. If a disk overlay is
     /// configured, also writes a sentinel tombstone so a future load
     /// re-derives the verdict.
-    pub fn invalidate_principal(&self, principal_did: &str) -> usize {
+    pub fn invalidate_principal(&self, principal_id: &str) -> usize {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
         let before = inner.entries.len();
-        inner.entries.retain(|(did, _), _| did != principal_did);
+        inner.entries.retain(|(did, _), _| did != principal_id);
         let removed = before - inner.entries.len();
-        inner.last_invalidated_principal = Some(principal_did.to_owned());
+        inner.last_invalidated_principal = Some(principal_id.to_owned());
 
         if let Some(overlay) = inner.disk_overlay.as_ref() {
             // Best-effort tombstone — failure is logged but not fatal:
@@ -386,7 +386,7 @@ impl PushContactCache {
                     "psi cache disk overlay tombstone parent create failed"
                 );
             }
-            let body = format!("invalidated:{principal_did}\n");
+            let body = format!("invalidated:{principal_id}\n");
             if let Err(err) = std::fs::write(overlay, body) {
                 tracing::warn!(
                     error = %err,
@@ -399,19 +399,17 @@ impl PushContactCache {
         let postgres_removed = inner
             .postgres_overlay
             .as_ref()
-            .and_then(
-                |overlay| match overlay.invalidate_principal(principal_did) {
-                    Ok(count) => Some(count),
-                    Err(err) => {
-                        tracing::warn!(
-                            error = %err,
-                            principal_did,
-                            "postgres push contact cache invalidation failed"
-                        );
-                        None
-                    }
-                },
-            )
+            .and_then(|overlay| match overlay.invalidate_principal(principal_id) {
+                Ok(count) => Some(count),
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        principal_id,
+                        "postgres push contact cache invalidation failed"
+                    );
+                    None
+                }
+            })
             .unwrap_or(0);
 
         removed.max(postgres_removed)
@@ -492,7 +490,7 @@ mod tests {
     fn consent_revoke_scope_is_any_helper() {
         let bcast = ConsentRevokeBroadcast {
             broadcast_id: "id-1".to_owned(),
-            principal_did: "did:web:alice.example".to_owned(),
+            principal_id: "did:web:alice.example".to_owned(),
             scope: "any".to_owned(),
             reason: None,
         };
@@ -500,7 +498,7 @@ mod tests {
 
         let scoped = ConsentRevokeBroadcast {
             broadcast_id: "id-2".to_owned(),
-            principal_did: "did:web:alice.example".to_owned(),
+            principal_id: "did:web:alice.example".to_owned(),
             scope: "realm".to_owned(),
             reason: None,
         };
@@ -511,7 +509,7 @@ mod tests {
     fn consent_revoke_reason_round_trips_well_known_variants() {
         let json = serde_json::json!({
             "broadcast_id": "bcast-paused",
-            "principal_did": "did:web:alice.example",
+            "principal_id": "did:web:alice.example",
             "scope": "any",
             "reason": "agent_paused"
         });
@@ -524,7 +522,7 @@ mod tests {
 
         let json = serde_json::json!({
             "broadcast_id": "bcast-deact",
-            "principal_did": "did:web:alice.example",
+            "principal_id": "did:web:alice.example",
             "scope": "any",
             "reason": "agent_deactivated"
         });
@@ -536,7 +534,7 @@ mod tests {
 
         let json = serde_json::json!({
             "broadcast_id": "bcast-user",
-            "principal_did": "did:web:alice.example",
+            "principal_id": "did:web:alice.example",
             "scope": "any",
             "reason": "user_revoked"
         });
@@ -549,7 +547,7 @@ mod tests {
         // Unknown reason — preserved verbatim in the `Other` variant.
         let json = serde_json::json!({
             "broadcast_id": "bcast-future",
-            "principal_did": "did:web:alice.example",
+            "principal_id": "did:web:alice.example",
             "scope": "any",
             "reason": "future_reason_v2"
         });
@@ -563,7 +561,7 @@ mod tests {
         // Missing reason — None (historical pre-P2 shape).
         let json = serde_json::json!({
             "broadcast_id": "bcast-nopadding",
-            "principal_did": "did:web:alice.example",
+            "principal_id": "did:web:alice.example",
             "scope": "any"
         });
         let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();

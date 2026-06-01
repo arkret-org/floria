@@ -617,7 +617,7 @@ mod tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
                 json!({
                     "msgtype": "m.text",

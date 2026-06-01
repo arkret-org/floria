@@ -878,7 +878,7 @@ mod tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
                 json!({
                     "msgtype": "m.text",
@@ -963,7 +963,7 @@ mod tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: None,
+            sender_actor_display_name: None,
             content: None,
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),

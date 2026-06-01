@@ -602,6 +602,9 @@ const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
     "fields",
     "track",
     "track_name",
+    // Notification projection sender display name, renamed to the
+    // sender_actor role prefix in current v1.
+    "sender_actor_display_name",
 ];
 
 /// Returns `true` if `key` matches a round R2/R3 locally-stripped
@@ -854,7 +857,7 @@ mod sanitize_tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: None,
             event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),

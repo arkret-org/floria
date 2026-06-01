@@ -25,7 +25,7 @@
 //! `storage.deactivation_queue_table` by deleting queued rows for the
 //! actor, optionally narrowed to the broadcast's device ids /
 //! push-key hashes. The expected table columns are:
-//! `actor_did text`, `device_id text`, and `push_key_hash text`.
+//! `actor_id text`, `device_id text`, and `push_key_hash text`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -49,7 +49,7 @@ pub struct AccountDeactivateFanoutBroadcast {
     pub fanout_id: String,
     /// DID of the principal whose footprint is being torn down. floria
     /// never learns realm contents — only the actor identity.
-    pub actor_did: String,
+    pub actor_id: String,
     /// Per-device unbind targets. Empty list means "every device for
     /// this actor"; floria still answers honestly about how many cells
     /// it saw.
@@ -168,9 +168,9 @@ impl PostgresDeactivationQueueDrain {
 impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
     fn drain(&self, broadcast: &AccountDeactivateFanoutBroadcast) -> Result<usize> {
         let mut client = self.connect()?;
-        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&broadcast.actor_did];
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&broadcast.actor_id];
         let sql = if broadcast.devices.is_empty() {
-            format!("DELETE FROM {} WHERE actor_did = $1", self.table.as_sql())
+            format!("DELETE FROM {} WHERE actor_id = $1", self.table.as_sql())
         } else {
             let mut clauses = Vec::new();
             for device in &broadcast.devices {
@@ -188,7 +188,7 @@ impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
                 }
             }
             format!(
-                "DELETE FROM {} WHERE actor_did = $1 AND ({})",
+                "DELETE FROM {} WHERE actor_id = $1 AND ({})",
                 self.table.as_sql(),
                 clauses.join(" OR ")
             )
@@ -236,14 +236,14 @@ impl Default for DeactivationLedger {
 struct DeactivationLedgerInner {
     /// fanout_id -> first-seen result
     seen: HashMap<String, DeactivationFanoutResult>,
-    /// Set of (actor_did, device_id) bindings the ledger knows are
+    /// Set of (actor_id, device_id) bindings the ledger knows are
     /// unbound. Used so a retry of the same fanout doesn't re-count
     /// devices that were already torn down.
     unbound_devices: HashSet<(String, String)>,
-    /// Set of actor_did values whose actor-level binding has been
+    /// Set of actor_id values whose actor-level binding has been
     /// torn down.
     unbound_actors: HashSet<String>,
-    /// Set of (actor_did, device_id) bindings whose underlying push
+    /// Set of (actor_id, device_id) bindings whose underlying push
     /// channel is sealed (provider rejected the token previously).
     /// Populated by [`DeactivationLedger::mark_channel_sealed`].
     sealed: HashSet<(String, String)>,
@@ -264,11 +264,11 @@ impl DeactivationLedger {
     /// Mark a channel as sealed so a subsequent fanout for the same
     /// `(actor, device)` reports the cell as drained-via-sealed rather
     /// than partially completed.
-    pub fn mark_channel_sealed(&self, actor_did: &str, device_id: &str) {
+    pub fn mark_channel_sealed(&self, actor_id: &str, device_id: &str) {
         let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
         inner
             .sealed
-            .insert((actor_did.to_owned(), device_id.to_owned()));
+            .insert((actor_id.to_owned(), device_id.to_owned()));
     }
 
     /// Process a fanout broadcast. Idempotent: a retry with the same
@@ -300,7 +300,7 @@ impl DeactivationLedger {
 
         for device in &broadcast.devices {
             observed_at_least_one_cell = true;
-            let key = (broadcast.actor_did.clone(), device.device_id.clone());
+            let key = (broadcast.actor_id.clone(), device.device_id.clone());
             if inner.sealed.contains(&key) {
                 sealed_channels += 1;
                 // Still mark as unbound so a future fanout for the
@@ -314,7 +314,7 @@ impl DeactivationLedger {
         }
 
         // Actor-level binding is unbound exactly once per actor.
-        let actor_bindings_unbound = if inner.unbound_actors.insert(broadcast.actor_did.clone()) {
+        let actor_bindings_unbound = if inner.unbound_actors.insert(broadcast.actor_id.clone()) {
             1
         } else {
             0
@@ -326,7 +326,7 @@ impl DeactivationLedger {
                 tracing::warn!(
                     error = %error,
                     fanout_id = %broadcast.fanout_id,
-                    actor_did = %broadcast.actor_did,
+                    actor_id = %broadcast.actor_id,
                     "deactivation queue drain failed"
                 );
                 (0, true)
@@ -385,7 +385,7 @@ mod tests {
     ) -> AccountDeactivateFanoutBroadcast {
         AccountDeactivateFanoutBroadcast {
             fanout_id: fanout_id.to_owned(),
-            actor_did: actor.to_owned(),
+            actor_id: actor.to_owned(),
             devices: devices
                 .iter()
                 .map(|d| DeactivateFanoutDevice {

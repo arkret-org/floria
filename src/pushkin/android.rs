@@ -117,7 +117,7 @@ fn merge_notification_data(
         }
     }
 
-    // `content`, `flow_name`, `sender_display_name` etc. are no longer
+    // `content`, `flow_name`, `sender_actor_display_name` etc. are no longer
     // copied here. Even under the visible profile, the visible
     // title/body is rendered by `derive_alert` and ends up in the
     // provider's notification block (e.g. `aps.alert`,
@@ -267,7 +267,7 @@ mod tests {
             realm_name: None,
             prio: None,
             membership: None,
-            sender_display_name: Some("Major Tom".to_owned()),
+            sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
                 json!({
                     "msgtype": "m.text",
@@ -328,7 +328,7 @@ mod tests {
         assert!(payload.data.get("event_id").is_none());
         assert!(payload.data.get("message_id").is_none());
         assert!(payload.data.get("sender").is_none());
-        assert!(payload.data.get("sender_display_name").is_none());
+        assert!(payload.data.get("sender_actor_display_name").is_none());
         assert!(payload.data.get("flow_name").is_none());
         assert!(payload.data.get("realm_name").is_none());
         assert!(payload.data.get("content").is_none());
@@ -373,7 +373,7 @@ mod tests {
                 realm_name: None,
                 prio: None,
                 membership: Some("invite".to_owned()),
-                sender_display_name: Some("Major Tom".to_owned()),
+                sender_actor_display_name: Some("Major Tom".to_owned()),
                 content: None,
                 event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
                 message_id: None,

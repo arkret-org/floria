@@ -78,7 +78,7 @@ impl InProcessBroadcastBus {
         Ok(ConsentRevokeAck {
             broadcast_id: broadcast.broadcast_id.clone(),
             scope: ConsentRevokeBroadcast::SUPPORTED_SCOPE,
-            entries_evicted: cache.invalidate_principal(&broadcast.principal_did),
+            entries_evicted: cache.invalidate_principal(&broadcast.principal_id),
         })
     }
 }
@@ -96,7 +96,7 @@ mod tests {
         let ack = bus
             .account_deactivate_fanout(&AccountDeactivateFanoutBroadcast {
                 fanout_id: "fanout-1".to_owned(),
-                actor_did: "did:web:alice.example".to_owned(),
+                actor_id: "did:web:alice.example".to_owned(),
                 devices: vec![DeactivateFanoutDevice {
                     device_id: "device-a".to_owned(),
                     push_key_hash: None,
@@ -116,7 +116,7 @@ mod tests {
         let ack = bus
             .consent_revoke(&ConsentRevokeBroadcast {
                 broadcast_id: "bcast-1".to_owned(),
-                principal_did: "did:web:alice.example".to_owned(),
+                principal_id: "did:web:alice.example".to_owned(),
                 scope: "any".to_owned(),
                 reason: None,
             })
