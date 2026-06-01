@@ -4,11 +4,10 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::AppState;
-use crate::config::NotifyAuthConfig;
-
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
+use crate::AppState;
+use crate::config::NotifyAuthConfig;
 
 #[derive(Debug, Serialize)]
 struct GatewayDescribeResponse {

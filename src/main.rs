@@ -2,14 +2,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use floria::AppState;
 use floria::audit::{AuditSink, HttpAuditSink, JsonlAuditSink};
 use floria::auth::redact_url_credentials;
 use floria::broadcast::InProcessBroadcastBus;
 use floria::config::{Config, resolve_path};
 use floria::deactivation::{DeactivationLedger, PostgresDeactivationQueueDrain};
 use floria::dedup::NotifyDeduplicator;
-use floria::metrics;
 use floria::nonce_store::{NonceStore, RedisFailurePolicy};
 use floria::observability::{self, TelemetryGuard};
 use floria::push_contact_cache::PushContactCache;
@@ -17,6 +15,7 @@ use floria::pushkin::PushkinRegistry;
 use floria::rate_limit::NotifyRateLimiter;
 use floria::retry_queue::{RetryQueue, RetryQueueCipher, RetryQueueConfig};
 use floria::service::build_router_with_access_log;
+use floria::{AppState, metrics};
 use salvo::prelude::*;
 use tokio::task::JoinSet;
 

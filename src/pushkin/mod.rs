@@ -721,8 +721,9 @@ pub fn random_collapse_key() -> String {
 
 #[cfg(test)]
 mod sanitize_tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn sanitized_provider_payload_strips_event_id() {

@@ -502,8 +502,9 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::env;
+
+    use super::*;
 
     fn config() -> NotifyRateLimitConfig {
         let mut config = NotifyRateLimitConfig::default();

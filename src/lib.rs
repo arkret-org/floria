@@ -40,14 +40,12 @@ use retry_queue::RetryQueue;
 
 // Round R2/R3 (T07/T17) — broadcast-channel surfaces:
 //
-//   * `deactivation_ledger` accepts `account_deactivate_fanout` events
-//     from soland, performs per-actor + per-device unbinds, and tracks
-//     whether the fanout completed fully or partially. Sealed channels
-//     still count as drained so soland's fanout state isn't blocked on
-//     a dead push provider.
-//   * `push_contact_cache` accepts `consent_revoke{scope=any}` events
-//     and drops every cached PSI verdict for the affected principal so
-//     the next push goes through a fresh consent check.
+//   * `deactivation_ledger` accepts `account_deactivate_fanout` events from soland, performs
+//     per-actor + per-device unbinds, and tracks whether the fanout completed fully or partially.
+//     Sealed channels still count as drained so soland's fanout state isn't blocked on a dead push
+//     provider.
+//   * `push_contact_cache` accepts `consent_revoke{scope=any}` events and drops every cached PSI
+//     verdict for the affected principal so the next push goes through a fresh consent check.
 //
 // Both are `Option<Arc<…>>` so deployments that do not subscribe to
 // the soland broadcast bus / audit endpoint can leave them unset; the

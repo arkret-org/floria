@@ -8,17 +8,14 @@
 //! used to leak via the freeform data dictionary. Coverage is split
 //! across three layers:
 //!
-//!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload`
-//!      with payload trees that include forbidden keys and assert that
-//!      they are stripped (or the request is rejected).
-//!   2. **Profile gating** — drive the `/api/v1/push/notify` HTTP
-//!      handler with blind-profile callers carrying plaintext content
-//!      and assert that the response is `failed_precondition` (412)
-//!      with the `plaintext_in_blind_profile` reason.
-//!   3. **WebPush collapse key randomness** — drive
-//!      `pushkin::random_collapse_key` to confirm two consecutive
-//!      calls produce different opaque base64url tokens that don't
-//!      embed any `cx:` / typed-id substring.
+//!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
+//!      include forbidden keys and assert that they are stripped (or the request is rejected).
+//!   2. **Profile gating** — drive the `/api/v1/push/notify` HTTP handler with blind-profile
+//!      callers carrying plaintext content and assert that the response is `failed_precondition`
+//!      (412) with the `plaintext_in_blind_profile` reason.
+//!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
+//!      consecutive calls produce different opaque base64url tokens that don't embed any `cx:` /
+//!      typed-id substring.
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1111,6 +1111,9 @@ pub fn signature_public_key_hex(signing_key_seed_hex: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
     use salvo::test::{ResponseExt, TestClient};
@@ -1121,8 +1124,6 @@ mod tests {
     use crate::AppState;
     use crate::pushkin::{Pushkin, PushkinRegistry};
     use crate::service::build_router;
-    use std::collections::HashMap;
-    use std::sync::Arc;
 
     struct NoopPushkin;
 

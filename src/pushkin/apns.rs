@@ -17,13 +17,12 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use super::reqwest_support::header_value;
+use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, sanitized_provider_payload};
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{Device, Notification, NotificationContext};
-
-use super::reqwest_support::header_value;
-use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, sanitized_provider_payload};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(

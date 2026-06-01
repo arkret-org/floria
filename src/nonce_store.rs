@@ -8,11 +8,10 @@
 //!
 //! ## Backends
 //!
-//! - `Memory`: process-local; sufficient for single-instance
-//!   deployments and CI; no cross-instance replay protection.
-//! - `Redis`: shared across gateway replicas; uses `SET ... NX EX`
-//!   so the first instance to claim a fingerprint wins; subsequent
-//!   replays return a conflict.
+//! - `Memory`: process-local; sufficient for single-instance deployments and CI; no cross-instance
+//!   replay protection.
+//! - `Redis`: shared across gateway replicas; uses `SET ... NX EX` so the first instance to claim a
+//!   fingerprint wins; subsequent replays return a conflict.
 //!
 //! Failure mode: if Redis is unreachable the store fails *open* —
 //! signatures pass replay protection but the existing static expiry

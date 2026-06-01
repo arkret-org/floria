@@ -9,15 +9,13 @@
 //! next push goes through a fresh consent check.
 //!
 //! Storage modes:
-//!   * In-memory (`PushContactCache::in_memory()`) — clearing is a
-//!     `HashMap::clear()` for the scoped entries.
-//!   * On-disk overlay (`PushContactCache::with_disk_overlay(path)`) —
-//!     the in-memory tier is cleared AND the on-disk overlay is marked
-//!     invalid by writing a sentinel file. The next cache load checks
-//!     the sentinel and forces a refresh.
-//!   * PostgreSQL overlay (`PushContactCache::with_postgres_overlay`) —
-//!     verdicts are read through / written through a table with
-//!     `(principal_id, peer_psi_token, verdict, updated_at)` columns
+//!   * In-memory (`PushContactCache::in_memory()`) — clearing is a `HashMap::clear()` for the
+//!     scoped entries.
+//!   * On-disk overlay (`PushContactCache::with_disk_overlay(path)`) — the in-memory tier is
+//!     cleared AND the on-disk overlay is marked invalid by writing a sentinel file. The next cache
+//!     load checks the sentinel and forces a refresh.
+//!   * PostgreSQL overlay (`PushContactCache::with_postgres_overlay`) — verdicts are read through /
+//!     written through a table with `(principal_id, peer_psi_token, verdict, updated_at)` columns
 //!     and a unique key on `(principal_id, peer_psi_token)`.
 //!
 //! The cache is intentionally tiny — keys are `(principal_id,

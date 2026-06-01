@@ -28,8 +28,7 @@
 //! `actor_id text`, `device_id text`, and `push_key_hash text`.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use postgres::NoTls;

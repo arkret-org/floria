@@ -13,8 +13,8 @@
 //! Concurrent requests with the same idempotency key race the lookup:
 //!  - The first-arriving instance misses and dispatches.
 //!  - Other instances arriving inside the dispatch window also miss.
-//!  - The last completed dispatch wins the cache slot; the others may
-//!    therefore double-dispatch in this rare window.
+//!  - The last completed dispatch wins the cache slot; the others may therefore double-dispatch in
+//!    this rare window.
 //!
 //! Per-device delivery suppression (`mark_delivered_device`) applies
 //! best-effort across the cluster: if a delivery races, both instances
@@ -567,9 +567,9 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::env;
 
+    use super::*;
     use crate::models::RejectedDevice;
 
     #[test]

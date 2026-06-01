@@ -18,15 +18,14 @@ use web_push::{
     VapidSignatureBuilder, WebPushClient, WebPushError, WebPushMessageBuilder,
 };
 
-use crate::auth::redact_url_credentials;
-use crate::config::{AppConfig, Config};
-use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
-
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections, random_collapse_key,
     sanitized_provider_payload,
 };
+use crate::auth::redact_url_credentials;
+use crate::config::{AppConfig, Config};
+use crate::error::DispatchError;
+use crate::models::{Device, Notification, NotificationContext};
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -525,12 +524,11 @@ fn classify_webpush_result(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener};
     use std::path::PathBuf;
-    use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::{fs, thread};
 
     use serde_json::json;
 

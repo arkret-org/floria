@@ -13,12 +13,11 @@ use std::time::Instant;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
+use super::metrics::{finish_error, finish_json};
 use crate::AppState;
 use crate::auth::{BearerState, bearer_state};
 use crate::deactivation::AccountDeactivateFanoutBroadcast;
 use crate::push_contact_cache::ConsentRevokeBroadcast;
-
-use super::metrics::{finish_error, finish_json};
 
 #[handler]
 pub(super) async fn require_internal_auth(

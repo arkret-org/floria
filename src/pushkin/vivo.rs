@@ -15,13 +15,12 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::config::{AppConfig, Config};
-use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
-
 use super::android::build_android_notification_payload;
 use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_after};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
+use crate::config::{AppConfig, Config};
+use crate::error::DispatchError;
+use crate::models::{Device, Notification, NotificationContext};
 
 static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(

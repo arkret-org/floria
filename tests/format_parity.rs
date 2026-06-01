@@ -74,15 +74,13 @@ fn sample_kdl_and_yaml_parse_to_equivalent_config() {
 
         // Normalize away projection-only differences between the two
         // formats that don't change Config semantics:
-        //   - YAML's `key:` with no value → `null`; KDL emits `{}` for
-        //     a node with no children. Both deserialize to the type's
-        //     `Default` value, so we elide nulls and empty objects.
-        //   - YAML lists vs KDL single-child scalar (`bind_addresses`).
-        //     Wrap KDL scalars into 1-element arrays where YAML used a
-        //     list, by promoting scalars when the sibling has a list.
-        //   - KDL preserves large integers as strings; YAML promotes
-        //     them to JSON numbers. Coerce integer-shaped strings into
-        //     numbers when the sibling has a number.
+        //   - YAML's `key:` with no value → `null`; KDL emits `{}` for a node with no children.
+        //     Both deserialize to the type's `Default` value, so we elide nulls and empty objects.
+        //   - YAML lists vs KDL single-child scalar (`bind_addresses`). Wrap KDL scalars into
+        //     1-element arrays where YAML used a list, by promoting scalars when the sibling has a
+        //     list.
+        //   - KDL preserves large integers as strings; YAML promotes them to JSON numbers. Coerce
+        //     integer-shaped strings into numbers when the sibling has a number.
         let mut kdl_norm = kdl_json.clone();
         let mut yaml_norm = yaml_value.clone();
         normalize_for_parity(&mut kdl_norm, &mut yaml_norm);

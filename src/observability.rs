@@ -3,8 +3,8 @@
 //! Wires three independently-configurable sinks into a single
 //! `tracing-subscriber` registry:
 //!
-//! 1. structured `tracing-subscriber` formatter (text or JSON), filtered
-//!    by `EnvFilter` (defaults to `RUST_LOG`),
+//! 1. structured `tracing-subscriber` formatter (text or JSON), filtered by `EnvFilter` (defaults
+//!    to `RUST_LOG`),
 //! 2. OTLP / OpenTelemetry tracing exporter (gRPC) for spans,
 //! 3. Sentry error capture from `tracing` events.
 //!
@@ -20,17 +20,16 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{KeyValue, global};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-use opentelemetry_sdk::{
-    Resource,
-    propagation::TraceContextPropagator,
-    trace::{Sampler, SdkTracerProvider},
-};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
 use sentry::{ClientInitGuard, ClientOptions};
-use tracing_subscriber::{
-    EnvFilter, Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer, Registry};
 
 use crate::config::{
     LogSetupConfig, ObservabilityConfig, OpentracingConfig, SentryConfig, TracingFormat,

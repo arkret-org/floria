@@ -9,11 +9,9 @@
 //!
 //! ## Backends
 //!
-//! - `Memory`: in-process priority heap; suitable for single-instance
-//!   deployments.
-//! - `Redis`: shared sorted set so multiple gateway replicas drain
-//!   together. Each replica claims an entry by `ZREMRANGEBYSCORE` /
-//!   `ZADD NX` and the dead-letter ring lives on a fixed-length list.
+//! - `Memory`: in-process priority heap; suitable for single-instance deployments.
+//! - `Redis`: shared sorted set so multiple gateway replicas drain together. Each replica claims an
+//!   entry by `ZREMRANGEBYSCORE` / `ZADD NX` and the dead-letter ring lives on a fixed-length list.
 //!
 //! Failure mode mirrors the other Redis-backed components: connection
 //! errors fail open (work stays in-process and gets re-dispatched on
@@ -760,9 +758,10 @@ pub async fn run_worker(
     batch_size: usize,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
+    use std::time::Instant;
+
     use crate::error::DispatchError;
     use crate::models::{Device, Notification, NotificationContext};
-    use std::time::Instant;
 
     loop {
         if shutdown.has_changed().unwrap_or(false) && *shutdown.borrow() {
@@ -878,8 +877,9 @@ pub async fn run_worker(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::thread;
+
+    use super::*;
 
     #[test]
     fn dead_letters_after_max_attempts() {

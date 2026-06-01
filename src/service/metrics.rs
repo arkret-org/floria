@@ -236,8 +236,9 @@ pub(super) fn finish_json<T: Serialize + Send>(
 
 #[cfg(test)]
 mod cardinality_guard_tests {
-    use super::*;
     use std::sync::Mutex as StdMutex;
+
+    use super::*;
 
     // The guard uses module-level statics, so concurrent tests would
     // race. A shared mutex serialises this file's test cases. Other

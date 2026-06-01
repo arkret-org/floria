@@ -22,16 +22,15 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use crate::auth::redact_url_credentials;
-use crate::config::{AppConfig, Config};
-use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
-
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections,
     sanitized_provider_payload,
 };
+use crate::auth::redact_url_credentials;
+use crate::config::{AppConfig, Config};
+use crate::error::DispatchError;
+use crate::models::{Device, Notification, NotificationContext};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(

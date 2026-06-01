@@ -5,14 +5,12 @@
 //! provider (APNS, FCM, WebPush, Chinese OEM, custom). This file
 //! exercises three invariants:
 //!
-//!  1. **Any forbidden top-level or nested key is stripped** — the
-//!     sanitized output never contains a name on the SDK forbidden
-//!     list at any nesting depth.
-//!  2. **`did:` / `cx:` literals are rejected** — strings that smell
-//!     like correlation identifiers cause a `ProviderPayloadRejection`
-//!     rather than silently surviving.
-//!  3. **Allowed static config keys (`client`, `wakeup_kind`, etc.)
-//!     round-trip unchanged** — sanitization is removal-only.
+//!  1. **Any forbidden top-level or nested key is stripped** — the sanitized output never contains
+//!     a name on the SDK forbidden list at any nesting depth.
+//!  2. **`did:` / `cx:` literals are rejected** — strings that smell like correlation identifiers
+//!     cause a `ProviderPayloadRejection` rather than silently surviving.
+//!  3. **Allowed static config keys (`client`, `wakeup_kind`, etc.) round-trip unchanged** —
+//!     sanitization is removal-only.
 //!
 //! Each block is capped at 64 cases to keep CI fast.
 

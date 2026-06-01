@@ -1,8 +1,7 @@
 use serde_json::{Map, Value};
 
-use crate::models::Notification;
-
 use super::{sanitized_provider_payload, truncate_str};
+use crate::models::Notification;
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;

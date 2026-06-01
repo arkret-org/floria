@@ -8,15 +8,14 @@ use contrix::push_gateway_api::{
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
-use crate::AppState;
-use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
-use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
-
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::server_describe::{
     describe_auth_modes, describe_plaintext_visibility, describe_rate_limit_scopes,
 };
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
+use crate::AppState;
+use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
+use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
 
 fn owned(items: Vec<&'static str>) -> Vec<String> {
     items.into_iter().map(str::to_owned).collect()

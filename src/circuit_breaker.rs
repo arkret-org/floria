@@ -189,8 +189,9 @@ impl CircuitBreaker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::thread::sleep;
+
+    use super::*;
 
     fn cfg() -> CircuitBreakerConfig {
         CircuitBreakerConfig {

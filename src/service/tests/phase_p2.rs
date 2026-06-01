@@ -4,17 +4,13 @@
 //! Covers the three wire-affecting changes carried by phase P2 / B-A
 //! and B-B:
 //!
-//! 1. Durable agent lifecycle events
-//!    (`cx.agent.{pause,resume,deactivate}`) MUST be silently consumed
-//!    on the `/push/notify` endpoint — 200 OK + zero provider fanout.
-//!    The authoritative capability-cache invalidation path is the
-//!    `/internal/consent_revoke` listener with `reason=agent_paused`
-//!    or `agent_deactivated`.
-//! 2. Actor-private agent events
-//!    (`cx.agent.{draft.propose,action_request,action_approve,
-//!    action_reject}`) MUST be dropped by default — same 200 OK +
-//!    zero-fanout shape, but logged separately so an operator can
-//!    later opt a subscription gate in.
+//! 1. Durable agent lifecycle events (`cx.agent.{pause,resume,deactivate}`) MUST be silently
+//!    consumed on the `/push/notify` endpoint — 200 OK + zero provider fanout. The authoritative
+//!    capability-cache invalidation path is the `/internal/consent_revoke` listener with
+//!    `reason=agent_paused` or `agent_deactivated`.
+//! 2. Actor-private agent events (`cx.agent.{draft.propose,action_request,action_approve,
+//!    action_reject}`) MUST be dropped by default — same 200 OK + zero-fanout shape, but logged
+//!    separately so an operator can later opt a subscription gate in.
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 

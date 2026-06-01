@@ -2,18 +2,16 @@
 //!
 //! Covers the four wire-affecting changes carried in by B4:
 //!
-//! 1. `mention_redirect_target_actor_ids` plaintext routing gate —
-//!    devices whose `target_actor_id` is NOT in the allow-list MUST
-//!    be fail-closed (no provider dispatch, no body decryption, no
+//! 1. `mention_redirect_target_actor_ids` plaintext routing gate — devices whose `target_actor_id`
+//!    is NOT in the allow-list MUST be fail-closed (no provider dispatch, no body decryption, no
 //!    delivery, rejection recorded with `mention_redirect_not_targeted`).
-//! 2. `reason_code=historical_only` — soland's diagnostic replay MUST
-//!    short-circuit to a 200 idempotency-style ack with no push fanout.
-//! 3. `cx.audit.policy_access{access_kind=e2ee_late_recovery}` —
-//!    routed to the audit pipeline; the push pipeline MUST be skipped.
-//! 4. Round-4 sanitizer hardening — `binding_proof.signature`,
-//!    `subject_proof.signature`, `expected_previous_generation`, and
-//!    `attestation_evidence` MUST be rejected as forbidden plaintext
-//!    fields regardless of profile.
+//! 2. `reason_code=historical_only` — soland's diagnostic replay MUST short-circuit to a 200
+//!    idempotency-style ack with no push fanout.
+//! 3. `cx.audit.policy_access{access_kind=e2ee_late_recovery}` — routed to the audit pipeline; the
+//!    push pipeline MUST be skipped.
+//! 4. Round-4 sanitizer hardening — `binding_proof.signature`, `subject_proof.signature`,
+//!    `expected_previous_generation`, and `attestation_evidence` MUST be rejected as forbidden
+//!    plaintext fields regardless of profile.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;

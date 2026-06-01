@@ -2,27 +2,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use salvo::http::ParseError;
-use salvo::http::StatusCode;
 use salvo::http::header::{HeaderName, HeaderValue};
+use salvo::http::{ParseError, StatusCode};
 use salvo::prelude::*;
 use serde_json::{Map, Value};
 use uuid::Uuid;
-
-use crate::AppState;
-use crate::audit::AuditEvent;
-use crate::auth::{
-    AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER,
-    ORIGIN_SERVICE_DID_HEADER, authenticate_notify_request,
-};
-use crate::config::NotifyAuthConfig;
-use crate::dedup::request_hash;
-use crate::metrics as app_metrics;
-use crate::models::{
-    DeliveryReceipt, Notification, NotificationContext, NotifyResponse, ProviderRetry,
-    RejectedDevice, redact_push_token,
-};
-use crate::rate_limit::NotifyRateLimitCheck;
 
 use super::metrics::{
     finish_error, finish_json, record_delivery_receipt_outcomes, record_notify_delivery_by_scope,
@@ -32,6 +16,19 @@ use super::{
     ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX,
     ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
 };
+use crate::audit::AuditEvent;
+use crate::auth::{
+    AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER,
+    ORIGIN_SERVICE_DID_HEADER, authenticate_notify_request,
+};
+use crate::config::NotifyAuthConfig;
+use crate::dedup::request_hash;
+use crate::models::{
+    DeliveryReceipt, Notification, NotificationContext, NotifyResponse, ProviderRetry,
+    RejectedDevice, redact_push_token,
+};
+use crate::rate_limit::NotifyRateLimitCheck;
+use crate::{AppState, metrics as app_metrics};
 
 // Round 4 (spec a77b995) — additional forbidden-key list maintained
 // locally as a defense-in-depth layer on top of the SDK's
@@ -698,14 +695,11 @@ fn validate_active_ref(
 //
 // floria exposes two push-gateway capability profiles:
 //
-//   * `cx.profile.push_gateway.blind_wakeup.v1`  (default) — opaque
-//     `push_target_id` + `wakeup_kind`, no plaintext metadata. Maps to
-//     `caller.allow_plaintext_metadata = false`.
-//   * `cx.profile.push_gateway.visible_notification.v1` — the caller
-//     has been explicitly gated as a plaintext-eligible service kind
-//     (sync / principal) AND the per-principal
-//     `allow_plaintext_metadata` flag is set. Maps to
-//     `caller.allow_plaintext_metadata = true`.
+//   * `cx.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
+//     `wakeup_kind`, no plaintext metadata. Maps to `caller.allow_plaintext_metadata = false`.
+//   * `cx.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
+//     plaintext-eligible service kind (sync / principal) AND the per-principal
+//     `allow_plaintext_metadata` flag is set. Maps to `caller.allow_plaintext_metadata = true`.
 //
 // A caller on the blind profile that submits plaintext metadata is
 // rejected with `plaintext_in_blind_profile`. A caller on the visible
@@ -1407,16 +1401,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // The SDK exposes seven new `cx.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `cx.agent.{pause, resume, deactivate}` — durable lifecycle.
-    //     Silently consumed: 200 OK + zero fanout. The authoritative
-    //     capability-cache invalidation path for these state changes
-    //     is the soland `consent_revoke` fanout
-    //     (`reason=agent_paused` / `agent_deactivated`), not a push.
-    //   * `cx.agent.{draft.propose, action_request, action_approve,
-    //     action_reject}` — actor-private. Dropped: 200 OK + zero
-    //     fanout. A future opt-in subscription gate may upgrade
-    //     specific kinds onto a dedicated agent-runtime endpoint, but
-    //     until that mechanism exists the default is drop.
+    //   * `cx.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
+    //     zero fanout. The authoritative capability-cache invalidation path for these state changes
+    //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
+    //     a push.
+    //   * `cx.agent.{draft.propose, action_request, action_approve, action_reject}` —
+    //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
+    //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
+    //     exists the default is drop.
     //
     // Either case answers 200 so the caller's pipeline advances; the
     // `accepted` count is 0 and the rejected list is empty.

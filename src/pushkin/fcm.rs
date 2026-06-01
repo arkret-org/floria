@@ -15,16 +15,15 @@ use serde_json::{Map, Value, json};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::sleep;
 
-use crate::auth::redact_url_credentials;
-use crate::config::{AppConfig, Config};
-use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
-
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, inflight_limit, max_connections,
     sanitized_provider_payload, truncate_str,
 };
+use crate::auth::redact_url_credentials;
+use crate::config::{AppConfig, Config};
+use crate::error::DispatchError;
+use crate::models::{Device, Notification, NotificationContext};
 
 static FCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -322,15 +321,13 @@ impl FcmPushkin {
         // message_id / flow_id / realm_id / sender / names / push_hint
         // / content_*. None of those survive on the wire any more:
         //
-        //   * The client decrypts a server-side e2ee envelope to learn
-        //     event/space/sender/body — the provider wire format only
-        //     needs to carry the opaque push_target_id + wakeup_kind
+        //   * The client decrypts a server-side e2ee envelope to learn event/space/sender/body —
+        //     the provider wire format only needs to carry the opaque push_target_id + wakeup_kind
         //     so the client knows it has work to pick up.
-        //   * `push_hint` survives ONLY when it's one of the SDK's
-        //     allow-listed literals (no l10n_key:* form that could
-        //     embed a stable token).
-        //   * Counts are clamped at SDK::MAX_COUNT_VALUE so a 4-byte
-        //     counter can't be smuggled through.
+        //   * `push_hint` survives ONLY when it's one of the SDK's allow-listed literals (no
+        //     l10n_key:* form that could embed a stable token).
+        //   * Counts are clamped at SDK::MAX_COUNT_VALUE so a 4-byte counter can't be smuggled
+        //     through.
         //
         // The caller-supplied `default_payload` is still respected so
         // operators can plug in static client-config keys

@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
-use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, bail};
 use kdl::{KdlDocument, KdlNode, KdlValue};
