@@ -658,6 +658,7 @@ dependencies = [
  "contrix-signatures",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

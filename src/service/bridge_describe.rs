@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
+use contrix::push_gateway_api::{
+    PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
+    PushBridgeDescribeNotifyDescriptor, PushBridgeDescribePrivacyDescriptor,
+    PushBridgeDescribeResponse, PushBridgeFailureCodeDescriptor,
+};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde::Serialize;
-use serde_json::Value;
 
 use crate::AppState;
 use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
-use crate::pushkin::{PROVIDER_CAPABILITIES_VERSION, ProviderCapabilityDescriptor};
+use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
 
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::server_describe::{
@@ -15,66 +18,8 @@ use super::server_describe::{
 };
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 
-#[derive(Debug, Serialize)]
-struct PushBridgeDescribeResponse {
-    contract: &'static str,
-    version: &'static str,
-    api_base_path: &'static str,
-    gateway: PushBridgeGatewayDescriptor,
-    notify: PushBridgeNotifyDescriptor,
-    privacy: PushBridgePrivacyDescriptor,
-    provider_capabilities_version: &'static str,
-    provider_capabilities: Vec<ProviderCapabilityDescriptor>,
-    failure_codes: Vec<PushBridgeFailureCodeDescriptor>,
-    examples: PushBridgeDescribeExamples,
-}
-
-#[derive(Debug, Serialize)]
-struct PushBridgeGatewayDescriptor {
-    service_did: Option<String>,
-    supported_profiles: Vec<&'static str>,
-    supported_providers: Vec<String>,
-    auth_modes: Vec<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-struct PushBridgeNotifyDescriptor {
-    notify_path: &'static str,
-    operation_id: &'static str,
-    request_id_header: &'static str,
-    idempotency_key_header: &'static str,
-    origin_service_did_header: &'static str,
-    destination_service_did_header: &'static str,
-    max_request_size_bytes: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dedup_backend: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dedup_ttl_seconds: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    rate_limit_window_seconds: Option<u64>,
-    rate_limit_scopes: Vec<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-struct PushBridgePrivacyDescriptor {
-    default_mode: &'static str,
-    plaintext_visibility_class: &'static str,
-    active_reference_fields: Vec<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-struct PushBridgeFailureCodeDescriptor {
-    code: &'static str,
-    http_status: u16,
-    retryable: bool,
-    description: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct PushBridgeDescribeExamples {
-    notify_headers: Value,
-    blind_wakeup_request: Value,
-    plaintext_visible_service_request: Value,
+fn owned(items: Vec<&'static str>) -> Vec<String> {
+    items.into_iter().map(str::to_owned).collect()
 }
 
 #[handler]
@@ -112,87 +57,89 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         .unwrap_or_default();
 
     let body = PushBridgeDescribeResponse {
-        contract: "cx.push.bridge.describe",
-        version: "2026-05-07",
-        api_base_path: "/api/v1/push",
-        gateway: PushBridgeGatewayDescriptor {
+        contract: "cx.push.bridge.describe".to_owned(),
+        version: "2026-05-07".to_owned(),
+        api_base_path: "/api/v1/push".to_owned(),
+        spec_version: Some(contrix::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
+        gateway: PushBridgeDescribeGatewayDescriptor {
             service_did: state.notify_auth.gateway_service_did.clone(),
-            supported_profiles: vec!["cx.profile.push_gateway.v1"],
+            supported_profiles: vec!["cx.profile.push_gateway.v1".to_owned()],
             supported_providers: state.registry.provider_names(),
-            auth_modes: describe_auth_modes(&state.notify_auth),
+            auth_modes: owned(describe_auth_modes(&state.notify_auth)),
         },
-        notify: PushBridgeNotifyDescriptor {
-            notify_path: "/api/v1/push/notify",
-            operation_id: NOTIFY_OPERATION_ID,
-            request_id_header: "X-Contrix-Request-Id",
-            idempotency_key_header: "Idempotency-Key",
-            origin_service_did_header: ORIGIN_SERVICE_DID_HEADER,
-            destination_service_did_header: DESTINATION_SERVICE_DID_HEADER,
+        notify: PushBridgeDescribeNotifyDescriptor {
+            notify_path: "/api/v1/push/notify".to_owned(),
+            operation_id: NOTIFY_OPERATION_ID.to_owned(),
+            request_id_header: "X-Contrix-Request-Id".to_owned(),
+            idempotency_key_header: "Idempotency-Key".to_owned(),
+            origin_service_did_header: ORIGIN_SERVICE_DID_HEADER.to_owned(),
+            destination_service_did_header: DESTINATION_SERVICE_DID_HEADER.to_owned(),
             max_request_size_bytes: MAX_REQUEST_SIZE,
-            dedup_backend,
+            dedup_backend: dedup_backend.map(str::to_owned),
             dedup_ttl_seconds,
             rate_limit_window_seconds,
-            rate_limit_scopes,
+            rate_limit_scopes: owned(rate_limit_scopes),
         },
-        privacy: PushBridgePrivacyDescriptor {
-            default_mode: "e2ee_blind_wakeup",
-            plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth),
+        privacy: PushBridgeDescribePrivacyDescriptor {
+            default_mode: "e2ee_blind_wakeup".to_owned(),
+            plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth)
+                .to_owned(),
             active_reference_fields: vec![
-                "notification.push_target_id",
-                "notification.wakeup_kind",
+                "notification.push_target_id".to_owned(),
+                "notification.wakeup_kind".to_owned(),
             ],
         },
-        provider_capabilities_version: PROVIDER_CAPABILITIES_VERSION,
+        provider_capabilities_version: Some(PROVIDER_CAPABILITIES_VERSION.to_owned()),
         provider_capabilities: state.registry.provider_capabilities(),
         failure_codes: vec![
-            PushBridgeFailureCodeDescriptor {
-                code: "capability_denied",
-                http_status: StatusCode::FORBIDDEN.as_u16(),
-                retryable: false,
-                description: "The caller is authenticated but not allowed to send this notify shape or destination.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "duplicate_conflict",
-                http_status: StatusCode::CONFLICT.as_u16(),
-                retryable: false,
-                description: "The same idempotency key was replayed with a different canonical request body.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "method_not_allowed",
-                http_status: StatusCode::METHOD_NOT_ALLOWED.as_u16(),
-                retryable: false,
-                description: "The notify surface only accepts POST.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "payload_too_large",
-                http_status: StatusCode::PAYLOAD_TOO_LARGE.as_u16(),
-                retryable: false,
-                description: "The notify request body exceeded the configured maximum size.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "rate_limited",
-                http_status: StatusCode::TOO_MANY_REQUESTS.as_u16(),
-                retryable: true,
-                description: "A rate-limit scope rejected the request; callers should respect Retry-After.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "schema_violation",
-                http_status: StatusCode::BAD_REQUEST.as_u16(),
-                retryable: false,
-                description: "The request body or headers did not match the active cx.push.notify contract.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "temporarily_unavailable",
-                http_status: StatusCode::SERVICE_UNAVAILABLE.as_u16(),
-                retryable: true,
-                description: "All dispatch attempts failed with retryable provider or gateway conditions.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: "unsupported_feature",
-                http_status: StatusCode::BAD_REQUEST.as_u16(),
-                retryable: false,
-                description: "The caller requested a non-canonical notify operation or unsupported contract feature.",
-            },
+            PushBridgeFailureCodeDescriptor::new(
+                "capability_denied",
+                StatusCode::FORBIDDEN.as_u16(),
+                false,
+                "The caller is authenticated but not allowed to send this notify shape or destination.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "duplicate_conflict",
+                StatusCode::CONFLICT.as_u16(),
+                false,
+                "The same idempotency key was replayed with a different canonical request body.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "method_not_allowed",
+                StatusCode::METHOD_NOT_ALLOWED.as_u16(),
+                false,
+                "The notify surface only accepts POST.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "payload_too_large",
+                StatusCode::PAYLOAD_TOO_LARGE.as_u16(),
+                false,
+                "The notify request body exceeded the configured maximum size.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "rate_limited",
+                StatusCode::TOO_MANY_REQUESTS.as_u16(),
+                true,
+                "A rate-limit scope rejected the request; callers should respect Retry-After.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "schema_violation",
+                StatusCode::BAD_REQUEST.as_u16(),
+                false,
+                "The request body or headers did not match the active cx.push.notify contract.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "temporarily_unavailable",
+                StatusCode::SERVICE_UNAVAILABLE.as_u16(),
+                true,
+                "All dispatch attempts failed with retryable provider or gateway conditions.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                "unsupported_feature",
+                StatusCode::BAD_REQUEST.as_u16(),
+                false,
+                "The caller requested a non-canonical notify operation or unsupported contract feature.",
+            ),
             // CARD-1 (R3 spec-sync 2026-05-27, `_before_todos.md` §0.7,
             // CXP-0008 / CXP-0009 / CXP-0010) — push surface
             // failure codes for Personal Agent lifecycle state and the
@@ -208,24 +155,24 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // recording-artifact destination check on a token-exchange
             // proxy hop). The strings are pinned to the SDK error-code
             // constants so a spec-side rename forces a recompile here.
-            PushBridgeFailureCodeDescriptor {
-                code: contrix::error::ERROR_CODE_AGENT_PAUSED,
-                http_status: StatusCode::FORBIDDEN.as_u16(),
-                retryable: false,
-                description: "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: contrix::error::ERROR_CODE_AGENT_DEACTIVATED,
-                http_status: StatusCode::FORBIDDEN.as_u16(),
-                retryable: false,
-                description: "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
-            },
-            PushBridgeFailureCodeDescriptor {
-                code: contrix::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
-                http_status: StatusCode::FORBIDDEN.as_u16(),
-                retryable: false,
-                description: "A media-service token-exchange or recording artifact reference would route through a destination outside the Contrix blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
-            },
+            PushBridgeFailureCodeDescriptor::new(
+                contrix::error::ERROR_CODE_AGENT_PAUSED,
+                StatusCode::FORBIDDEN.as_u16(),
+                false,
+                "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                contrix::error::ERROR_CODE_AGENT_DEACTIVATED,
+                StatusCode::FORBIDDEN.as_u16(),
+                false,
+                "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
+            ),
+            PushBridgeFailureCodeDescriptor::new(
+                contrix::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                StatusCode::FORBIDDEN.as_u16(),
+                false,
+                "A media-service token-exchange or recording artifact reference would route through a destination outside the Contrix blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
+            ),
         ],
         examples: PushBridgeDescribeExamples {
             notify_headers: serde_json::json!({
@@ -254,6 +201,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 }
             }),
         },
+        todos: Vec::new(),
     };
 
     res.status_code(StatusCode::OK);

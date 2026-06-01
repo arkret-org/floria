@@ -18,6 +18,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
+use contrix::push_gateway_api::ProviderCapabilityDescriptor;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;
@@ -303,14 +304,6 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
     Some(kind)
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ProviderCapabilityDescriptor {
-    /// Configured app name as known to the registry.
-    pub name: String,
-    #[serde(flatten)]
-    pub capabilities: ProviderCapabilities,
-}
-
 #[derive(Clone)]
 pub struct PushkinRegistry {
     pushkins: HashMap<String, Arc<dyn Pushkin>>,
@@ -358,7 +351,19 @@ impl PushkinRegistry {
                 provider_kind_capabilities(pushkin.kind()).map(|capabilities| {
                     ProviderCapabilityDescriptor {
                         name: name.clone(),
-                        capabilities,
+                        kind: capabilities.kind.to_owned(),
+                        batch: capabilities.batch.to_owned(),
+                        ttl_seconds_max: capabilities.ttl_seconds_max,
+                        supports_collapse: capabilities.supports_collapse,
+                        supports_badge: capabilities.supports_badge,
+                        default_payload_shape: capabilities.default_payload_shape.to_owned(),
+                        credential_kinds: capabilities
+                            .credential_kinds
+                            .iter()
+                            .map(|kind| (*kind).to_owned())
+                            .collect(),
+                        credential_rotation: capabilities.credential_rotation.to_owned(),
+                        blind_wakeup_required: capabilities.blind_wakeup_required,
                     }
                 })
             })

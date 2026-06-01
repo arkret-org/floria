@@ -166,10 +166,11 @@ fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
     None
 }
 
-/// Phase P2 — the eight new SDK typed-id prefixes
-/// (`agent_principal`, `agent_session`, `agent_key`, `agent_draft`,
+/// Phase P2 — the seven SDK typed-id prefixes
+/// (`agent_session`, `agent_key`, `agent_draft`,
 /// `accountability_grant`, `sidecar_circle`, `backup_series`,
-/// `recovery_session`). Floria does not route on these today — none
+/// `recovery_session`). `agent_principal_id` is a DID-as-id, not a
+/// `cx:*` typed id. Floria does not route on these today — none
 /// of them appear in the push-wire reference fields — but we keep the
 /// list here so the prefix validator is aware of them when a future
 /// notify field starts to carry one. Any caller that smuggles one of
@@ -178,7 +179,6 @@ fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
 /// `validate_active_ref` gates because those slots are pinned to
 /// their own typed-id prefix (`cx:event:`, etc.).
 const PHASE_P2_AGENT_TYPED_ID_PREFIXES: &[&str] = &[
-    "cx:agent_principal:",
     "cx:agent_session:",
     "cx:agent_key:",
     "cx:agent_draft:",
@@ -188,7 +188,7 @@ const PHASE_P2_AGENT_TYPED_ID_PREFIXES: &[&str] = &[
     "cx:recovery_session:",
 ];
 
-/// Phase P2 — returns `true` if `value` starts with one of the eight
+/// Phase P2 — returns `true` if `value` starts with one of the seven
 /// new SDK typed-id prefixes. Used by the typed-id prefix recognizer
 /// so any future routing code can ask "is this one of the new agent /
 /// sidecar / backup / recovery typed IDs?" without having to thread
@@ -674,7 +674,7 @@ fn validate_active_ref(
         return Err(format!("{path} must not be empty"));
     }
     if !value.starts_with(required_prefix) {
-        // Phase P2 — if the value carries one of the eight new
+        // Phase P2 — if the value carries one of the seven
         // agent / sidecar / backup / recovery typed-id prefixes, fail
         // closed with a clearer error so the caller can see they're
         // routing the wrong typed id into a push-wire slot. Floria's
