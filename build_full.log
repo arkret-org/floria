@@ -1,0 +1,82 @@
+    Blocking waiting for file lock on package cache
+   Compiling generic-array v0.14.9
+   Compiling num-traits v0.2.19
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling num-integer v0.1.46
+   Compiling curl-sys v0.4.86+curl-8.19.0
+   Compiling digest v0.10.7
+   Compiling universal-hash v0.5.1
+   Compiling chrono v0.4.44
+   Compiling aead v0.5.2
+   Compiling lazy_static v1.5.0
+   Compiling sha2 v0.10.9
+   Compiling cipher v0.4.4
+   Compiling num-bigint v0.4.6
+   Compiling polyval v0.6.2
+   Compiling contrix-identifiers v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\identifiers)
+   Compiling ctr v0.9.2
+   Compiling ghash v0.5.1
+   Compiling aes v0.8.4
+   Compiling hmac v0.12.1
+   Compiling sha1 v0.10.6
+   Compiling spin v0.9.8
+   Compiling signature v2.2.0
+   Compiling asn1-rs v0.7.1
+   Compiling curve25519-dalek v4.1.3
+   Compiling sharded-slab v0.1.7
+   Compiling headers v0.4.1
+   Compiling multer v3.1.0
+   Compiling ed25519 v2.2.3
+   Compiling aes-gcm v0.10.3
+   Compiling chacha20 v0.9.1
+   Compiling poly1305 v0.8.0
+   Compiling num-iter v0.1.45
+   Compiling num-complex v0.4.6
+   Compiling reqwest v0.13.2
+   Compiling cookie v0.18.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling serde-saphyr v0.0.22
+   Compiling prometheus v0.14.0
+   Compiling md-5 v0.10.6
+   Compiling blake2 v0.10.6
+   Compiling proptest v1.11.0
+   Compiling num-rational v0.4.2
+   Compiling simple_asn1 v0.6.4
+   Compiling redis v0.32.7
+   Compiling chacha20poly1305 v0.10.1
+   Compiling x25519-dalek v2.0.1
+   Compiling ed25519-dalek v2.2.0
+   Compiling chrono-tz v0.10.4
+   Compiling num v0.4.3
+   Compiling kdl v6.5.0
+   Compiling salvo_core v0.89.3
+   Compiling jsonwebtoken v10.3.0
+   Compiling contrix-core v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\core)
+   Compiling oid-registry v0.8.1
+   Compiling der-parser v10.0.0
+   Compiling sentry-tracing v0.48.1
+   Compiling tracing-opentelemetry v0.32.1
+   Compiling x509-parser v0.18.1
+   Compiling sentry v0.48.1
+   Compiling curl v0.4.49
+   Compiling isahc v1.7.2
+   Compiling salvo_extra v0.89.3
+   Compiling salvo v0.89.3
+   Compiling contrix-signatures v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\signatures)
+   Compiling contrix-html v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\html)
+   Compiling contrix-ffi v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\ffi)
+   Compiling contrix-crypto v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\crypto)
+   Compiling contrix-contracts v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\contracts)
+   Compiling contrix-testing v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\testing)
+   Compiling contrix v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\sdk)
+   Compiling floria v0.1.0 (D:\Works\contrix-dev\floria)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 27s
+  Executable unittests src\lib.rs (target\debug\deps\floria-424b879ab2400f08.exe)
+  Executable unittests src\main.rs (target\debug\deps\floria-14361c293bd22860.exe)
+  Executable tests\format_parity.rs (target\debug\deps\format_parity-f368ccdf3f301a28.exe)
+  Executable tests\property_provider_payload.rs (target\debug\deps\property_provider_payload-90ea4288b1470122.exe)
+  Executable tests\provider_payload_strictness.rs (target\debug\deps\provider_payload_strictness-d09b75d7b9b0e72b.exe)
+  Executable tests\sample_config_parse.rs (target\debug\deps\sample_config_parse-7f63a0b014df157a.exe)
+  Executable tests\sample_config_secret_scan.rs (target\debug\deps\sample_config_secret_scan-900d77a89d850be3.exe)

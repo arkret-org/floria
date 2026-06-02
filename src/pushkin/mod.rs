@@ -585,7 +585,7 @@ impl std::fmt::Display for ProviderPayloadRejection {
 // TODO(circle-rollout-P2C.5): once the SDK ships
 // `is_forbidden_payload_key` coverage for these names, drop the local
 // list.
-const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
+const LOCAL_FORBIDDEN_FIELDS: &[&str] = &[
     "appeal_id",
     "attestation_evidence",
     "audit_purpose",
@@ -614,8 +614,8 @@ const ROUND23_LOCAL_FORBIDDEN: &[&str] = &[
 
 /// Returns `true` if `key` matches a round R2/R3 locally-stripped
 /// forbidden name (case-insensitive).
-fn is_round23_local_forbidden(key: &str) -> bool {
-    ROUND23_LOCAL_FORBIDDEN
+fn is_local_forbidden_field(key: &str) -> bool {
+    LOCAL_FORBIDDEN_FIELDS
         .iter()
         .any(|name| name.eq_ignore_ascii_case(key))
 }
@@ -633,7 +633,7 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // identifiers and CXP-0007's `circle_id` / `effective_scope`.
     map.retain(|key, _| {
         !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key)
-            && !is_round23_local_forbidden(key)
+            && !is_local_forbidden_field(key)
     });
     for value in map.values_mut() {
         strip_value_recursive(value);
@@ -775,7 +775,7 @@ mod sanitize_tests {
     /// would let an observer link the push back to a moderation appeal,
     /// audit agent, or cross-signing reset.
     #[test]
-    fn sanitized_provider_payload_strips_round23_forbidden_fields() {
+    fn sanitized_provider_payload_strips_forbidden_fields() {
         // We stage values that are safe (no `did:` / `cx:` literals)
         // so the sanitizer doesn't reject for `sensitive_literal`; the
         // only assertion is "key was removed from the output map".
@@ -817,7 +817,7 @@ mod sanitize_tests {
     /// Round R2/R3 — the same field names buried inside a nested object
     /// are also stripped by the recursive sweep.
     #[test]
-    fn sanitized_provider_payload_strips_round23_forbidden_fields_when_nested() {
+    fn sanitized_provider_payload_strips_forbidden_fields_when_nested() {
         let payload = json!({
             "client": "ios",
             "wakeup_kind": "message",

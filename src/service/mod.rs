@@ -31,7 +31,7 @@ const ACTIVE_REALM_ID_PREFIX: &str = "cx:realm:";
 // when present so two Flows that share a name in different Circles do
 // not collide. `circle_id` is gateway-routing only; it MUST NOT be
 // echoed back to providers (the local strip list in
-// `pushkin/mod.rs::ROUND23_LOCAL_FORBIDDEN` enforces that).
+// `pushkin/mod.rs::LOCAL_FORBIDDEN_FIELDS` enforces that).
 const ACTIVE_CIRCLE_ID_PREFIX: &str = "cx:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass

@@ -45,7 +45,7 @@ use crate::{AppState, metrics as app_metrics};
 // match when the parent key + leaf key form that path, so callers
 // can't smuggle a `signature` under an unrelated parent and have it
 // pass.
-const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
+const FORBIDDEN_PLAINTEXT_LEAF_KEYS: &[&str] = &[
     "expected_previous_generation",
     "attestation_evidence",
     // Phase P2 (spec 37ce729 / SDK 4d5a1af) — legacy B-B field-naming
@@ -80,7 +80,7 @@ const ROUND4_FORBIDDEN_LEAF_KEYS: &[&str] = &[
 /// path-shaped check for them — both for clearer error messages and so
 /// a future sanitizer relaxation cannot accidentally re-open the
 /// proof-signature leak.
-const ROUND4_FORBIDDEN_PARENT_LEAF: &[(&str, &str)] = &[
+const FORBIDDEN_PLAINTEXT_PARENT_LEAF: &[(&str, &str)] = &[
     ("binding_proof", "signature"),
     ("subject_proof", "signature"),
 ];
@@ -354,7 +354,7 @@ fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
     // too. This walker fires BEFORE any other contract check so a
     // smuggled CAS-precondition can never even reach the auth /
     // sanitization layer.
-    reject_round4_forbidden_fields("", raw)?;
+    reject_forbidden_plaintext_fields("", raw)?;
 
     let Some(notification) = raw.get("notification") else {
         return Ok(());
@@ -403,7 +403,7 @@ fn validate_mention_redirect_routing(notification: &Map<String, Value>) -> Resul
         // we require the round-4-tightened DID shape `did:[a-z0-9]+:…`
         // here. The SDK enforces the full regex at the sender, this is
         // a defense-in-depth check on the floria entry.
-        if !is_round4_did_shape(actor_id) {
+        if !is_did_shape(actor_id) {
             return Err(format!(
                 "notification.mention_redirect_target_actor_ids[{index}] must be a DID matching \
                  round-4 regex `^did:[a-z0-9]+:[^\\s]+$`"
@@ -417,7 +417,7 @@ fn validate_mention_redirect_routing(notification: &Map<String, Value>) -> Resul
 /// `^did:[a-z0-9]+:[^\s]+$`. Method-name segment is lowercase ASCII
 /// alphanumeric ONLY (no `.`/`-`/`_`/`:`); the method-specific suffix
 /// has to be non-empty and contain no whitespace.
-pub(super) fn is_round4_did_shape(value: &str) -> bool {
+pub(super) fn is_did_shape(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("did:") else {
         return false;
     };
@@ -441,7 +441,7 @@ pub(super) fn is_round4_did_shape(value: &str) -> bool {
 /// Recursive walker that rejects any round-4-forbidden plaintext
 /// field anywhere in the JSON tree. `path` is the dotted JSON path to
 /// the current value used for error messages.
-fn reject_round4_forbidden_fields(path: &str, value: &Value) -> Result<(), String> {
+fn reject_forbidden_plaintext_fields(path: &str, value: &Value) -> Result<(), String> {
     match value {
         Value::Object(map) => {
             for (key, nested) in map {
@@ -451,7 +451,7 @@ fn reject_round4_forbidden_fields(path: &str, value: &Value) -> Result<(), Strin
                 } else {
                     format!("{path}.{key}")
                 };
-                if ROUND4_FORBIDDEN_LEAF_KEYS
+                if FORBIDDEN_PLAINTEXT_LEAF_KEYS
                     .iter()
                     .any(|forbidden| forbidden.eq_ignore_ascii_case(&leaf))
                 {
@@ -462,7 +462,7 @@ fn reject_round4_forbidden_fields(path: &str, value: &Value) -> Result<(), Strin
                 }
                 if let Some(parent_key) = path.rsplit('.').next() {
                     let parent_lower = parent_key.to_ascii_lowercase();
-                    if ROUND4_FORBIDDEN_PARENT_LEAF
+                    if FORBIDDEN_PLAINTEXT_PARENT_LEAF
                         .iter()
                         .any(|(parent, leaf_name)| {
                             parent.eq_ignore_ascii_case(&parent_lower)
@@ -475,13 +475,13 @@ fn reject_round4_forbidden_fields(path: &str, value: &Value) -> Result<(), Strin
                         ));
                     }
                 }
-                reject_round4_forbidden_fields(&next_path, nested)?;
+                reject_forbidden_plaintext_fields(&next_path, nested)?;
             }
             Ok(())
         }
         Value::Array(values) => {
             for (index, nested) in values.iter().enumerate() {
-                reject_round4_forbidden_fields(&format!("{path}[{index}]"), nested)?;
+                reject_forbidden_plaintext_fields(&format!("{path}[{index}]"), nested)?;
             }
             Ok(())
         }

@@ -547,12 +547,12 @@ mod tests {
             "broadcast_id": "bcast-future",
             "principal_id": "did:web:alice.example",
             "scope": "any",
-            "reason": "future_reason_v2"
+            "reason": "future_unknown_reason"
         });
         let parsed: ConsentRevokeBroadcast = serde_json::from_value(json).unwrap();
-        assert_eq!(parsed.reason_str(), Some("future_reason_v2"));
+        assert_eq!(parsed.reason_str(), Some("future_unknown_reason"));
         match parsed.reason {
-            Some(ConsentRevokeReason::Other(value)) => assert_eq!(value, "future_reason_v2"),
+            Some(ConsentRevokeReason::Other(value)) => assert_eq!(value, "future_unknown_reason"),
             other => panic!("expected Other variant, got {other:?}"),
         }
 
