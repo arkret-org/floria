@@ -36,22 +36,24 @@ pub enum NonceCheck {
     BackendUnavailable,
 }
 
-/// Behaviour when the Redis backend is unreachable. `Permissive` is the
-/// legacy fail-open semantic so existing deployments keep working; in
-/// `Strict` mode the gateway returns 503 from the calling site rather
-/// than silently bypassing replay protection.
+/// Behaviour when the Redis backend is unreachable. `Strict` (the
+/// default) is fail-closed: the gateway returns 503 from the calling site
+/// rather than silently bypassing replay protection / rate limiting.
+/// `Permissive` is the opt-in fail-open semantic for deployments that
+/// accept silent bypass during a Redis outage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RedisFailurePolicy {
     #[default]
-    Permissive,
     Strict,
+    Permissive,
 }
 
 impl RedisFailurePolicy {
     pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
-            "strict" => Self::Strict,
-            _ => Self::Permissive,
+            "permissive" => Self::Permissive,
+            // Default and any unrecognized value fail closed.
+            _ => Self::Strict,
         }
     }
 
@@ -96,7 +98,7 @@ impl NonceStore {
     }
 
     pub fn redis(ttl: Duration, redis_url: &str, key_prefix: impl Into<String>) -> Result<Self> {
-        Self::redis_with_policy(ttl, redis_url, key_prefix, RedisFailurePolicy::Permissive)
+        Self::redis_with_policy(ttl, redis_url, key_prefix, RedisFailurePolicy::Strict)
     }
 
     pub fn redis_with_policy(

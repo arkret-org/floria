@@ -7,13 +7,6 @@ pub mod deactivation;
 pub mod dedup;
 pub mod egress;
 pub mod error;
-// CXP-0010 (R3 spec-sync 2026-05-27) — media-service token-exchange
-// scaffolds. floria's v1 binary does not expose a media token minting
-// route; any deployment-level proxy must forward to soland without
-// re-signing. The self-issue path lives behind fail-closed `TODO(R3.1)`
-// stubs so the wire shapes are pinned without committing to a full
-// media-service keystore in the v1 cycle.
-pub mod media;
 pub mod metrics;
 pub mod models;
 pub mod nonce_store;

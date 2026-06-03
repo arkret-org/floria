@@ -243,10 +243,8 @@ impl ApnsPushkin {
         let notif_id = Uuid::new_v4().to_string();
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "apns-priority",
-            HeaderValue::from_str(&priority.to_string()).unwrap(),
-        );
+        // `HeaderValue: From<u16>` is infallible — no hot-path unwrap.
+        headers.insert("apns-priority", HeaderValue::from(u16::from(priority)));
         headers.insert("content-type", HeaderValue::from_static("application/json"));
         headers.insert("apns-id", header_value(&notif_id)?);
 
@@ -347,8 +345,8 @@ impl ApnsPushkin {
 
         match notification.wakeup_kind.as_deref() {
             Some("message") => {
-                let room_display = notification
-                    .scope_name()
+                let scope_display = notification
+                    .scope_title()
                     .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
                 let msgtype = notification
                     .content
@@ -364,24 +362,24 @@ impl ApnsPushkin {
                 };
                 let is_image = msgtype == Some("m.image");
 
-                if let Some(room_display) = room_display {
+                if let Some(scope_display) = scope_display {
                     match (is_image, content_display, action_display) {
                         (true, content, _) => {
                             loc_key = Some("IMAGE_FROM_USER_IN_ROOM");
                             loc_args =
-                                vec![from_display, content.unwrap_or_default(), room_display];
+                                vec![from_display, content.unwrap_or_default(), scope_display];
                         }
                         (false, Some(content), _) if msgtype != Some("m.emote") => {
                             loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
-                            loc_args = vec![from_display, room_display, content];
+                            loc_args = vec![from_display, scope_display, content];
                         }
                         (false, _, Some(action)) => {
                             loc_key = Some("ACTION_FROM_USER_IN_ROOM");
-                            loc_args = vec![room_display, from_display, action];
+                            loc_args = vec![scope_display, from_display, action];
                         }
                         _ => {
                             loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                            loc_args = vec![from_display, room_display];
+                            loc_args = vec![from_display, scope_display];
                         }
                     }
                 } else {
@@ -431,26 +429,27 @@ impl ApnsPushkin {
                 if notification.user_is_target == Some(true)
                     && notification.membership.as_deref() == Some("invite") =>
             {
-                if let Some(room_name) = notification.scope_name() {
+                if let Some(scope_title) = notification.scope_title() {
                     loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
-                    loc_args = vec![from_display, trim_chars(room_name, APNS_MAX_FIELD_LENGTH)];
+                    loc_args = vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
                 } else {
                     loc_key = Some("USER_INVITE_TO_CHAT");
                     loc_args = vec![from_display];
                 }
             }
             Some(_) => {
-                if let Some(room_name) = notification.scope_name() {
+                if let Some(scope_title) = notification.scope_title() {
                     if let Some(body) = notification.content_body() {
                         loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
                         loc_args = vec![
                             from_display,
-                            trim_chars(room_name, APNS_MAX_FIELD_LENGTH),
+                            trim_chars(scope_title, APNS_MAX_FIELD_LENGTH),
                             trim_chars(body, APNS_MAX_FIELD_LENGTH),
                         ];
                     } else {
                         loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                        loc_args = vec![from_display, trim_chars(room_name, APNS_MAX_FIELD_LENGTH)];
+                        loc_args =
+                            vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
                     }
                 } else if let Some(body) = notification.content_body() {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
@@ -873,8 +872,8 @@ mod tests {
     fn builds_message_payload() {
         let pushkin = pushkin();
         let notification = Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -896,7 +895,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),
@@ -958,8 +956,8 @@ mod tests {
             .clone(),
         );
         let notification = Notification {
-            flow_name: None,
-            realm_name: None,
+            flow_title: None,
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: None,
@@ -973,7 +971,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: None,
-            sender: None,
             push_hint: None,
             devices: vec![device.clone()],
             mention_redirect_target_actor_ids: Vec::new(),

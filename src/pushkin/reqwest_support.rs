@@ -10,6 +10,12 @@ use crate::auth::redact_url_credentials;
 use crate::config::Config;
 use crate::error::DispatchError;
 
+/// How long before a cached provider access token expires that the
+/// gateway proactively refreshes it. Single-sourced here so every
+/// provider token cache (FCM, OPPO, VIVO, …) shares one skew and cannot
+/// drift apart.
+pub(super) const TOKEN_REFRESH_SKEW: Duration = Duration::from_secs(30);
+
 pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<Client> {
     let mut builder = Client::builder()
         .user_agent(user_agent)
@@ -57,7 +63,7 @@ impl ClientCredentialsGrant {
         {
             let cache = self.cache.lock().await;
             if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + Duration::from_secs(30)
+                && token.expires_at > Instant::now() + TOKEN_REFRESH_SKEW
             {
                 return Ok(token.token.clone());
             }

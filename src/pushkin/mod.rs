@@ -54,8 +54,8 @@ pub const DEFAULT_MAX_CONNECTIONS: usize = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DispatchTarget {
-    pub app_id: String,
     pub push_key: String,
+    pub app_id: String,
 }
 
 /// Unified result of a single pushkin dispatch attempt.
@@ -600,16 +600,15 @@ const LOCAL_FORBIDDEN_FIELDS: &[&str] = &[
     "scope_circle_id",
     // Spec 9dabf26 message/flow carrier split. Provider payloads stay
     // blind and must not leak protocol content or track selectors.
+    // (`encrypted_content` and `sender_actor_display_name` are already
+    // covered by the SDK `is_forbidden_payload_key`, so they are NOT
+    // duplicated here.)
     "encrypted_payload",
-    "encrypted_content",
     "encrypted_metadata",
     "metadata",
     "fields",
     "track",
     "track_name",
-    // Notification projection sender display name, renamed to the
-    // sender_actor role prefix in current v1.
-    "sender_actor_display_name",
 ];
 
 /// Returns `true` if `key` matches a round R2/R3 locally-stripped
@@ -859,8 +858,8 @@ mod sanitize_tests {
     #[test]
     fn build_blind_provider_data_keeps_only_allowed_fields() {
         let notification = Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -874,7 +873,6 @@ mod sanitize_tests {
             user_is_target: None,
             push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
             mention_redirect_target_actor_ids: Vec::new(),
@@ -892,7 +890,7 @@ mod sanitize_tests {
         assert!(data.contains_key("unread_count"));
         assert!(!data.contains_key("event_id"));
         assert!(!data.contains_key("sender"));
-        assert!(!data.contains_key("flow_name"));
+        assert!(!data.contains_key("flow_title"));
         assert!(!data.contains_key("flow_id"));
     }
 

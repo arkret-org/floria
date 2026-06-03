@@ -20,61 +20,93 @@ use crate::models::{DeliveryReceipt, Notification, NotifyResponse};
 /// runaway opt-in does not blow the metric vector.
 pub(super) const DETAILED_CIRCLE_LABEL_THRESHOLD: usize = 5_000;
 
-/// Observed-circle set + a sticky downgrade flag. Both live behind a
-/// single Mutex / AtomicBool so the hot path (already inside the
-/// delivery-receipt loop) pays the cost only when detailed labels are
-/// enabled AND a circle_id is present.
+/// Observed-id set + a sticky downgrade flag, per scope dimension. Both
+/// live behind a single Mutex / AtomicBool so the hot path (already
+/// inside the delivery-receipt loop) pays the cost only when a scope id
+/// is actually being emitted as a label.
 static DETAILED_CIRCLE_SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static DETAILED_CIRCLE_DOWNGRADED: AtomicBool = AtomicBool::new(false);
+/// Realm-dimension guard. `realm_id` is the *default* scope label and is
+/// unbounded in a multi-tenant gateway, so it gets the same cardinality
+/// ceiling as the opt-in circle dimension: once tripped, the realm
+/// `scope_id` label is dropped (aggregated) for the rest of the process.
+static REALM_SCOPE_SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+static REALM_SCOPE_DOWNGRADED: AtomicBool = AtomicBool::new(false);
 
-/// True iff the cardinality guard has fired. `pub(crate)` so tests
-/// and any future `/admin` introspection inside the crate can confirm
-/// the downgrade.
+/// True iff the circle cardinality guard has fired. `pub(crate)` so
+/// tests and any future `/admin` introspection inside the crate can
+/// confirm the downgrade.
 #[cfg(test)]
 pub(crate) fn detailed_circle_labels_downgraded() -> bool {
     DETAILED_CIRCLE_DOWNGRADED.load(Ordering::Relaxed)
 }
 
-/// Test-only hook to reset the guard between cases. `pub(crate)` so it
+/// Test-only hook to reset the guards between cases. `pub(crate)` so it
 /// is reachable from `#[cfg(test)]` integration helpers but does not
 /// leak into the public API.
 #[cfg(test)]
 pub(crate) fn reset_cardinality_guard_for_tests() {
-    DETAILED_CIRCLE_DOWNGRADED.store(false, Ordering::Relaxed);
-    let mut guard = DETAILED_CIRCLE_SEEN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    *guard = None;
+    for (downgraded, seen) in [
+        (&DETAILED_CIRCLE_DOWNGRADED, &DETAILED_CIRCLE_SEEN),
+        (&REALM_SCOPE_DOWNGRADED, &REALM_SCOPE_SEEN),
+    ] {
+        downgraded.store(false, Ordering::Relaxed);
+        let mut guard = seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = None;
+    }
 }
 
-/// Returns whether detailed labels should be used right now. Records
-/// the supplied `circle_id` against the global guard set; when the
-/// unique-count threshold is crossed, flips the sticky downgrade flag
-/// AND emits a one-shot warning so operators see it in the audit
-/// stream. Subsequent calls observe the flag and return `false`.
-fn record_circle_and_check_guard(circle_id: &str) -> bool {
-    if DETAILED_CIRCLE_DOWNGRADED.load(Ordering::Relaxed) {
+/// Generic per-dimension cardinality guard. Returns whether the detailed
+/// `id` may still be used as a label. Records `id` against the
+/// dimension's guard set; when the unique-count threshold is crossed,
+/// flips the sticky downgrade flag AND emits a one-shot warning so
+/// operators see it. Subsequent calls observe the flag and return
+/// `false` (the caller aggregates / drops the id).
+fn record_and_check_guard(
+    seen: &Mutex<Option<HashSet<String>>>,
+    downgraded: &AtomicBool,
+    id: &str,
+    dimension: &str,
+) -> bool {
+    if downgraded.load(Ordering::Relaxed) {
         return false;
     }
-    let mut guard = DETAILED_CIRCLE_SEEN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let set = guard.get_or_insert_with(HashSet::new);
-    if set.len() >= DETAILED_CIRCLE_LABEL_THRESHOLD && !set.contains(circle_id) {
+    if set.len() >= DETAILED_CIRCLE_LABEL_THRESHOLD && !set.contains(id) {
         // Trip the breaker once — log, set the sticky flag, and clear
         // the set so we do not retain unbounded memory after downgrade.
-        DETAILED_CIRCLE_DOWNGRADED.store(true, Ordering::Relaxed);
+        downgraded.store(true, Ordering::Relaxed);
         let observed = set.len();
         set.clear();
         tracing::warn!(
-            observed_circle_ids = observed,
+            dimension,
+            observed_ids = observed,
             threshold = DETAILED_CIRCLE_LABEL_THRESHOLD,
-            "metrics_detailed_circle_labels=true cardinality guard tripped; auto-downgrading to realm-keyed labels for the rest of this process lifetime"
+            "scope-label cardinality guard tripped; auto-aggregating this dimension for the rest of this process lifetime"
         );
         return false;
     }
-    set.insert(circle_id.to_owned());
+    set.insert(id.to_owned());
     true
+}
+
+fn record_circle_and_check_guard(circle_id: &str) -> bool {
+    record_and_check_guard(
+        &DETAILED_CIRCLE_SEEN,
+        &DETAILED_CIRCLE_DOWNGRADED,
+        circle_id,
+        "circle",
+    )
+}
+
+fn record_realm_and_check_guard(realm_id: &str) -> bool {
+    record_and_check_guard(
+        &REALM_SCOPE_SEEN,
+        &REALM_SCOPE_DOWNGRADED,
+        realm_id,
+        "realm",
+    )
 }
 
 #[derive(Debug, Serialize)]
@@ -158,7 +190,13 @@ pub(super) fn record_notify_delivery_by_scope(
     let (scope_kind, scope_id): (&'static str, Option<&str>) =
         match (effective_detailed, notification.circle_id()) {
             (true, Some(circle)) => ("circle", Some(circle)),
-            _ => ("realm", notification.realm_id()),
+            // Realm is the default (unbounded) dimension — apply the same
+            // cardinality ceiling. Once tripped, drop the per-realm id so
+            // the series collapses to a single aggregated `realm` label.
+            _ => match notification.realm_id() {
+                Some(realm) if record_realm_and_check_guard(realm) => ("realm", Some(realm)),
+                _ => ("realm", None),
+            },
         };
 
     let mut per_provider: std::collections::HashMap<String, usize> =

@@ -143,9 +143,9 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     // delivery_binding_frontier struct-literal hazard) and assert that
     // only the SDK-allowed blind fields make it out.
     let notification: Notification = serde_json::from_value(json!({
-        "flow_name": "Mission Control",
-        // Realm/Space reversal — security-boundary name is now `realm_name`.
-        "realm_name": "Apollo",
+        "flow_title": "Mission Control",
+        // Realm/Space reversal — security-boundary label is now `realm_title`.
+        "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
         "event_id":   "cx:event:01JS0EV000000000000000000",
@@ -154,7 +154,6 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "realm_id":   "cx:realm:01JS0SP000000000000000000",
         "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
-        "sender": "@major:example.com",
         "push_hint": "new_message",
         "counts": { "unread": 3 },
     }))
@@ -182,9 +181,9 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "scope_circle_id",
         "sender",
         "sender_actor_display_name",
-        "flow_name",
+        "flow_title",
         "space_name",
-        "realm_name",
+        "realm_title",
         "content",
     ] {
         assert!(
@@ -508,7 +507,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
     let service = visible_profile_service();
     let body = blind_payload(
         json!({
-            "flow_name": "Mission Control",
+            "flow_title": "Mission Control",
             "sender_actor_display_name": "Major Tom",
         })
         .as_object()

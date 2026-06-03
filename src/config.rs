@@ -750,10 +750,12 @@ pub struct NotifyNonceStoreConfig {
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
-    /// Behaviour when the Redis backend is unreachable. `permissive`
-    /// (the default) preserves the legacy fail-open semantic. `strict`
-    /// causes the gateway to answer 503 on the calling site so the
-    /// caller backs off instead of bypassing replay protection.
+    /// Behaviour when the Redis backend is unreachable. `strict` (the
+    /// default) is fail-closed: the gateway answers 503 on the calling
+    /// site so the caller backs off instead of bypassing replay
+    /// protection. `permissive` opts back into fail-open and MUST only be
+    /// used in deployments that accept silent replay-protection bypass
+    /// during Redis outages.
     pub redis_failure_policy: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
@@ -765,7 +767,7 @@ impl Default for NotifyNonceStoreConfig {
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
-            redis_failure_policy: "permissive".to_owned(),
+            redis_failure_policy: "strict".to_owned(),
             extra: Map::new(),
         }
     }
@@ -788,11 +790,7 @@ impl NotifyNonceStoreConfig {
 
     pub fn failure_policy(&self) -> &str {
         let value = self.redis_failure_policy.trim();
-        if value.is_empty() {
-            "permissive"
-        } else {
-            value
-        }
+        if value.is_empty() { "strict" } else { value }
     }
 
     fn emit_startup_warnings(&self) {
@@ -958,8 +956,9 @@ pub struct NotifyRateLimitConfig {
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
-    /// `permissive` (default) — fail-open if Redis is unreachable;
-    /// `strict` — reject with 429 so callers back off.
+    /// `strict` (default) — fail-closed: reject with 429 so callers back
+    /// off when Redis is unreachable. `permissive` opts into fail-open
+    /// (rate limiting silently disabled during a Redis outage).
     pub redis_failure_policy: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
@@ -978,7 +977,7 @@ impl Default for NotifyRateLimitConfig {
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
-            redis_failure_policy: "permissive".to_owned(),
+            redis_failure_policy: "strict".to_owned(),
             extra: Map::new(),
         }
     }
@@ -1014,11 +1013,7 @@ impl NotifyRateLimitConfig {
 
     pub fn failure_policy(&self) -> &str {
         let value = self.redis_failure_policy.trim();
-        if value.is_empty() {
-            "permissive"
-        } else {
-            value
-        }
+        if value.is_empty() { "strict" } else { value }
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -1796,7 +1791,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-05-31.1/floria.config.schema.json",
+        "$id": "https://contrix.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -1910,7 +1905,7 @@ fn http_schema() -> Value {
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
                     "key_prefix": {"type": "string", "default": "floria"},
-                    "redis_failure_policy": {"type": "string", "enum": ["permissive", "strict"], "default": "permissive"}
+                    "redis_failure_policy": {"type": "string", "enum": ["strict", "permissive"], "default": "strict"}
                 }
             },
             "notify_retry_queue": {
@@ -2030,7 +2025,7 @@ fn notify_auth_schema() -> Value {
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
                     "key_prefix": {"type": "string", "default": "floria"},
-                    "redis_failure_policy": {"type": "string", "enum": ["permissive", "strict"], "default": "permissive"}
+                    "redis_failure_policy": {"type": "string", "enum": ["strict", "permissive"], "default": "strict"}
                 }
             },
             "replay_window_seconds": {
@@ -2190,7 +2185,7 @@ fn string_or_string_list_schema() -> Value {
 
 impl Config {
     /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-05-31.1";
+    pub const SCHEMA_VERSION: &'static str = "2026-06-03.1";
 
     /// Parse a KDL config body into the intermediate JSON shape used by
     /// [`Config::load`]. Exposed for parity tests and ops tooling so

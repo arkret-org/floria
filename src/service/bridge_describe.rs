@@ -11,6 +11,7 @@ use salvo::prelude::*;
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::server_describe::{
     describe_auth_modes, describe_plaintext_visibility, describe_rate_limit_scopes,
+    describe_supported_profiles,
 };
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
@@ -57,12 +58,24 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
 
     let body = PushBridgeDescribeResponse {
         contract: "cx.push.bridge.describe".to_owned(),
-        version: "2026-05-07".to_owned(),
+        // `version` is the bridge-describe CONTRACT version (the shape of
+        // this response), distinct from `spec_version` below (the
+        // contrix-spec revision the SDK is compiled against) and from the
+        // config-file `SCHEMA_VERSION`. Pinned to the SDK provider-matrix
+        // version so it moves in lockstep with the capability snapshot
+        // rather than drifting as a hand-edited date.
+        version: PROVIDER_CAPABILITIES_VERSION.to_owned(),
         api_base_path: "/api/v1/push".to_owned(),
+        // `spec_version` = the contrix-spec revision the SDK was built
+        // against (single source: SDK constant). See `version` above for
+        // the contract-vs-spec distinction.
         spec_version: Some(contrix::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
             service_did: state.notify_auth.gateway_service_did.clone(),
-            supported_profiles: vec!["cx.profile.push_gateway.v1".to_owned()],
+            supported_profiles: describe_supported_profiles(&state.notify_auth)
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
             supported_providers: state.registry.provider_names(),
             auth_modes: owned(describe_auth_modes(&state.notify_auth)),
         },
@@ -180,11 +193,17 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "X-Contrix-Origin-Service-Did": "did:web:soland.example",
                 "X-Contrix-Destination-Service-Did": state.notify_auth.gateway_service_did,
             }),
+            // Default interop privacy baseline
+            // (`cx.profile.push_gateway.blind_wakeup.v1`): identifying
+            // fields (`event_id` / `flow_id` / `realm_id` / sender) MUST
+            // NOT appear — only the opaque pseudonym, wakeup discriminator
+            // and bounded counts. Identifying-field examples live under
+            // `plaintext_visible_service_request` (visible_notification
+            // profile) below. Spec push-notifications.md §5.1.
             blind_wakeup_request: serde_json::json!({
                 "notification": {
-                    "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
-                    "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
-                    "realm_id": "cx:realm:01964000-0000-7000-8000-000000000000",
+                    "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                    "wakeup_kind": "message",
                     "push_hint": "new_message",
                     "counts": {"unread": 3}
                 }

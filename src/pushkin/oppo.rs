@@ -193,7 +193,7 @@ impl OppoPushkin {
         {
             let cache = self.token_cache.lock().await;
             if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + Duration::from_secs(30)
+                && token.expires_at > Instant::now() + super::reqwest_support::TOKEN_REFRESH_SKEW
             {
                 return Ok(token.token.clone());
             }
@@ -661,8 +661,8 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -684,7 +684,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),

@@ -1,5 +1,5 @@
 {
-  "$id": "https://contrix.dev/schema/floria/2026-05-31.1/floria.config.schema.json",
+  "$id": "https://contrix.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -236,10 +236,10 @@
                   "type": "string"
                 },
                 "redis_failure_policy": {
-                  "default": "permissive",
+                  "default": "strict",
                   "enum": [
-                    "permissive",
-                    "strict"
+                    "strict",
+                    "permissive"
                   ],
                   "type": "string"
                 },
@@ -490,10 +490,10 @@
               ]
             },
             "redis_failure_policy": {
-              "default": "permissive",
+              "default": "strict",
               "enum": [
-                "permissive",
-                "strict"
+                "strict",
+                "permissive"
               ],
               "type": "string"
             },
@@ -797,5 +797,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-05-31.1"
+  "x-floria-schema-version": "2026-06-03.1"
 }

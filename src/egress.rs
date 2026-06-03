@@ -59,8 +59,16 @@ fn blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => blocked_ipv4(ip),
         IpAddr::V6(ip) => {
-            if let Some(v4) = ipv4_mapped(ip) {
-                return blocked_ipv4(v4);
+            // Unwrap any IPv4 smuggled through a translation / tunnel
+            // mechanism (IPv4-mapped, NAT64, 6to4) and re-check it against
+            // the IPv4 blocklist so e.g. `64:ff9b::169.254.169.254` or a
+            // 6to4-wrapped 10.0.0.0/8 cannot bypass the v4 rules.
+            if let Some(v4) = ipv4_mapped(ip)
+                .or_else(|| nat64_embedded_ipv4(ip))
+                .or_else(|| sixtofour_embedded_ipv4(ip))
+                && blocked_ipv4(v4)
+            {
+                return true;
             }
             blocked_ipv6(ip)
         }
@@ -89,6 +97,13 @@ fn blocked_ipv6(ip: Ipv6Addr) -> bool {
         || (segments[0] & 0xfe00) == 0xfc00
         || (segments[0] & 0xffc0) == 0xfe80
         || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        // NAT64 well-known prefix 64:ff9b::/96 and local-use 64:ff9b:1::/48
+        // (RFC 6052 / RFC 8215). These translate to IPv4 destinations and
+        // could reach internal v4 ranges, so block the whole prefix in
+        // addition to unwrapping the embedded v4 above.
+        || (segments[0] == 0x0064 && segments[1] == 0xff9b)
+        // 6to4 2002::/16 (RFC 3056) — tunnels arbitrary embedded IPv4.
+        || segments[0] == 0x2002
 }
 
 fn ipv4_mapped(ip: Ipv6Addr) -> Option<Ipv4Addr> {
@@ -96,6 +111,32 @@ fn ipv4_mapped(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     if segments[..5] == [0, 0, 0, 0, 0] && segments[5] == 0xffff {
         let high = segments[6].to_be_bytes();
         let low = segments[7].to_be_bytes();
+        Some(Ipv4Addr::new(high[0], high[1], low[0], low[1]))
+    } else {
+        None
+    }
+}
+
+/// Embedded IPv4 of a NAT64 well-known-prefix address (64:ff9b::/96):
+/// the last 32 bits carry the translated IPv4 destination.
+fn nat64_embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let segments = ip.segments();
+    if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2..6] == [0, 0, 0, 0] {
+        let high = segments[6].to_be_bytes();
+        let low = segments[7].to_be_bytes();
+        Some(Ipv4Addr::new(high[0], high[1], low[0], low[1]))
+    } else {
+        None
+    }
+}
+
+/// Embedded IPv4 of a 6to4 address (2002:V4ADDR::/48): segments 1–2 hold
+/// the encapsulated IPv4 address.
+fn sixtofour_embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let segments = ip.segments();
+    if segments[0] == 0x2002 {
+        let high = segments[1].to_be_bytes();
+        let low = segments[2].to_be_bytes();
         Some(Ipv4Addr::new(high[0], high[1], low[0], low[1]))
     } else {
         None
@@ -131,5 +172,23 @@ mod tests {
     fn explicit_allow_private_networks_keeps_local_dev_possible() {
         let url = Url::parse("http://127.0.0.1:5001/audit").unwrap();
         assert!(validate_url_for_egress(&url, "test", true).is_ok());
+    }
+
+    #[test]
+    fn rejects_nat64_and_6to4_wrapped_internal_targets() {
+        for raw in [
+            // NAT64 well-known prefix wrapping the cloud metadata IP.
+            "http://[64:ff9b::a9fe:a9fe]/latest/meta-data",
+            // NAT64 local-use prefix.
+            "http://[64:ff9b:1::1]/x",
+            // 6to4 wrapping 10.0.0.1 (2002:0a00:0001::).
+            "http://[2002:a00:1::1]/x",
+        ] {
+            let url = Url::parse(raw).unwrap();
+            assert!(
+                validate_url_for_egress(&url, "test", false).is_err(),
+                "expected {raw} to be blocked"
+            );
+        }
     }
 }

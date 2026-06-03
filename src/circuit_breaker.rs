@@ -23,8 +23,11 @@
 //! ops dashboards.
 
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+use lru::LruCache;
 
 /// Per-Circle (or per-Realm, when no circle is set) breaker config.
 #[derive(Debug, Clone)]
@@ -82,30 +85,34 @@ impl BreakerKey {
 struct BreakerState {
     consecutive_failures: u32,
     opened_at: Option<Instant>,
-    /// LRU tick — incremented on every access. The oldest tick is
-    /// the next candidate for eviction.
-    last_used_tick: u64,
 }
 
 /// In-process circuit breaker keyed by `(provider, realm, circle)`.
 /// Cheap enough to consult on every dispatch.
-#[derive(Debug, Default)]
+///
+/// Backed by an [`LruCache`] so the breaker-state slot count is bounded
+/// at `max_breaker_states` with O(1) access + eviction — a malicious
+/// caller cycling through circle ids can no longer force an O(n) scan on
+/// every dispatch (the previous hand-rolled `min_by_key` eviction).
+#[derive(Debug)]
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
-    inner: Mutex<CircuitBreakerInner>,
+    inner: Mutex<LruCache<BreakerKey, BreakerState>>,
 }
 
-#[derive(Debug, Default)]
-struct CircuitBreakerInner {
-    state: HashMap<BreakerKey, BreakerState>,
-    tick: u64,
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self::new(CircuitBreakerConfig::default())
+    }
 }
 
 impl CircuitBreaker {
     pub fn new(config: CircuitBreakerConfig) -> Self {
+        let cap = NonZeroUsize::new(config.max_breaker_states.max(1))
+            .expect("max_breaker_states.max(1) is non-zero");
         Self {
             config,
-            inner: Mutex::new(CircuitBreakerInner::default()),
+            inner: Mutex::new(LruCache::new(cap)),
         }
     }
 
@@ -117,27 +124,13 @@ impl CircuitBreaker {
             .unwrap_or(self.config.open_for)
     }
 
-    fn evict_if_needed(&self, inner: &mut CircuitBreakerInner) {
-        let cap = self.config.max_breaker_states.max(1);
-        while inner.state.len() > cap {
-            let Some(oldest_key) = inner
-                .state
-                .iter()
-                .min_by_key(|(_, state)| state.last_used_tick)
-                .map(|(k, _)| k.clone())
-            else {
-                break;
-            };
-            inner.state.remove(&oldest_key);
-        }
-    }
-
     /// Returns `true` when the breaker for `key` is currently open and
     /// the caller should short-circuit rather than dispatch.
     pub fn is_open(&self, key: &BreakerKey) -> bool {
         let open_for = self.open_for(&key.provider);
         let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
-        let Some(state) = guard.state.get_mut(key) else {
+        // `get_mut` bumps the slot to most-recently-used.
+        let Some(state) = guard.get_mut(key) else {
             return false;
         };
         let Some(opened_at) = state.opened_at else {
@@ -156,33 +149,25 @@ impl CircuitBreaker {
     /// short blip doesn't latch the breaker open on the next failure.
     pub fn record_success(&self, key: &BreakerKey) {
         let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
-        guard.tick = guard.tick.saturating_add(1);
-        let tick = guard.tick;
-        let entry = guard.state.entry(key.clone()).or_default();
+        let entry = guard.get_or_insert_mut(key.clone(), BreakerState::default);
         entry.consecutive_failures = 0;
-        entry.last_used_tick = tick;
-        self.evict_if_needed(&mut guard);
     }
 
     /// Record a failed dispatch. Returns `true` when this failure
     /// caused the breaker to open (so the caller can emit a metric /
     /// log line at that moment).
     pub fn record_failure(&self, key: &BreakerKey) -> bool {
+        let threshold = self.config.failure_threshold;
         let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
-        guard.tick = guard.tick.saturating_add(1);
-        let tick = guard.tick;
-        let state = guard.state.entry(key.clone()).or_default();
-        state.last_used_tick = tick;
-        if state.opened_at.is_some() {
-            self.evict_if_needed(&mut guard);
+        let entry = guard.get_or_insert_mut(key.clone(), BreakerState::default);
+        if entry.opened_at.is_some() {
             return false;
         }
-        state.consecutive_failures = state.consecutive_failures.saturating_add(1);
-        let opened = state.consecutive_failures >= self.config.failure_threshold;
+        entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+        let opened = entry.consecutive_failures >= threshold;
         if opened {
-            state.opened_at = Some(Instant::now());
+            entry.opened_at = Some(Instant::now());
         }
-        self.evict_if_needed(&mut guard);
         opened
     }
 }
@@ -217,9 +202,9 @@ mod tests {
         breaker.record_failure(&k3);
         // k1 should have been evicted; k2 and k3 remain.
         let guard = breaker.inner.lock().expect("breaker mutex");
-        assert!(!guard.state.contains_key(&k1));
-        assert!(guard.state.contains_key(&k2));
-        assert!(guard.state.contains_key(&k3));
+        assert!(!guard.contains(&k1));
+        assert!(guard.contains(&k2));
+        assert!(guard.contains(&k3));
     }
 
     #[test]

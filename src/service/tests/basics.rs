@@ -51,9 +51,15 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
     assert_eq!(body["operation_id"], json!(NOTIFY_OPERATION_ID));
+    // The mandatory blind-wakeup baseline is always advertised alongside
+    // the base profile; the visible-notification profile is only added
+    // when a plaintext-eligible surface is configured (not here).
     assert_eq!(
         body["supported_profiles"],
-        json!(["cx.profile.push_gateway.v1"])
+        json!([
+            "cx.profile.push_gateway.v1",
+            "cx.profile.push_gateway.blind_wakeup.v1"
+        ])
     );
     assert_eq!(body["supported_providers"], json!(["com.example.app"]));
     assert_eq!(
@@ -345,7 +351,14 @@ async fn bridge_describe_omits_unknown_provider_kinds() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    assert_eq!(body["provider_capabilities"], json!([]));
+    // The SDK `PushBridgeDescribeResponse` skip-serializes an empty
+    // `provider_capabilities`, so an all-unknown-kind registry yields no
+    // such key at all (rather than an explicit `[]`).
+    let caps = body.get("provider_capabilities");
+    assert!(
+        caps.is_none() || caps == Some(&json!([])),
+        "unknown provider kinds must surface no capabilities, got: {caps:?}"
+    );
 }
 
 #[tokio::test]

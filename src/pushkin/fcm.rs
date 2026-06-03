@@ -526,7 +526,7 @@ impl ServiceAccountSigner {
         {
             let cache = self.cache.lock().await;
             if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + Duration::from_secs(30)
+                && token.expires_at > Instant::now() + super::reqwest_support::TOKEN_REFRESH_SKEW
             {
                 return Ok(token.token.clone());
             }
@@ -679,8 +679,8 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -702,7 +702,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),
@@ -724,7 +723,7 @@ mod tests {
 
         // T4.3 — provider payload now carries only allowed blind
         // fields. event_id / message_id / flow_id / realm_id /
-        // sender / flow_name / sender_actor_display_name / content_* are
+        // sender / flow_title / sender_actor_display_name / content_* are
         // all stripped at the gateway.
         assert_eq!(
             payload.get("push_target_id"),
@@ -762,8 +761,8 @@ mod tests {
             "scope_circle_id",
             "sender",
             "sender_actor_display_name",
-            "flow_name",
-            "realm_name",
+            "flow_title",
+            "realm_title",
             "content_body",
             "content_msgtype",
             "highlight_count",
@@ -806,8 +805,8 @@ mod tests {
         // push_hint) AND no nonzero counts. Without push_target_id the
         // dispatch is dropped entirely.
         let notification = Notification {
-            flow_name: None,
-            realm_name: None,
+            flow_title: None,
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: None,
@@ -821,7 +820,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: None,
-            sender: None,
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),

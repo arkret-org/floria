@@ -54,7 +54,7 @@ async fn caller_push_decision_dont_notify_skips_dispatch_and_records_reason() {
     // the wire-safe reason code.
     assert_eq!(body.accepted, 0);
     assert_eq!(body.rejected.len(), 1);
-    assert_eq!(body.rejected[0].reason.as_deref(), Some("muted"));
+    assert_eq!(body.rejected[0].reason_code.as_deref(), Some("muted"));
     // The pushkin never sees the device — caller's decision short-
     // circuits dispatch entirely.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -200,7 +200,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     assert_eq!(resp.accepted, 0);
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
-        resp.rejected[0].reason.as_deref(),
+        resp.rejected[0].reason_code.as_deref(),
         Some("mention_redirect_not_targeted")
     );
     // Critical: the pushkin MUST NOT see the device — fail-closed means
@@ -256,7 +256,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
     assert_eq!(resp.accepted, 0);
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
-        resp.rejected[0].reason.as_deref(),
+        resp.rejected[0].reason_code.as_deref(),
         Some("mention_redirect_not_targeted")
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);

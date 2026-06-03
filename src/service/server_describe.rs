@@ -134,10 +134,22 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         "development_mode=true requires verified_profiles=[] (service-surface.md §3.0)"
     );
 
+    let supported_profiles = describe_supported_profiles(&state.notify_auth);
+    let claimed_profiles = supported_profiles
+        .iter()
+        .map(|&profile_id| ClaimedProfile {
+            profile_id,
+            claim_kind: "self_claimed",
+            notes: (profile_id == PROFILE_PUSH_GATEWAY).then_some(
+                "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)",
+            ),
+        })
+        .collect();
+
     let body = GatewayDescribeResponse {
         service_did: state.notify_auth.gateway_service_did.clone(),
         operation_id: NOTIFY_OPERATION_ID,
-        supported_profiles: vec!["cx.profile.push_gateway.v1"],
+        supported_profiles,
         supported_providers: state.registry.provider_names(),
         plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth),
         limits: GatewayDescribeLimits {
@@ -155,13 +167,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "push.rate_limit",
             "push.provider_matrix",
         ],
-        claimed_profiles: vec![ClaimedProfile {
-            profile_id: "cx.profile.push_gateway.v1",
-            claim_kind: "self_claimed",
-            notes: Some(
-                "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)",
-            ),
-        }],
+        claimed_profiles,
         verified_profiles,
         experimental_features: vec!["push.bridge.failure_codes", "push.notify.retry_queue"],
         compat_surfaces: vec![],
@@ -169,6 +175,31 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     };
     res.status_code(StatusCode::OK);
     res.render(Json(body));
+}
+
+/// Base push-gateway profile id.
+pub(super) const PROFILE_PUSH_GATEWAY: &str = "cx.profile.push_gateway.v1";
+/// Mandatory default-interop privacy baseline. Spec (push-notifications.md
+/// §0, conformance-profiles.json) — any implementation claiming
+/// `cx.profile.push_gateway.v1` MUST also claim this profile.
+pub(super) const PROFILE_BLIND_WAKEUP: &str = "cx.profile.push_gateway.blind_wakeup.v1";
+/// Opt-in visible-payload profile. Only advertised when the gateway is
+/// configured with a plaintext-eligible service surface
+/// (`describe_plaintext_visibility == "service-gated"`).
+pub(super) const PROFILE_VISIBLE_NOTIFICATION: &str =
+    "cx.profile.push_gateway.visible_notification.v1";
+
+/// Profiles the gateway actually supports and gates on, in claim order.
+/// The base profile and its mandatory blind-wakeup baseline are always
+/// present; the visible-notification profile is added only when a
+/// plaintext-eligible service surface is configured (matching the
+/// internal `allow_plaintext_metadata` gate in `notify.rs`).
+pub(super) fn describe_supported_profiles(auth: &NotifyAuthConfig) -> Vec<&'static str> {
+    let mut profiles = vec![PROFILE_PUSH_GATEWAY, PROFILE_BLIND_WAKEUP];
+    if describe_plaintext_visibility(auth) == "service-gated" {
+        profiles.push(PROFILE_VISIBLE_NOTIFICATION);
+    }
+    profiles
 }
 
 pub(super) fn describe_plaintext_visibility(auth: &NotifyAuthConfig) -> &'static str {

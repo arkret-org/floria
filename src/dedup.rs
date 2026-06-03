@@ -235,7 +235,7 @@ impl NotifyDeduplicator {
         let last_error = response
             .rejected
             .iter()
-            .find_map(|rejected| rejected.reason.clone());
+            .find_map(|rejected| rejected.reason_code.clone());
         Some(NotifyStatus {
             idempotency_key: key.to_owned(),
             status,

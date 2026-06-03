@@ -119,12 +119,10 @@ const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
     &["cx.agent.pause", "cx.agent.resume", "cx.agent.deactivate"];
 
 /// Phase P2 — actor-private Personal Agent event kinds. These never
-/// reach user-device push by default: they're controller-private state
-/// transitions between the controller and its native agent runtime.
-/// Floria drops them with a 200 + zero-fanout ack. A follow-up
-/// subscription mechanism (TODO: opt-in controller-private channel)
-/// MAY route a subset to a dedicated `agent runtime endpoint`, but
-/// until that subscription gate lands the default is "do nothing".
+/// reach user-device push: they're controller-private state transitions
+/// between the controller and its native agent runtime. Floria drops
+/// them with a 200 + zero-fanout ack — there is no partial routing
+/// implementation behind this; drop is the complete behaviour.
 const AGENT_ACTOR_PRIVATE_KINDS: &[&str] = &[
     "cx.agent.draft.propose",
     "cx.agent.action_request",
@@ -143,9 +141,7 @@ enum AgentEventRouting {
     DurableLifecycle,
     /// Actor-private agent kind
     /// (`cx.agent.{draft.propose,action_request,action_approve,
-    /// action_reject}`): dropped — 200 OK, no provider dispatch. A
-    /// future opt-in subscription gate may upgrade specific kinds to
-    /// `agent runtime endpoint` fanout; today the default is drop.
+    /// action_reject}`): dropped — 200 OK, no provider dispatch.
     ActorPrivateDrop,
 }
 
@@ -714,11 +710,11 @@ fn validate_notification_contract(
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
         && (notification.sender_actor_display_name.is_some()
-            || notification.flow_name.is_some()
-            || notification.realm_name.is_some())
+            || notification.flow_title.is_some()
+            || notification.realm_title.is_some())
     {
         // Realm/Space reversal — `space_name` is gone from the wire
-        // model; the security-boundary name is now `realm_name`. The
+        // model; the security-boundary name is now `realm_title`. The
         // blind-profile blanket ban below stays as the active
         // enforcement — a follow-up `TODO(circle-rollout-P2C.3):` will
         // split this into Realm- vs Container-policy decisions once
@@ -1161,7 +1157,7 @@ async fn record_rejected_devices_audit(
         Ok(()) => {
             app_metrics::audit_divert("rejected_devices", "success");
             for device in rejected {
-                app_metrics::audit_rejected_devices(device.reason.as_deref(), 1);
+                app_metrics::audit_rejected_devices(device.reason_code.as_deref(), 1);
             }
             Ok(())
         }
@@ -1900,7 +1896,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 );
                 rejected.push(
                     rejected_device(device, Some(&device.push_key))
-                        .with_reason(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
+                        .with_reason_code(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
                 );
                 delivery_receipts.push(delivery_receipt(
                     None,
@@ -1931,7 +1927,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             rejected.push(
                 rejected_device(device, Some(&device.push_key))
-                    .with_reason(hint.reason_code.as_deref()),
+                    .with_reason_code(hint.reason_code.as_deref()),
             );
             delivery_receipts.push(delivery_receipt(
                 None,
@@ -2416,11 +2412,11 @@ fn idempotency_cache_key(idempotency_key: &str) -> String {
 fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     let mut normalized = Map::new();
 
-    if let Some(value) = notification.flow_name() {
-        normalized.insert("flow_name".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.flow_title() {
+        normalized.insert("flow_title".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.realm_name() {
-        normalized.insert("realm_name".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.realm_title() {
+        normalized.insert("realm_title".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.prio.as_ref() {
         normalized.insert("prio".to_owned(), Value::String(value.clone()));
@@ -2468,9 +2464,6 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     }
     if let Some(value) = notification.wakeup_kind() {
         normalized.insert("wakeup_kind".to_owned(), Value::String(value.to_owned()));
-    }
-    if let Some(value) = notification.sender.as_ref() {
-        normalized.insert("sender".to_owned(), Value::String(value.clone()));
     }
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
@@ -2520,7 +2513,9 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
         })
         .collect::<Option<Vec<_>>>()
         .unwrap_or_default();
-    devices.sort_by_key(canonical_sort_key);
+    devices.sort_by_cached_key(|value| {
+        contrix::canonical::canonical_json_string(value).unwrap_or_default()
+    });
     devices.dedup();
     normalized.insert("devices".to_owned(), Value::Array(devices));
 
@@ -2532,10 +2527,6 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     contrix::canonical::canonical_json_bytes(&Value::Object(normalized))
         .ok()
         .map(|bytes| request_hash(&bytes))
-}
-
-fn canonical_sort_key(value: &Value) -> String {
-    serde_json::to_string(value).unwrap_or_default()
 }
 
 fn enqueue_retry(

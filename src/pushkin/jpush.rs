@@ -612,8 +612,8 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -635,7 +635,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),

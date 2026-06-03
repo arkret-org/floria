@@ -116,7 +116,7 @@ fn merge_notification_data(
         }
     }
 
-    // `content`, `flow_name`, `sender_actor_display_name` etc. are no longer
+    // `content`, `flow_title`, `sender_actor_display_name` etc. are no longer
     // copied here. Even under the visible profile, the visible
     // title/body is rendered by `derive_alert` and ends up in the
     // provider's notification block (e.g. `aps.alert`,
@@ -130,9 +130,9 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
         .sender_label()
         .map(str::to_owned)
         .unwrap_or_else(|| "New activity".to_owned());
-    let room = notification.scope_name().map(ToOwned::to_owned);
+    let scope_title = notification.scope_title().map(ToOwned::to_owned);
 
-    let title = room.clone().unwrap_or_else(|| sender.clone());
+    let title = scope_title.clone().unwrap_or_else(|| sender.clone());
     let summary = match notification.wakeup_kind.as_deref() {
         Some("message") => message_summary(notification, &sender),
         Some("incoming_call") => {
@@ -158,14 +158,14 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
             if notification.user_is_target == Some(true)
                 && notification.membership.as_deref() == Some("invite") =>
         {
-            match room {
-                Some(room) => format!("{sender} invited you to {room}"),
+            match scope_title {
+                Some(scope_title) => format!("{sender} invited you to {scope_title}"),
                 None => format!("{sender} invited you"),
             }
         }
         Some(event_type) => {
             if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(room.is_some(), &sender, body)
+                maybe_prefix_sender(scope_title.is_some(), &sender, body)
             } else {
                 format!("{sender} sent {event_type}")
             }
@@ -182,7 +182,7 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
 }
 
 fn message_summary(notification: &Notification, sender: &str) -> String {
-    let has_room = notification.scope_name().is_some();
+    let has_scope = notification.scope_title().is_some();
     let msgtype = notification
         .content
         .as_ref()
@@ -191,7 +191,7 @@ fn message_summary(notification: &Notification, sender: &str) -> String {
     match msgtype {
         Some("m.text") | Some("m.notice") | Some("m.encrypted") | None => {
             if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(has_room, sender, body)
+                maybe_prefix_sender(has_scope, sender, body)
             } else {
                 format!("{sender} sent a message")
             }
@@ -206,7 +206,7 @@ fn message_summary(notification: &Notification, sender: &str) -> String {
             .unwrap_or_else(|| format!("{sender} sent an emote")),
         Some(other) => {
             if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(has_room, sender, body)
+                maybe_prefix_sender(has_scope, sender, body)
             } else {
                 format!("{sender} sent {other}")
             }
@@ -216,7 +216,7 @@ fn message_summary(notification: &Notification, sender: &str) -> String {
 
 fn fallback_summary(notification: &Notification, sender: &str) -> String {
     if let Some(body) = content_body(notification) {
-        return maybe_prefix_sender(notification.scope_name().is_some(), sender, body);
+        return maybe_prefix_sender(notification.scope_title().is_some(), sender, body);
     }
 
     match notification.counts.unread {
@@ -225,8 +225,8 @@ fn fallback_summary(notification: &Notification, sender: &str) -> String {
     }
 }
 
-fn maybe_prefix_sender(has_room: bool, sender: &str, body: String) -> String {
-    if has_room && sender != "New activity" {
+fn maybe_prefix_sender(has_scope: bool, sender: &str, body: String) -> String {
+    if has_scope && sender != "New activity" {
         format!("{sender}: {body}")
     } else {
         body
@@ -262,8 +262,8 @@ mod tests {
 
     fn message_notification() -> Notification {
         Notification {
-            flow_name: Some("Mission Control".to_owned()),
-            realm_name: None,
+            flow_title: Some("Mission Control".to_owned()),
+            realm_title: None,
             prio: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -286,7 +286,6 @@ mod tests {
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
-            sender: Some("@major:example.com".to_owned()),
             push_hint: None,
             devices: vec![device()],
             mention_redirect_target_actor_ids: Vec::new(),
@@ -328,8 +327,8 @@ mod tests {
         assert!(payload.data.get("message_id").is_none());
         assert!(payload.data.get("sender").is_none());
         assert!(payload.data.get("sender_actor_display_name").is_none());
-        assert!(payload.data.get("flow_name").is_none());
-        assert!(payload.data.get("realm_name").is_none());
+        assert!(payload.data.get("flow_title").is_none());
+        assert!(payload.data.get("realm_title").is_none());
         assert!(payload.data.get("content").is_none());
 
         // Allowed blind-wakeup fields survive.
@@ -368,8 +367,8 @@ mod tests {
     fn invitation_uses_human_readable_summary() {
         let payload = build_android_notification_payload(
             &Notification {
-                flow_name: Some("Nebula".to_owned()),
-                realm_name: None,
+                flow_title: Some("Nebula".to_owned()),
+                realm_title: None,
                 prio: None,
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
@@ -383,7 +382,6 @@ mod tests {
                 recipient_service_did: None,
                 delivery_binding_frontier: None,
                 wakeup_kind: Some("member".to_owned()),
-                sender: Some("@major:example.com".to_owned()),
                 push_hint: None,
                 devices: vec![device()],
                 mention_redirect_target_actor_ids: Vec::new(),

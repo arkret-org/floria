@@ -243,9 +243,13 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_name"] = Value::Null;
-    request_body["notification"]["realm_name"] = Value::Null;
+    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
+    // The bare `sender` field has been removed from the wire model (it was
+    // the spec forbidden-wire-field name). Sending it is now a hard schema
+    // violation at deserialization (`deny_unknown_fields`) — a stronger,
+    // earlier rejection than the old blind-profile plaintext gate.
     request_body["notification"]["sender"] = json!("@alice:example.com");
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
@@ -260,20 +264,8 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    assert_eq!(
-        response.status_code.unwrap(),
-        StatusCode::PRECONDITION_FAILED
-    );
-    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
-    let msg = body["error"]["message"].as_str().unwrap_or_default();
-    assert!(
-        msg.starts_with("plaintext_in_blind_profile"),
-        "expected plaintext_in_blind_profile reason code, got: {msg}"
-    );
-    assert!(
-        msg.contains("notification.sender"),
-        "expected notification.sender path mention, got: {msg}"
-    );
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    assert_notify_error(&mut response, "schema_violation", true).await;
 }
 
 #[tokio::test]
@@ -286,10 +278,9 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_name"] = Value::Null;
-    request_body["notification"]["realm_name"] = Value::Null;
+    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
-    request_body["notification"]["sender"] = Value::Null;
     request_body["notification"]["content"] = json!({
         "target_did": "did:web:bob.example.com"
     });
@@ -330,10 +321,9 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_name"] = Value::Null;
-    request_body["notification"]["realm_name"] = Value::Null;
+    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
-    request_body["notification"]["sender"] = Value::Null;
     request_body["notification"]["content"] = json!({
         "call_wakeup": {
             "relay_username": "did:web:relay.example.com"

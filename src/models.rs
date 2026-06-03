@@ -106,7 +106,7 @@ pub struct RejectedDevice {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    pub reason_code: Option<String>,
 }
 
 impl RejectedDevice {
@@ -118,19 +118,19 @@ impl RejectedDevice {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned),
-            reason: None,
+            reason_code: None,
         }
     }
 
     /// Attach a wire-safe reason code. Empty / whitespace strings are
-    /// dropped — floria never emits an empty `reason` field, only
+    /// dropped — floria never emits an empty `reason_code` field, only
     /// `None`. The matching T4.4 contract is: caller is responsible
     /// for using only the wire-safe `reason_code` set (e.g.
     /// `muted` / `not_mentioned` / `not_participating`); internal
     /// diagnostic strings are caller's problem to suppress before
     /// they reach floria.
-    pub fn with_reason(mut self, reason: Option<&str>) -> Self {
-        self.reason = reason
+    pub fn with_reason_code(mut self, reason_code: Option<&str>) -> Self {
+        self.reason_code = reason_code
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
@@ -160,12 +160,14 @@ pub struct DeliveryReceipt {
 #[serde(deny_unknown_fields)]
 pub struct Notification {
     #[serde(default)]
-    pub flow_name: Option<String>,
-    /// Realm/Space reversal: the security-boundary's human name is now
-    /// `realm_name` (was `space_name`). The new container-level Space
-    /// concept does not surface a wire name on this struct.
+    pub flow_title: Option<String>,
+    /// Realm/Space reversal: the security-boundary's human-readable label
+    /// is now `realm_title` (was `space_name`). Matches the spec's
+    /// forbidden-wire-fields replacement `notification.realm_title`. The
+    /// new container-level Space concept does not surface a wire name on
+    /// this struct.
     #[serde(default)]
-    pub realm_name: Option<String>,
+    pub realm_title: Option<String>,
     #[serde(default)]
     pub prio: Option<String>,
     #[serde(default)]
@@ -214,16 +216,15 @@ pub struct Notification {
     /// dispatch MUST validate the inbound binding matches this scope.
     #[serde(default)]
     pub recipient_service_did: Option<String>,
-    /// Receiver's accepted Space delivery-binding frontier when the
+    /// Receiver's accepted Realm delivery-binding frontier when the
     /// notify originated from a federation hop. Receiver returns
     /// `delivery_binding_stale` if its accepted frontier is ahead.
+    /// (Realm/Space reversal: delivery-binding is a Realm-level concept.)
     /// Spec 0a5ab85 §4.1.
     #[serde(default)]
     pub delivery_binding_frontier: Option<String>,
     #[serde(default)]
     pub wakeup_kind: Option<String>,
-    #[serde(default)]
-    pub sender: Option<String>,
     #[serde(default)]
     pub push_hint: Option<String>,
     /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
@@ -257,8 +258,8 @@ impl Notification {
             .or_else(|| self.realm_id())
     }
 
-    pub fn scope_name(&self) -> Option<&str> {
-        self.flow_name().or(self.realm_name())
+    pub fn scope_title(&self) -> Option<&str> {
+        self.flow_title().or(self.realm_title())
     }
 
     pub fn circle_id(&self) -> Option<&str> {
@@ -277,16 +278,16 @@ impl Notification {
         non_empty(self.realm_id.as_deref())
     }
 
-    pub fn flow_name(&self) -> Option<&str> {
-        non_empty(self.flow_name.as_deref())
+    pub fn flow_title(&self) -> Option<&str> {
+        non_empty(self.flow_title.as_deref())
     }
 
-    pub fn realm_name(&self) -> Option<&str> {
-        non_empty(self.realm_name.as_deref())
+    pub fn realm_title(&self) -> Option<&str> {
+        non_empty(self.realm_title.as_deref())
     }
 
     pub fn sender_label(&self) -> Option<&str> {
-        non_empty(self.sender_actor_display_name.as_deref()).or(non_empty(self.sender.as_deref()))
+        non_empty(self.sender_actor_display_name.as_deref())
     }
 
     pub fn wakeup_kind(&self) -> Option<&str> {
@@ -319,8 +320,8 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Device {
-    pub app_id: String,
     pub push_key: String,
+    pub app_id: String,
     #[serde(default)]
     pub data: Option<Map<String, Value>>,
     #[serde(default)]
@@ -367,7 +368,7 @@ pub struct PushDecisionHint {
     #[serde(default)]
     pub blind_wakeup: bool,
     /// Wire-safe reason code. Mirrored into
-    /// `RejectedDevice.reason` when `deliver=false`. Empty / missing
+    /// `RejectedDevice.reason_code` when `deliver=false`. Empty / missing
     /// is treated as `dont_notify` (no public reason emitted) — this
     /// keeps the wire surface tight without leaking diagnostics.
     #[serde(default)]
@@ -488,7 +489,7 @@ mod tests {
         assert_eq!(rejected.app_id.as_deref(), Some("com.example.app"));
         assert!(rejected.push_key.starts_with("pkh_"));
         assert_ne!(rejected.push_key, "token-123");
-        assert!(rejected.reason.is_none());
+        assert!(rejected.reason_code.is_none());
     }
 
     #[test]
