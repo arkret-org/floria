@@ -169,8 +169,8 @@ pub(super) fn record_delivery_receipt_outcomes(
 
 /// CXP-0007 — emit the per-(provider, scope) delivery counter. When
 /// `detailed_circle_labels` is `true` and the notification carried a
-/// `circle_id`, labels with `scope_kind=circle, scope_id=<cx:circle:…>`.
-/// Otherwise labels with `scope_kind=realm, scope_id=<cx:realm:…>` to
+/// `circle_id`, labels with `scope_kind=circle, scope_id=<ck:circle:…>`.
+/// Otherwise labels with `scope_kind=realm, scope_id=<ck:realm:…>` to
 /// keep the cardinality bounded.
 pub(super) fn record_notify_delivery_by_scope(
     notification: &Notification,
@@ -295,7 +295,7 @@ mod cardinality_guard_tests {
         reset_cardinality_guard_for_tests();
         for i in 0..10 {
             assert!(
-                record_circle_and_check_guard(&format!("cx:circle:{i}")),
+                record_circle_and_check_guard(&format!("ck:circle:{i}")),
                 "well under threshold must keep returning true"
             );
         }
@@ -308,13 +308,13 @@ mod cardinality_guard_tests {
         reset_cardinality_guard_for_tests();
         // Fill the set up to the threshold.
         for i in 0..DETAILED_CIRCLE_LABEL_THRESHOLD {
-            assert!(record_circle_and_check_guard(&format!("cx:circle:{i}")));
+            assert!(record_circle_and_check_guard(&format!("ck:circle:{i}")));
         }
         assert!(!detailed_circle_labels_downgraded());
         // The (threshold+1)th NEW id trips the guard.
-        assert!(!record_circle_and_check_guard("cx:circle:trip"));
+        assert!(!record_circle_and_check_guard("ck:circle:trip"));
         assert!(detailed_circle_labels_downgraded());
         // Subsequent calls keep returning false without re-touching the set.
-        assert!(!record_circle_and_check_guard("cx:circle:after"));
+        assert!(!record_circle_and_check_guard("ck:circle:after"));
     }
 }

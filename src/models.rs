@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use blake2::Blake2s256;
 use blake2::digest::Digest;
-use contrix::EffectiveScope;
+use cokret::EffectiveScope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -28,7 +28,7 @@ pub struct NotifyRequest {
     pub collapse_key: Option<String>,
     /// Round 4 (spec a77b995) — caller-supplied wire-safe `reason_code`
     /// on the inbound request. When set to
-    /// [`contrix::ERROR_CODE_HISTORICAL_ONLY`] the request is a soland
+    /// [`cokret::ERROR_CODE_HISTORICAL_ONLY`] the request is a soland
     /// diagnostic replay and MUST NOT trigger a fresh push fanout — the
     /// gateway answers a 200 idempotency-style ack instead. Other values
     /// are rejected with `schema_violation` (floria only honors the
@@ -50,7 +50,7 @@ pub struct NotifyRequest {
 /// `e2ee_late_recovery` access_kind here means soland routed an audit
 /// event through the gateway's HTTP surface; the gateway forwards it
 /// to the configured audit sink and MUST NOT do any push fanout.
-/// Mirrors [`contrix::AuditPolicyAccessPayload`] but with
+/// Mirrors [`cokret::AuditPolicyAccessPayload`] but with
 /// only the wire fields floria needs to make the routing decision.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -183,12 +183,12 @@ pub struct Notification {
     #[serde(default)]
     pub flow_id: Option<String>,
     /// Realm/Space reversal: the security boundary's id is now `realm_id`
-    /// (typed `cx:realm:`). The old container-level `place_id` becomes
+    /// (typed `ck:realm:`). The old container-level `place_id` becomes
     /// the new `space_id` — that one is forbidden on the push wire
     /// model entirely so it does NOT appear on this struct.
     #[serde(default)]
     pub realm_id: Option<String>,
-    /// CXP-0007 Circle primitive (spec b7d35be) — typed `cx:circle:` id
+    /// CXP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
     /// of the encryption sub-boundary this notification belongs to. When
     /// present, routing / dedup / per-(provider,realm,circle) circuit
     /// breaker stats key off this id rather than the parent realm so two
@@ -229,7 +229,7 @@ pub struct Notification {
     pub push_hint: Option<String>,
     /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
     /// fragment that mirrors the SDK's
-    /// [`contrix::MentionRedirectRouting`]. When the list is non-empty
+    /// [`cokret::MentionRedirectRouting`]. When the list is non-empty
     /// each device's [`Device::target_actor_id`] MUST appear in this
     /// allow-list or the device is failed-closed (rejected without
     /// fanout, no provider call, no body decryption). An empty / missing
@@ -504,9 +504,9 @@ mod tests {
             "ttl_seconds": 900,
             "collapse_key": "space-1",
             "notification": {
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "realm_id": "cx:realm:01JS0SP000000000000000000",
-                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ck:event:01JS0EV000000000000000000",
+                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "devices": [{
                     "app_id": "app.example.android",
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
         let response = NotifyResponse {
-            request_id: "cx:request:123".to_owned(),
+            request_id: "ck:request:123".to_owned(),
             accepted: 1,
             rejected: vec![super::RejectedDevice::new(
                 Some("app.example.android"),
@@ -543,7 +543,7 @@ mod tests {
                 status: Some("accepted".to_owned()),
                 retry_after_ms: None,
                 timestamp: Some("2026-05-02T00:00:00Z".to_owned()),
-                request_id: Some("cx:request:123".to_owned()),
+                request_id: Some("ck:request:123".to_owned()),
             }],
         };
 

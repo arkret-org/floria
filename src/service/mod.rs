@@ -19,20 +19,20 @@ mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
 const NOTIFY_OPERATION_ID: &str = "cx.push.notify";
-const ACTIVE_EVENT_ID_PREFIX: &str = "cx:event:";
-const ACTIVE_MESSAGE_ID_PREFIX: &str = "cx:message:";
-const ACTIVE_FLOW_ID_PREFIX: &str = "cx:flow:";
+const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
+const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
+const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
 // Realm/Space reversal: the security boundary is now Realm with typed
-// prefix `cx:realm:`. The push wire model carries `realm_id`, never the
+// prefix `ck:realm:`. The push wire model carries `realm_id`, never the
 // container-level `space_id` (which is on the forbidden-key list).
-const ACTIVE_REALM_ID_PREFIX: &str = "cx:realm:";
+const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
 // CXP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
 // inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
 // when present so two Flows that share a name in different Circles do
 // not collide. `circle_id` is gateway-routing only; it MUST NOT be
 // echoed back to providers (the local strip list in
 // `pushkin/mod.rs::LOCAL_FORBIDDEN_FIELDS` enforces that).
-const ACTIVE_CIRCLE_ID_PREFIX: &str = "cx:circle:";
+const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
 // floria entirely. The four broadcast ephemeral signal kinds
@@ -45,9 +45,9 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "cx:circle:";
 // so an
 // ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
 // future caller ever pipes an ephemeral as a durable Event, the
-// `validate_active_notification_refs` ID-prefix gate (`cx:event:` /
-// `cx:message:` / `cx:flow:` / `cx:realm:`) is the second line of
-// defence — there is no `cx:presence:` or `cx:typing:` typed-id, so
+// `validate_active_notification_refs` ID-prefix gate (`ck:event:` /
+// `ck:message:` / `ck:flow:` / `ck:realm:`) is the second line of
+// defence — there is no `ck:presence:` or `ck:typing:` typed-id, so
 // the prefix check rejects it.
 
 fn notify_route(path: &'static str) -> Router {

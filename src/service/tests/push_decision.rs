@@ -222,15 +222,15 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     assert_eq!(origin_service_did, "<anonymous>");
     assert_eq!(
         notification_event_id.as_deref(),
-        Some("cx:event:01JS0EV000000000000000000")
+        Some("ck:event:01JS0EV000000000000000000")
     );
     assert_eq!(
         notification_flow_id.as_deref(),
-        Some("cx:flow:01JS0FLOW000000000000000")
+        Some("ck:flow:01JS0FLOW000000000000000")
     );
     assert_eq!(
         notification_realm_id.as_deref(),
-        Some("cx:realm:01JS0SP000000000000000000")
+        Some("ck:realm:01JS0SP000000000000000000")
     );
     assert_eq!(devices, &resp.rejected);
 }
@@ -296,7 +296,7 @@ async fn mention_reference_v2_fields_are_not_push_payload_fields() {
     // AST concern and MUST NOT be accepted by the push notification
     // wire model.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["notification"]["subject_id"] = json!("cx:message:01JS0MSG0000000000000000");
+    body["notification"]["subject_id"] = json!("ck:message:01JS0MSG0000000000000000");
     body["notification"]["display_name_at_time"] = json!("Alice");
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
@@ -362,7 +362,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["audit_envelope"] = json!({
         "access_kind": "e2ee_late_recovery",
-        "late_recovery_original_event_id": "cx:event:01JS0EV000000000000000000",
+        "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
     });
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
@@ -395,19 +395,19 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     assert_eq!(access_kind, "e2ee_late_recovery");
     assert_eq!(
         late_recovery_original_event_id.as_deref(),
-        Some("cx:event:01JS0EV000000000000000000")
+        Some("ck:event:01JS0EV000000000000000000")
     );
     assert_eq!(
         notification_event_id.as_deref(),
-        Some("cx:event:01JS0EV000000000000000000")
+        Some("ck:event:01JS0EV000000000000000000")
     );
     assert_eq!(
         notification_flow_id.as_deref(),
-        Some("cx:flow:01JS0FLOW000000000000000")
+        Some("ck:flow:01JS0FLOW000000000000000")
     );
     assert_eq!(
         notification_realm_id.as_deref(),
-        Some("cx:realm:01JS0SP000000000000000000")
+        Some("ck:realm:01JS0SP000000000000000000")
     );
 }
 
@@ -420,7 +420,7 @@ async fn audit_envelope_without_sink_is_temporarily_unavailable() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["audit_envelope"] = json!({
         "access_kind": "e2ee_late_recovery",
-        "late_recovery_original_event_id": "cx:event:01JS0EV000000000000000000",
+        "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
     });
 
     let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")

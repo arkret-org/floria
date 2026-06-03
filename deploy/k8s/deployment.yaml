@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: floria
-          image: ghcr.io/contrix-dev/floria:latest
+          image: ghcr.io/cokret-dev/floria:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

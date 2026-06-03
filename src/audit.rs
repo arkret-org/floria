@@ -170,8 +170,8 @@ mod tests {
             origin_service_did: "did:web:sync.example.com".to_owned(),
             destination_service_did: Some("did:web:push.example.com".to_owned()),
             access_kind: "e2ee_late_recovery".to_owned(),
-            late_recovery_original_event_id: Some("cx:event:late".to_owned()),
-            notification_event_id: Some("cx:event:notify".to_owned()),
+            late_recovery_original_event_id: Some("ck:event:late".to_owned()),
+            notification_event_id: Some("ck:event:notify".to_owned()),
             notification_flow_id: None,
             notification_realm_id: None,
         };

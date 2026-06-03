@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use contrix::push_gateway_api::{
+use cokret::push_gateway_api::{
     PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribePrivacyDescriptor,
     PushBridgeDescribeResponse, PushBridgeFailureCodeDescriptor,
@@ -60,16 +60,16 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         contract: "cx.push.bridge.describe".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the
-        // contrix-spec revision the SDK is compiled against) and from the
+        // cokret-spec revision the SDK is compiled against) and from the
         // config-file `SCHEMA_VERSION`. Pinned to the SDK provider-matrix
         // version so it moves in lockstep with the capability snapshot
         // rather than drifting as a hand-edited date.
         version: PROVIDER_CAPABILITIES_VERSION.to_owned(),
         api_base_path: "/api/v1/push".to_owned(),
-        // `spec_version` = the contrix-spec revision the SDK was built
+        // `spec_version` = the cokret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.
-        spec_version: Some(contrix::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
+        spec_version: Some(cokret::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
             service_did: state.notify_auth.gateway_service_did.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)
@@ -82,7 +82,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         notify: PushBridgeDescribeNotifyDescriptor {
             notify_path: "/api/v1/push/notify".to_owned(),
             operation_id: NOTIFY_OPERATION_ID.to_owned(),
-            request_id_header: "X-Contrix-Request-Id".to_owned(),
+            request_id_header: "X-Cokret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
             origin_service_did_header: ORIGIN_SERVICE_DID_HEADER.to_owned(),
             destination_service_did_header: DESTINATION_SERVICE_DID_HEADER.to_owned(),
@@ -168,30 +168,30 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // proxy hop). The strings are pinned to the SDK error-code
             // constants so a spec-side rename forces a recompile here.
             PushBridgeFailureCodeDescriptor::new(
-                contrix::error::ERROR_CODE_AGENT_PAUSED,
+                cokret::error::ERROR_CODE_AGENT_PAUSED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                contrix::error::ERROR_CODE_AGENT_DEACTIVATED,
+                cokret::error::ERROR_CODE_AGENT_DEACTIVATED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                contrix::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                cokret::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
-                "A media-service token-exchange or recording artifact reference would route through a destination outside the Contrix blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
+                "A media-service token-exchange or recording artifact reference would route through a destination outside the Cokret blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
             ),
         ],
         examples: PushBridgeDescribeExamples {
             notify_headers: serde_json::json!({
-                "X-Contrix-Request-Id": "req_01js0000000000000000000000",
+                "X-Cokret-Request-Id": "req_01js0000000000000000000000",
                 "Idempotency-Key": "notify-01js0000000000000000000000",
-                "X-Contrix-Origin-Service-Did": "did:web:soland.example",
-                "X-Contrix-Destination-Service-Did": state.notify_auth.gateway_service_did,
+                "X-Cokret-Origin-Service-Did": "did:web:soland.example",
+                "X-Cokret-Destination-Service-Did": state.notify_auth.gateway_service_did,
             }),
             // Default interop privacy baseline
             // (`cx.profile.push_gateway.blind_wakeup.v1`): identifying
@@ -202,7 +202,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // profile) below. Spec push-notifications.md §5.1.
             blind_wakeup_request: serde_json::json!({
                 "notification": {
-                    "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "push_hint": "new_message",
                     "counts": {"unread": 3}
@@ -210,9 +210,9 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             }),
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
-                    "event_id": "cx:event:01964000-0000-7000-8000-000000000000",
-                    "flow_id": "cx:flow:01964000-0000-7000-8000-000000000000",
-                    "realm_id": "cx:realm:01964000-0000-7000-8000-000000000000",
+                    "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
+                    "flow_id": "ck:flow:01964000-0000-7000-8000-000000000000",
+                    "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
                     "push_hint": "new_message",
                     "preview": "Alice: deploy is complete",
                     "counts": {"unread": 3}

@@ -66,7 +66,7 @@ fn merge_notification_data(
     // from the e2ee wakeup payload it pulls server-side, never from the
     // provider wire format. `push_hint` survives only when it matches
     // the SDK's closed enum (validated via `sanitized_provider_payload`).
-    use contrix::blind_payload_sanitizer as sdk;
+    use cokret::blind_payload_sanitizer as sdk;
 
     if let Some(push_target_id) = notification.push_target_id.as_deref()
         && sdk::is_valid_push_target_id(push_target_id)
@@ -277,12 +277,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
+            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(
             payload.data.get("push_target_id"),
             Some(&Value::String(
-                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
+                "ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()
             ))
         );
         assert_eq!(
@@ -373,12 +373,12 @@ mod tests {
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
                 content: None,
-                event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
+                event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
                 message_id: None,
-                flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
+                flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
                 realm_id: None,
                 user_is_target: Some(true),
-                push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+                push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
                 recipient_service_did: None,
                 delivery_binding_frontier: None,
                 wakeup_kind: Some("member".to_owned()),

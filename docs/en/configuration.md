@@ -384,7 +384,7 @@ environment variable is used as a fallback.
 
 ## `apps` — push providers
 
-Each child node under `apps` is keyed by its contrix `app_id`. The `app_id` can
+Each child node under `apps` is keyed by its cokret `app_id`. The `app_id` can
 be an exact string or a glob pattern (e.g. `com.example.*`).
 
 Every provider accepts these common fields:

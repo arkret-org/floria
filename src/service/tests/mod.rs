@@ -265,13 +265,13 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
         "operation_id": NOTIFY_OPERATION_ID,
         "origin_service_did": "did:web:sync.example.com",
         "notification": {
-            "event_id": "cx:event:01JS0EV000000000000000000",
-            "message_id": "cx:message:01JS0MSG0000000000000000",
-            "flow_id": "cx:flow:01JS0FLOW000000000000000",
-            "realm_id": "cx:realm:01JS0SP000000000000000000",
+            "event_id": "ck:event:01JS0EV000000000000000000",
+            "message_id": "ck:message:01JS0MSG0000000000000000",
+            "flow_id": "ck:flow:01JS0FLOW000000000000000",
+            "realm_id": "ck:realm:01JS0SP000000000000000000",
             "flow_title": "Engineering",
             "sender_actor_display_name": "Alice",
-            "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "push_hint": "new_message",
             "devices": devices

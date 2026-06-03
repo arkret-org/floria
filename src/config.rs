@@ -556,7 +556,7 @@ pub struct NotifyAuthConfig {
     /// if that DID has a configured `service_principal` entry whose
     /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
     /// stolen gateway-wide bearer token from being used to impersonate
-    /// an arbitrary tenant via the X-Contrix-Origin-Service-DID header.
+    /// an arbitrary tenant via the X-Cokret-Origin-Service-DID header.
     /// Has no effect in `production_mode` (which already disables the
     /// gateway-wide bearer fallback).
     pub bind_bearer_to_origin_did: bool,
@@ -1791,7 +1791,7 @@ fn normalize_listen_addr(raw: &str, default_port: u16) -> Result<String> {
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://contrix.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
+        "$id": "https://cokret.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",

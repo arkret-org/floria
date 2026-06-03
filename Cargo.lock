@@ -149,6 +149,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -627,53 +639,55 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix"
+name = "cokret"
 version = "1.0.0"
 dependencies = [
+ "argon2",
  "base64 0.22.1",
  "chacha20poly1305",
  "chrono",
  "chrono-tz",
- "contrix-contracts",
- "contrix-core",
- "contrix-crypto",
- "contrix-ffi",
- "contrix-html",
- "contrix-signatures",
- "contrix-testing",
+ "cokret-contracts",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-ffi",
+ "cokret-html",
+ "cokret-signatures",
  "ed25519-dalek",
  "getrandom 0.3.4",
+ "hkdf",
+ "parking_lot",
  "regex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "subtle",
  "thiserror 2.0.18",
- "ulid",
  "uuid",
  "x25519-dalek",
 ]
 
 [[package]]
-name = "contrix-contracts"
+name = "cokret-contracts"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "contrix-core",
- "contrix-crypto",
- "contrix-html",
- "contrix-signatures",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-html",
+ "cokret-signatures",
  "serde",
  "serde_json",
  "tracing",
 ]
 
 [[package]]
-name = "contrix-core"
+name = "cokret-core"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "contrix-identifiers",
+ "cokret-identifiers",
  "getrandom 0.3.4",
  "regex",
  "serde",
@@ -683,12 +697,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-crypto"
+name = "cokret-crypto"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "contrix-core",
- "contrix-signatures",
+ "cokret-core",
+ "cokret-signatures",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -696,25 +710,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-ffi"
+name = "cokret-ffi"
 version = "1.0.0"
 dependencies = [
- "contrix-core",
+ "cokret-core",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "contrix-html"
+name = "cokret-html"
 version = "1.0.0"
 dependencies = [
- "contrix-core",
+ "cokret-core",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "contrix-identifiers"
+name = "cokret-identifiers"
 version = "1.0.0"
 dependencies = [
  "getrandom 0.2.17",
@@ -726,31 +740,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-signatures"
+name = "cokret-signatures"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "contrix-core",
+ "cokret-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "contrix-testing"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "contrix-contracts",
- "contrix-core",
- "contrix-crypto",
- "contrix-ffi",
- "contrix-html",
- "contrix-signatures",
- "serde",
- "serde_json",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -1354,7 +1352,7 @@ dependencies = [
  "base64 0.22.1",
  "blake2",
  "chacha20poly1305",
- "contrix",
+ "cokret",
  "ed25519-dalek",
  "futures",
  "globset",
@@ -3074,6 +3072,17 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]

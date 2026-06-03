@@ -333,7 +333,7 @@ impl FcmPushkin {
         // operators can plug in static client-config keys
         // (`client=android`, theme overrides, …) — but it goes through
         // the same sanitizer and any forbidden key is stripped.
-        use contrix::blind_payload_sanitizer as sdk;
+        use cokret::blind_payload_sanitizer as sdk;
 
         let mut data = default_payload;
         let mut overflow_fields = 0usize;
@@ -693,12 +693,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
+            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: None,
-            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
@@ -728,7 +728,7 @@ mod tests {
         assert_eq!(
             payload.get("push_target_id"),
             Some(&Value::String(
-                "cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()
+                "ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()
             ))
         );
         assert_eq!(

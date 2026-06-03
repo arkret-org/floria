@@ -18,7 +18,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
-use contrix::push_gateway_api::ProviderCapabilityDescriptor;
+use cokret::push_gateway_api::ProviderCapabilityDescriptor;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;
@@ -531,12 +531,12 @@ pub fn sanitized_provider_payload(
     strip_forbidden_recursive(&mut payload);
     let envelope = serde_json::json!({
         "notification": {
-            "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+            "push_target_id": "ck:pseudonym:push:0000000000000000000000",
             "wakeup_kind": "message",
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
-    if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
+    if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
         return Err(ProviderPayloadRejection {
             field_path: err.field_path,
             reason_code: err.reason_code.as_str().to_owned(),
@@ -631,7 +631,7 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // `space_id`. The local R23 list adds the round-R23 governance
     // identifiers and CXP-0007's `circle_id` / `effective_scope`.
     map.retain(|key, _| {
-        !contrix::blind_payload_sanitizer::is_forbidden_payload_key(key)
+        !cokret::blind_payload_sanitizer::is_forbidden_payload_key(key)
             && !is_local_forbidden_field(key)
     });
     for value in map.values_mut() {
@@ -666,7 +666,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` / `unread_count` (clamped at SDK MAX_COUNT_VALUE)
 pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
-    use contrix::blind_payload_sanitizer as sdk;
+    use cokret::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
     if let Some(push_target_id) = notification.push_target_id.as_deref()
@@ -728,7 +728,7 @@ mod sanitize_tests {
     fn sanitized_provider_payload_strips_event_id() {
         let payload = json!({
             "client": "android",
-            "event_id": "cx:event:01JS0EV000000000000000000",
+            "event_id": "ck:event:01JS0EV000000000000000000",
             "wakeup_kind": "message",
         })
         .as_object()
@@ -775,7 +775,7 @@ mod sanitize_tests {
     /// audit agent, or cross-signing reset.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields() {
-        // We stage values that are safe (no `did:` / `cx:` literals)
+        // We stage values that are safe (no `did:` / `ck:` literals)
         // so the sanitizer doesn't reject for `sensitive_literal`; the
         // only assertion is "key was removed from the output map".
         let payload = json!({
@@ -864,14 +864,14 @@ mod sanitize_tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: None,
-            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
+            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
             recipient_service_did: None,
             delivery_binding_frontier: None,
             user_is_target: None,
-            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
@@ -899,6 +899,6 @@ mod sanitize_tests {
         let a = random_collapse_key();
         let b = random_collapse_key();
         assert_ne!(a, b);
-        assert!(!a.contains("cx:"));
+        assert!(!a.contains("ck:"));
     }
 }

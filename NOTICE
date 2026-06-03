@@ -1,8 +1,8 @@
 floria
-Copyright 2025-2026 The Contrix Project Authors
+Copyright 2025-2026 The Cokret Project Authors
 
-This product includes software developed by the Contrix Project
-(https://contrix.dev).
+This product includes software developed by the Cokret Project
+(https://cokret.dev).
 
 This project depends on third-party Rust crates whose licenses are
 listed in `LICENSES.third-party.md` (generated via cargo-about or

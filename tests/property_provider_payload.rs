@@ -7,7 +7,7 @@
 //!
 //!  1. **Any forbidden top-level or nested key is stripped** — the sanitized output never contains
 //!     a name on the SDK forbidden list at any nesting depth.
-//!  2. **`did:` / `cx:` literals are rejected** — strings that smell like correlation identifiers
+//!  2. **`did:` / `ck:` literals are rejected** — strings that smell like correlation identifiers
 //!     cause a `ProviderPayloadRejection` rather than silently surviving.
 //!  3. **Allowed static config keys (`client`, `wakeup_kind`, etc.) round-trip unchanged** —
 //!     sanitization is removal-only.
@@ -105,7 +105,7 @@ fn arb_leaf() -> impl Strategy<Value = Value> {
         Just(Value::Null),
         any::<bool>().prop_map(Value::Bool),
         // Non-sensitive ASCII text only (so we don't trigger the
-        // `did:` / `cx:` sensitive-literal path in this property).
+        // `did:` / `ck:` sensitive-literal path in this property).
         "[a-zA-Z0-9_ .-]{0,16}".prop_map(Value::String),
         any::<i32>().prop_map(|n| json!(n)),
     ]
@@ -181,7 +181,7 @@ proptest! {
     #[test]
     fn did_or_cx_literal_in_extra_field_is_rejected(
         suffix in "[a-z0-9]{1,12}",
-        prefix in prop_oneof![Just("did:web:"), Just("cx:event:"), Just("cx:flow:")],
+        prefix in prop_oneof![Just("did:web:"), Just("ck:event:"), Just("ck:flow:")],
     ) {
         // Use a key that is NOT in the forbidden list, so the only
         // rejection path is the sensitive-literal check.
@@ -191,7 +191,7 @@ proptest! {
         payload.insert("custom_tracer".into(), json!(format!("{prefix}{suffix}")));
         prop_assert!(
             sanitized_provider_payload(payload).is_err(),
-            "did:/cx: literal smuggled in custom_tracer slipped through"
+            "did:/ck: literal smuggled in custom_tracer slipped through"
         );
     }
 

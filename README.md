@@ -1,6 +1,6 @@
 # floria
 
-> **Spec target**: [contrix-spec @ c2848a4](../contrix-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
 
 Push gateway service in Rust.
 
@@ -15,7 +15,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`contrix-rust-sdk`](https://github.com/contrix-dev/contrix-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
 adapt to your local toolchain.
 
 ## Realm vs Space
@@ -33,7 +33,7 @@ The push payloads carry the new `realm_id` field while keeping the old
 
 ## Round R4 (protocol review closures)
 
-Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds
+Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds
 three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 `[Unreleased]` and [`../_todos.md`](../_todos.md) for the canonical
 wire-breaking list.
@@ -61,7 +61,7 @@ new internal broadcast endpoints — `POST /api/v1/internal/
 account_deactivate_fanout` (T07) and `POST /api/v1/internal/
 consent_revoke` (T17) — consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
-[`../contrix-spec/CHANGELOG.md`](../contrix-spec/CHANGELOG.md) for the
+[`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the
 normative source. Ephemeral kinds (`cx.presence`, `cx.typing`,
 `cx.receipt.read`, `cx.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
@@ -82,7 +82,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 
 ## Supported features
 
-- `POST /api/v1/push/notify` as the canonical Contrix notify endpoint
+- `POST /api/v1/push/notify` as the canonical Cokret notify endpoint
 - `GET /api/v1/push/describe` gateway profile discovery (`/api/v1/server/describe` is an identical alias)
 - `GET /health`
 - `GET /ready`
@@ -136,7 +136,7 @@ Quick notes:
 - `push_hint` is a body-free wakeup hint and must not contain plaintext message content
 - the push gateway is a derived wakeup surface, not canonical truth for events or unread state
 
-## Contrix notify semantics
+## Cokret notify semantics
 
 - `/api/v1/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
 - `cx.push.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
@@ -164,7 +164,7 @@ Sample files:
 ## Run
 
 ```powershell
-$env:FLORIA_CONF="E:\Works\contrix-dev\floria\floria.sample.kdl"
+$env:FLORIA_CONF="E:\Works\cokret-dev\floria\floria.sample.kdl"
 cargo run
 ```
 
@@ -230,5 +230,5 @@ Licensed under Apache 2.0. See `LICENSE`.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_floria_todos.md` in the parent `contrix-dev/` directory for the
+> `_floria_todos.md` in the parent `cokret-dev/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.

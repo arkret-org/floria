@@ -1,33 +1,33 @@
 # Changelog
 
-All notable changes to floria (Contrix push gateway) will be documented in this
+All notable changes to floria (Cokret push gateway) will be documented in this
 file. The format is loosely based on [Keep a Changelog]; floria follows the
-parent Contrix spec's round-numbering for grouping wire-breaking changes.
+parent Cokret spec's round-numbering for grouping wire-breaking changes.
 
-## R3.4 — Spec sync 2026-05-31 (contrix-spec @ c2848a4)
+## R3.4 — Spec sync 2026-05-31 (cokret-spec @ c2848a4)
 
-- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `cx:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
-
-> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-
-## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
-
-- R3.3 spec sync — pin to contrix-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ck:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-## R3.2 — Spec sync 2026-05-28 (contrix-spec @ b56cab1)
+
+## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
+
+- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
 
 - Audited for mention-reference wire fields: none present (push gateway routes by DID actor lists; `deny_unknown_fields` rejects stray legacy fields). No wire change required for the §3.8 mention shape v2.
-- Synced to contrix-spec @ b56cab1; media token signing remains `TODO(R3.2.1)`.
+- Synced to cokret-spec @ b56cab1; media token signing remains `TODO(R3.2.1)`.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+## R3 — Spec sync 2026-05-27 (cokret-spec @ b47ff6ec)
 
 - MEDIA-1: documented floria's `cx.call.media.token_exchange` role — proxy-to-soland for the v1 cycle; self-issue (option b) deferred to R3.1. Role decision lives in `src/media.rs` module docs.
-- MEDIA-2: Contrix-native binding token scaffolding (`ContrixNativeBackendToken`, `ContrixNativeTokenPayload`, `ContrixNativeMediaCaps`) per `bindings/contrix-native.md` §2; signing path fails closed until R3.1.
+- MEDIA-2: Cokret-native binding token scaffolding (`CokretNativeBackendToken`, `CokretNativeTokenPayload`, `CokretNativeMediaCaps`) per `bindings/cokret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
-- CARD-1: `bridge_describe` failure-codes now advertise `agent_paused`, `agent_deactivated`, `recording_artifact_pipeline_bypassed` sourced from `contrix::error::ERROR_CODE_*` so spec renames force a recompile.
+- CARD-1: `bridge_describe` failure-codes now advertise `agent_paused`, `agent_deactivated`, `recording_artifact_pipeline_bypassed` sourced from `cokret::error::ERROR_CODE_*` so spec renames force a recompile.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 
@@ -36,11 +36,11 @@ parent Contrix spec's round-numbering for grouping wire-breaking changes.
 ### CXP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
 
 Push-gateway alignment with the CXP-0007 Circle primitive landing in
-contrix-rust-sdk P1.
+cokret-rust-sdk P1.
 
 #### Added
 
-- `Notification.circle_id` (typed `cx:circle:…`) and
+- `Notification.circle_id` (typed `ck:circle:…`) and
   `Notification.effective_scope` (reducer-stamped envelope binding
   mirrored from the SDK's `EffectiveScope`). Routing / dedup /
   metrics key off `circle_id > flow_id > realm_id` precedence.
@@ -90,7 +90,7 @@ contrix-rust-sdk P1.
 - Version number stays `0.1.0` per the milestone hard rule (no
   release this round).
 
-### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+### Round R4 — protocol review closures (2026-05-20, cokret-spec `2a4d39b..a77b995`)
 
 Push-gateway alignment with the round-4 protocol-review commits. See
 [`../_todos.md`](../_todos.md) for the workstream context.
@@ -157,9 +157,9 @@ MUST upgrade soland and the principal-server fanout to a matching version.
   `ephemeral_envelope` / device-message channels in the Sync Service, are
   dropped at TTL, and MUST NOT enter floria's durable Event path. The
   `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects
-  `cx:` / `did:`) and the ID-prefix gate on
+  `ck:` / `did:`) and the ID-prefix gate on
   `event_id` / `message_id` / `flow_id` / `realm_id` together act as
-  defence-in-depth — no `cx:presence:` typed-id exists, so the prefix check
+  defence-in-depth — no `ck:presence:` typed-id exists, so the prefix check
   rejects any future caller that tries to smuggle an ephemeral as a durable
   Event. See the comment in `src/service/mod.rs`.
 - New test module `service::tests::internal` exercising both broadcast

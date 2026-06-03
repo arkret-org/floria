@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
-use contrix::http_signature::{
+use cokret::http_signature::{
     self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
 };
 use salvo::http::StatusCode;
@@ -13,8 +13,8 @@ use subtle::ConstantTimeEq;
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use crate::nonce_store::{NonceCheck, NonceStore};
 
-pub const ORIGIN_SERVICE_DID_HEADER: &str = "x-contrix-origin-service-did";
-pub const DESTINATION_SERVICE_DID_HEADER: &str = "x-contrix-destination-service-did";
+pub const ORIGIN_SERVICE_DID_HEADER: &str = "x-cokret-origin-service-did";
+pub const DESTINATION_SERVICE_DID_HEADER: &str = "x-cokret-destination-service-did";
 const CONTENT_DIGEST_HEADER: &str = "content-digest";
 const SIGNATURE_INPUT_HEADER: &str = "signature-input";
 const SIGNATURE_HEADER: &str = "signature";
@@ -253,7 +253,7 @@ fn authenticate_bearer_request(
     // declare an origin_service_did and present a bearer credential
     // configured for THAT principal. This blocks a stolen gateway
     // bearer token from being used to impersonate an arbitrary tenant
-    // by spoofing the X-Contrix-Origin-Service-DID header.
+    // by spoofing the X-Cokret-Origin-Service-DID header.
     if auth.bind_bearer_to_origin_did {
         let Some(origin_did) = origin_did else {
             tracing::warn!(
@@ -1203,7 +1203,7 @@ mod tests {
         );
         let now = unix_now_secs();
         let signature_input = format!(
-            "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now - 1,
             now + 300
         );
@@ -1212,10 +1212,10 @@ mod tests {
             format!("\"@target-uri\": {target_uri}"),
             format!("\"@authority\": {authority}"),
             format!("\"content-digest\": {digest}"),
-            "\"x-contrix-origin-service-did\": did:web:sync.example.com".to_owned(),
-            "\"x-contrix-destination-service-did\": did:web:push.example.com".to_owned(),
+            "\"x-cokret-origin-service-did\": did:web:sync.example.com".to_owned(),
+            "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
             format!(
-                "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+                "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
                 now - 1,
                 now + 300
             ),
@@ -1241,11 +1241,11 @@ mod tests {
             "operation_id": "cx.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "realm_id": "cx:realm:01JS0SP000000000000000000",
-                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ck:event:01JS0EV000000000000000000",
+                "message_id": "ck:message:01JS0MSG0000000000000000",
+                "flow_id": "ck:flow:01JS0FLOW000000000000000",
+                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
                 "devices": [{
@@ -1295,11 +1295,11 @@ mod tests {
             "operation_id": "cx.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "realm_id": "cx:realm:01JS0SP000000000000000000",
-                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ck:event:01JS0EV000000000000000000",
+                "message_id": "ck:message:01JS0MSG0000000000000000",
+                "flow_id": "ck:flow:01JS0FLOW000000000000000",
+                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
                 "devices": [{
@@ -1350,11 +1350,11 @@ mod tests {
             "operation_id": "cx.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "realm_id": "cx:realm:01JS0SP000000000000000000",
-                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ck:event:01JS0EV000000000000000000",
+                "message_id": "ck:message:01JS0MSG0000000000000000",
+                "flow_id": "ck:flow:01JS0FLOW000000000000000",
+                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
                 "devices": [{
@@ -1415,11 +1415,11 @@ mod tests {
             "operation_id": "cx.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
-                "event_id": "cx:event:01JS0EV000000000000000000",
-                "message_id": "cx:message:01JS0MSG0000000000000000",
-                "flow_id": "cx:flow:01JS0FLOW000000000000000",
-                "realm_id": "cx:realm:01JS0SP000000000000000000",
-                "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ck:event:01JS0EV000000000000000000",
+                "message_id": "ck:message:01JS0MSG0000000000000000",
+                "flow_id": "ck:flow:01JS0FLOW000000000000000",
+                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
                 "devices": [{"app_id": "com.example.app", "push_key": "accept"}]
@@ -1485,7 +1485,7 @@ mod tests {
         // Intentionally omit `@authority` from the covered components —
         // floria's required-component policy must still trip this.
         let signature_input = format!(
-            "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now - 1,
             now + 300
         );
@@ -1493,10 +1493,10 @@ mod tests {
             "\"@method\": post".to_owned(),
             "\"@target-uri\": http://127.0.0.1/api/v1/push/notify".to_owned(),
             format!("\"content-digest\": {digest}"),
-            "\"x-contrix-origin-service-did\": did:web:sync.example.com".to_owned(),
-            "\"x-contrix-destination-service-did\": did:web:push.example.com".to_owned(),
+            "\"x-cokret-origin-service-did\": did:web:sync.example.com".to_owned(),
+            "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
             format!(
-                "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-contrix-origin-service-did\" \"x-contrix-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+                "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
                 now - 1,
                 now + 300
             ),

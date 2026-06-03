@@ -49,7 +49,7 @@ http:
     #     # Bind this principal to a specific cert subject + SAN so a
     #     # fingerprint reuse on a different cert under the same trust
     #     # root is still rejected.
-    #     # mtls_subject_dn: "CN=sync.example.com,O=Contrix,C=US"
+    #     # mtls_subject_dn: "CN=sync.example.com,O=Cokret,C=US"
     #     # mtls_subject_alt_names:
     #     #   - "uri:did:web:sync.example.com"
     #

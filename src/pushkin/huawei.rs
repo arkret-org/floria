@@ -448,12 +448,12 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("cx:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("cx:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("cx:flow:01JS0FLOW000000000000000".to_owned()),
-            realm_id: Some("cx:realm:01JS0SP000000000000000000".to_owned()),
+            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
+            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
             user_is_target: Some(true),
-            push_target_id: Some("cx:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             recipient_service_did: None,
             delivery_binding_frontier: None,
             wakeup_kind: Some("message".to_owned()),
@@ -551,7 +551,7 @@ mod tests {
             "huawei data must not carry sender: {data_blob}"
         );
         assert!(
-            data_blob.contains("\"push_target_id\":\"cx:pseudonym:push:01HYZ8Z000000000000000\""),
+            data_blob.contains("\"push_target_id\":\"ck:pseudonym:push:01HYZ8Z000000000000000\""),
             "huawei data must carry push_target_id: {data_blob}"
         );
     }

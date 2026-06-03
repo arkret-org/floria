@@ -2,7 +2,7 @@
 
 floria still carries a local provider-payload sweep for Round R2/R3
 forbidden fields. The SDK exposes
-`contrix::blind_payload_sanitizer::is_forbidden_payload_key`, but the
+`cokret::blind_payload_sanitizer::is_forbidden_payload_key`, but the
 exported list is not yet sufficient for the newer realm, appeal,
 attestation, policy-frontier, cross-signing-reset, and Circle
 field names.
@@ -61,7 +61,7 @@ Do not remove the local sweep until all of these are true:
 
 ## Spec round upgrade checklist
 
-Use this when bumping floria to a newer contrix-spec round (R4 →
+Use this when bumping floria to a newer cokret-spec round (R4 →
 R5, CXP-0007 → CXP-0008, etc.):
 
 - [ ] Diff the new round's `forbidden_payload_keys` table against

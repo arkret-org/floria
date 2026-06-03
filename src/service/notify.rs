@@ -89,7 +89,7 @@ const FORBIDDEN_PLAINTEXT_PARENT_LEAF: &[(&str, &str)] = &[
 /// diagnostic replay. floria MUST NOT fan the request out a second
 /// time; it answers 200 with an empty rejected list and no provider
 /// retries. The wire constant comes from the SDK.
-const HISTORICAL_ONLY_REASON: &str = contrix::ERROR_CODE_HISTORICAL_ONLY;
+const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 
 /// Round 4 — `cx.audit.policy_access.access_kind` value that diverts
 /// to the audit pipeline. floria MUST NOT push-fan-out when the
@@ -163,22 +163,22 @@ fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
 /// (`agent_session`, `agent_key`, `agent_draft`,
 /// `accountability_grant`, `sidecar_circle`, `backup_series`,
 /// `recovery_session`). `agent_principal_id` is a DID-as-id, not a
-/// `cx:*` typed id. Floria does not route on these today — none
+/// `ck:*` typed id. Floria does not route on these today — none
 /// of them appear in the push-wire reference fields — but we keep the
 /// list here so the prefix validator is aware of them when a future
 /// notify field starts to carry one. Any caller that smuggles one of
 /// these into an `event_id` / `message_id` / `flow_id` / `realm_id` /
 /// `circle_id` slot still fails closed against the existing
 /// `validate_active_ref` gates because those slots are pinned to
-/// their own typed-id prefix (`cx:event:`, etc.).
+/// their own typed-id prefix (`ck:event:`, etc.).
 const PHASE_P2_AGENT_TYPED_ID_PREFIXES: &[&str] = &[
-    "cx:agent_session:",
-    "cx:agent_key:",
-    "cx:agent_draft:",
-    "cx:accountability_grant:",
-    "cx:sidecar_circle:",
-    "cx:backup_series:",
-    "cx:recovery_session:",
+    "ck:agent_session:",
+    "ck:agent_key:",
+    "ck:agent_draft:",
+    "ck:accountability_grant:",
+    "ck:sidecar_circle:",
+    "ck:backup_series:",
+    "ck:recovery_session:",
 ];
 
 /// Phase P2 — returns `true` if `value` starts with one of the seven
@@ -532,7 +532,7 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         ACTIVE_FLOW_ID_PREFIX,
     )?;
     // Realm/Space reversal — Realm/Space/Flow id. The security boundary
-    // is now Realm (`cx:realm:`); the new container-level `space_id` is
+    // is now Realm (`ck:realm:`); the new container-level `space_id` is
     // forbidden on the wire and rejected by the sanitizer below.
     validate_active_ref(
         notification.get("realm_id"),
@@ -605,7 +605,7 @@ fn validate_effective_scope_consistency(notification: &Notification) -> Result<(
 }
 
 fn validate_push_target_id(value: Option<&Value>) -> Result<(), String> {
-    const PREFIX: &str = "cx:pseudonym:push:";
+    const PREFIX: &str = "ck:pseudonym:push:";
     let Some(value) = value else {
         return Err("notification.push_target_id is required".to_owned());
     };
@@ -642,7 +642,7 @@ fn validate_wakeup_kind(value: Option<&Value>) -> Result<(), String> {
     if value.is_empty() {
         return Err("notification.wakeup_kind must not be empty".to_owned());
     }
-    if !contrix::blind_payload_sanitizer::is_valid_wakeup_kind(value) {
+    if !cokret::blind_payload_sanitizer::is_valid_wakeup_kind(value) {
         return Err(
             "notification.wakeup_kind must be one of message, mention, reaction, call_invite"
                 .to_owned(),
@@ -701,7 +701,7 @@ fn validate_active_ref(
 // rejected with `plaintext_in_blind_profile`. A caller on the visible
 // profile can still be rejected if the wire payload contains keys that
 // would let an observer correlate pushes across users (forbidden
-// payload keys, sensitive `did:` / `cx:` literals).
+// payload keys, sensitive `did:` / `ck:` literals).
 pub(super) const BLIND_PROFILE_PLAINTEXT_REASON: &str = "plaintext_in_blind_profile";
 
 fn validate_notification_contract(
@@ -905,10 +905,10 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
 // T1.1 — thin wrapper over the SDK's shared `is_valid_push_hint` so the
 // allowed `push_hint` vocabulary cannot drift between chime / floria.
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
-    if contrix::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
+    if cokret::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
         return Ok(());
     }
-    Err("Contrix blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
+    Err("Cokret blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
 }
 
 // T1.1 — thin wrapper over the SDK's `sanitize_blind_payload` recursive
@@ -918,18 +918,18 @@ fn validate_push_hint(push_hint: &str) -> Result<(), String> {
 fn validate_blind_content(path: &str, value: &Value) -> Result<(), String> {
     // Run the SDK sanitizer over the subtree by wrapping it in a synthetic
     // notification envelope so the wrapper-scan path (forbidden keys +
-    // sensitive did:/cx: literals) walks the whole tree without needing
+    // sensitive did:/ck: literals) walks the whole tree without needing
     // top-level `push_target_id` / `wakeup_kind` to be present.
     let envelope = serde_json::json!({
         "notification": {
-            "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+            "push_target_id": "ck:pseudonym:push:0000000000000000000000",
             "wakeup_kind": "message",
         },
         path: value,
     });
-    if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
+    if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
         return Err(format!(
-            "Contrix blind wakeup payloads must not include sensitive field `{}` ({})",
+            "Cokret blind wakeup payloads must not include sensitive field `{}` ({})",
             err.field_path,
             err.reason_code.as_str(),
         ));
@@ -968,7 +968,7 @@ fn validate_blind_string(path: &str, value: &str) -> Result<(), String> {
         || normalized.contains("v=0\n")
     {
         Err(format!(
-            "Contrix blind wakeup payloads must not include call setup material in `{path}`"
+            "Cokret blind wakeup payloads must not include call setup material in `{path}`"
         ))
     } else {
         Ok(())
@@ -976,7 +976,7 @@ fn validate_blind_string(path: &str, value: &str) -> Result<(), String> {
 }
 
 // T1.1 — the legacy `is_sensitive_payload_key` floria-local allow-list
-// has moved into `contrix::blind_payload_sanitizer::is_forbidden_payload_key`
+// has moved into `cokret::blind_payload_sanitizer::is_forbidden_payload_key`
 // so the chime/floria rule cannot drift. Callers now go through the SDK
 // helper via `validate_blind_content`.
 
@@ -1632,7 +1632,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     // T1.1 — for blind-only callers, additionally run the SDK
     // sanitizer over each device's `data.default_payload` subtree so
-    // that any forbidden field or did:/cx: literal that survived the
+    // that any forbidden field or did:/ck: literal that survived the
     // wire-model allow-list gets stopped before fan-out.
     if !caller.allow_plaintext_metadata
         && let Some(devices) = notification_object
@@ -1650,12 +1650,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             };
             let envelope = serde_json::json!({
                 "notification": {
-                    "push_target_id": "cx:pseudonym:push:0000000000000000000000",
+                    "push_target_id": "ck:pseudonym:push:0000000000000000000000",
                     "wakeup_kind": "message",
                 },
                 "default_payload": default_payload,
             });
-            if let Err(err) = contrix::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
+            if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,
@@ -2514,17 +2514,17 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
         .collect::<Option<Vec<_>>>()
         .unwrap_or_default();
     devices.sort_by_cached_key(|value| {
-        contrix::canonical::canonical_json_string(value).unwrap_or_default()
+        cokret::canonical::canonical_json_string(value).unwrap_or_default()
     });
     devices.dedup();
     normalized.insert("devices".to_owned(), Value::Array(devices));
 
     // Canonicalize the whole fingerprint tree via the SDK so the
-    // blind-wakeup digest is byte-identical to every other contrix
+    // blind-wakeup digest is byte-identical to every other cokret
     // service (soland/yougen/chime). `canonical_json_bytes` recursively
     // sorts object keys and emits the v1 canonical encoding, replacing
     // floria's former local `canonical_json_value` helper.
-    contrix::canonical::canonical_json_bytes(&Value::Object(normalized))
+    cokret::canonical::canonical_json_bytes(&Value::Object(normalized))
         .ok()
         .map(|bytes| request_hash(&bytes))
 }

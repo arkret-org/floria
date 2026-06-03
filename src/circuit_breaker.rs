@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn closes_under_threshold() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("cx:realm:r"), Some("cx:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ck:realm:r"), Some("ck:circle:c"));
         assert!(!breaker.is_open(&key));
         assert!(!breaker.record_failure(&key));
         assert!(!breaker.record_failure(&key));
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn opens_at_threshold() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("cx:realm:r"), Some("cx:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ck:realm:r"), Some("ck:circle:c"));
         breaker.record_failure(&key);
         breaker.record_failure(&key);
         assert!(breaker.record_failure(&key));
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn auto_resets_after_open_for_window() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("cx:realm:r"), Some("cx:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ck:realm:r"), Some("ck:circle:c"));
         breaker.record_failure(&key);
         breaker.record_failure(&key);
         breaker.record_failure(&key);
@@ -273,8 +273,8 @@ mod tests {
     #[test]
     fn realm_and_circle_keys_are_independent() {
         let breaker = CircuitBreaker::new(cfg());
-        let realm_key = BreakerKey::new("fcm", Some("cx:realm:r"), None);
-        let circle_key = BreakerKey::new("fcm", Some("cx:realm:r"), Some("cx:circle:c"));
+        let realm_key = BreakerKey::new("fcm", Some("ck:realm:r"), None);
+        let circle_key = BreakerKey::new("fcm", Some("ck:realm:r"), Some("ck:circle:c"));
         breaker.record_failure(&realm_key);
         breaker.record_failure(&realm_key);
         breaker.record_failure(&realm_key);

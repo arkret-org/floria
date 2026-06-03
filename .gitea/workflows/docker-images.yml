@@ -138,11 +138,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check out Contrix Rust SDK
+      - name: Check out Cokret Rust SDK
         uses: actions/checkout@v4
         with:
-          repository: ${{ gitea.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ gitea.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
 
@@ -205,7 +205,7 @@ jobs:
             --load \
             --platform linux/arm64 \
             --pull \
-            --build-context contrix-rust-sdk=contrix-rust-sdk \
+            --build-context cokret-rust-sdk=cokret-rust-sdk \
             "${tag_args[@]}" \
             -f Dockerfile \
             .

@@ -201,23 +201,23 @@
         "properties": {
           "event_id": {
             "type": "string",
-            "pattern": "^cx:event:"
+            "pattern": "^ck:event:"
           },
           "message_id": {
             "type": "string",
-            "pattern": "^cx:message:"
+            "pattern": "^ck:message:"
           },
           "flow_id": {
             "type": "string",
-            "pattern": "^cx:flow:"
+            "pattern": "^ck:flow:"
           },
           "realm_id": {
             "type": "string",
-            "pattern": "^cx:realm:"
+            "pattern": "^ck:realm:"
           },
           "push_target_id": {
             "type": "string",
-            "pattern": "^cx:pseudonym:push:"
+            "pattern": "^ck:pseudonym:push:"
           },
           "wakeup_kind": {
             "type": "string",

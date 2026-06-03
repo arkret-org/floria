@@ -14,7 +14,7 @@
 //!      callers carrying plaintext content and assert that the response is `failed_precondition`
 //!      (412) with the `plaintext_in_blind_profile` reason.
 //!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
-//!      consecutive calls produce different opaque base64url tokens that don't embed any `cx:` /
+//!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
 //!      typed-id substring.
 
 use std::collections::HashMap;
@@ -43,10 +43,10 @@ use serde_json::{Value, json};
 fn sanitizer_strips_apns_correlation_identifiers() {
     let payload = json!({
         "client": "ios",
-        "event_id": "cx:event:01JS0EV000000000000000000",
-        "space_id": "cx:space:01JS0SP000000000000000000",
-        "flow_id":  "cx:flow:01JS0FLOW000000000000000",
-        "message_id": "cx:message:01JS0MSG0000000000000000",
+        "event_id": "ck:event:01JS0EV000000000000000000",
+        "space_id": "ck:space:01JS0SP000000000000000000",
+        "flow_id":  "ck:flow:01JS0FLOW000000000000000",
+        "message_id": "ck:message:01JS0MSG0000000000000000",
         "sender": "@alice:example.com",
         "sender_actor_display_name": "Alice",
         "flow_name": "Project Apollo",
@@ -85,8 +85,8 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
         "client": "android",
         "content_body": "I'm floating in a most peculiar way.",
         "content_msgtype": "m.text",
-        "event_id": "cx:event:01JS0EV000000000000000000",
-        "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+        "event_id": "ck:event:01JS0EV000000000000000000",
+        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
     })
     .as_object()
@@ -106,9 +106,9 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
 fn sanitizer_strips_webpush_correlation_identifiers() {
     let payload = json!({
         "client": "web",
-        "flow_id": "cx:flow:01JS0FLOW000000000000000",
-        "space_id": "cx:space:01JS0SP000000000000000000",
-        "event_id": "cx:event:01JS0EV000000000000000000",
+        "flow_id": "ck:flow:01JS0FLOW000000000000000",
+        "space_id": "ck:space:01JS0SP000000000000000000",
+        "event_id": "ck:event:01JS0EV000000000000000000",
         "content": {"body": "secret message"},
         "wakeup_kind": "message",
     })
@@ -148,11 +148,11 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
-        "event_id":   "cx:event:01JS0EV000000000000000000",
-        "message_id": "cx:message:01JS0MSG0000000000000000",
-        "flow_id":    "cx:flow:01JS0FLOW000000000000000",
-        "realm_id":   "cx:realm:01JS0SP000000000000000000",
-        "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+        "event_id":   "ck:event:01JS0EV000000000000000000",
+        "message_id": "ck:message:01JS0MSG0000000000000000",
+        "flow_id":    "ck:flow:01JS0FLOW000000000000000",
+        "realm_id":   "ck:realm:01JS0SP000000000000000000",
+        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "push_hint": "new_message",
         "counts": { "unread": 3 },
@@ -162,7 +162,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     let data = build_blind_provider_data(&notification);
     assert_eq!(
         data.get("push_target_id"),
-        Some(&json!("cx:pseudonym:push:01HYZ8Z000000000000000"))
+        Some(&json!("ck:pseudonym:push:01HYZ8Z000000000000000"))
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
@@ -208,13 +208,13 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
 fn sanitizer_strips_circle_routing_identifiers() {
     let payload = json!({
         "client": "ios",
-        "circle_id":         "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "circle_id":         "ck:circle:0196419b-0000-7000-8000-000000000456",
         "effective_scope":   {
             "kind": "circle",
-            "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000123",
-            "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000123",
+            "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
         },
-        "scope_circle_id":   "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "scope_circle_id":   "ck:circle:0196419b-0000-7000-8000-000000000456",
         "wakeup_kind": "message",
     })
     .as_object()
@@ -241,12 +241,12 @@ fn sanitizer_strips_nested_circle_metadata() {
         "client": "android",
         "extra_block": {
             "level_one": {
-                "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+                "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
                 "nested": {
                     "effective_scope": {
                         "kind": "circle",
-                        "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000123",
-                        "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+                        "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000123",
+                        "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
                     },
                 },
             },
@@ -274,14 +274,14 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
     // the SDK `EffectiveScope` deserializer (which is strict per
     // `conformance/encoding.md` §4).
     let notification: Notification = serde_json::from_value(json!({
-        "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
-        "realm_id":  "cx:realm:0196419b-0000-7000-8000-000000000123",
-        "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+        "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
+        "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
         "effective_scope": {
             "kind": "circle",
-            "realm_id":  "cx:realm:0196419b-0000-7000-8000-000000000123",
-            "circle_id": "cx:circle:0196419b-0000-7000-8000-000000000456",
+            "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
+            "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
         },
         "counts": { "unread": 3 },
     }))
@@ -323,8 +323,8 @@ fn webpush_collapse_key_is_random_and_opaque() {
             "collapse key must not contain `:` (would embed typed id): {key}"
         );
         assert!(
-            !key.to_ascii_lowercase().contains("cx:"),
-            "collapse key must not contain `cx:` substring: {key}"
+            !key.to_ascii_lowercase().contains("ck:"),
+            "collapse key must not contain `ck:` substring: {key}"
         );
         assert!(
             !key.to_ascii_lowercase().contains("did:"),
@@ -414,7 +414,7 @@ fn visible_profile_service() -> salvo::Service {
 
 fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> Value {
     let mut notification = json!({
-        "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "devices": [{
             "app_id": "com.example.app",
@@ -445,7 +445,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-contrix-destination-service-did",
+            "x-cokret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -483,7 +483,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-contrix-destination-service-did",
+            "x-cokret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -519,7 +519,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-contrix-destination-service-did",
+            "x-cokret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -545,7 +545,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-contrix-destination-service-did",
+            "x-cokret-destination-service-did",
             "did:web:push.example.com",
             true,
         )

@@ -168,7 +168,7 @@ impl CustomPushkin {
         //   * `wakeup_kind`      — closed enum, validated by the SDK
         //   * `push_hint`        — only when SDK-validated literal
         //   * `push_target_id`   — opaque pseudonym
-        use contrix::blind_payload_sanitizer as sdk;
+        use cokret::blind_payload_sanitizer as sdk;
 
         let mut payload = Map::new();
         payload.insert(

@@ -25,11 +25,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check out Contrix Rust SDK
+      - name: Check out Cokret Rust SDK
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -49,7 +49,7 @@ jobs:
       - name: Build local image
         run: |
           docker buildx build \
-            --build-context contrix-rust-sdk=contrix-rust-sdk \
+            --build-context cokret-rust-sdk=cokret-rust-sdk \
             --file Dockerfile \
             --load \
             --tag "${LOCAL_IMAGE}" \
