@@ -406,6 +406,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bs58"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "bstr"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,6 +609,7 @@ dependencies = [
  "cokret-crypto",
  "cokret-ffi",
  "cokret-html",
+ "cokret-keystore",
  "cokret-signatures",
  "ed25519-dalek",
  "getrandom 0.3.4",
@@ -634,6 +644,7 @@ name = "cokret-core"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
+ "bs58",
  "chrono",
  "cokret-identifiers",
  "getrandom 0.3.4",
@@ -688,14 +699,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cokret-keystore"
+version = "1.0.0"
+dependencies = [
+ "cokret-core",
+]
+
+[[package]]
 name = "cokret-signatures"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "cokret-core",
+ "ed25519-dalek",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "subtle",
  "thiserror 2.0.18",
 ]
 
