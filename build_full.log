@@ -15,7 +15,7 @@
    Compiling cipher v0.4.4
    Compiling num-bigint v0.4.6
    Compiling polyval v0.6.2
-   Compiling cokret-identifiers v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\identifiers)
+   Compiling cokret-identifiers v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\identifiers)
    Compiling ctr v0.9.2
    Compiling ghash v0.5.1
    Compiling aes v0.8.4
@@ -53,7 +53,7 @@
    Compiling kdl v6.5.0
    Compiling salvo_core v0.89.3
    Compiling jsonwebtoken v10.3.0
-   Compiling cokret-core v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\core)
+   Compiling cokret-core v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\core)
    Compiling oid-registry v0.8.1
    Compiling der-parser v10.0.0
    Compiling sentry-tracing v0.48.1
@@ -64,14 +64,14 @@
    Compiling isahc v1.7.2
    Compiling salvo_extra v0.89.3
    Compiling salvo v0.89.3
-   Compiling cokret-signatures v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\signatures)
-   Compiling cokret-html v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\html)
-   Compiling cokret-ffi v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\ffi)
-   Compiling cokret-crypto v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\crypto)
-   Compiling cokret-contracts v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\contracts)
-   Compiling cokret-testing v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\testing)
-   Compiling cokret v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\sdk)
-   Compiling floria v0.1.0 (D:\Works\cokret-dev\floria)
+   Compiling cokret-signatures v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\signatures)
+   Compiling cokret-html v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\html)
+   Compiling cokret-ffi v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\ffi)
+   Compiling cokret-crypto v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\crypto)
+   Compiling cokret-contracts v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\contracts)
+   Compiling cokret-testing v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\testing)
+   Compiling cokret v1.0.0 (D:\Works\cokret\cokret-rust-sdk\crates\sdk)
+   Compiling floria v0.1.0 (D:\Works\cokret\floria)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 27s
   Executable unittests src\lib.rs (target\debug\deps\floria-424b879ab2400f08.exe)
   Executable unittests src\main.rs (target\debug\deps\floria-14361c293bd22860.exe)

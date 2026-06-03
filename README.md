@@ -15,7 +15,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
 adapt to your local toolchain.
 
 ## Realm vs Space
@@ -164,7 +164,7 @@ Sample files:
 ## Run
 
 ```powershell
-$env:FLORIA_CONF="E:\Works\cokret-dev\floria\floria.sample.kdl"
+$env:FLORIA_CONF="E:\Works\cokret\floria\floria.sample.kdl"
 cargo run
 ```
 
@@ -230,5 +230,5 @@ Licensed under Apache 2.0. See `LICENSE`.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_floria_todos.md` in the parent `cokret-dev/` directory for the
+> `_floria_todos.md` in the parent `cokret/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.
