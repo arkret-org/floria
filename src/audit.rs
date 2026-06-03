@@ -17,7 +17,7 @@ pub trait AuditSink: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
 pub enum AuditEvent {
-    #[serde(rename = "cx.audit.policy_access")]
+    #[serde(rename = "ck.audit.policy_access")]
     PolicyAccess {
         request_id: String,
         origin_service_did: String,
@@ -33,7 +33,7 @@ pub enum AuditEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         notification_realm_id: Option<String>,
     },
-    #[serde(rename = "cx.push.rejected_devices")]
+    #[serde(rename = "ck.push.rejected_devices")]
     RejectedDevices {
         request_id: String,
         origin_service_did: String,

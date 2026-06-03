@@ -35,7 +35,7 @@ pub struct NotifyRequest {
     /// `historical_only` no-op shape).
     #[serde(default)]
     pub reason_code: Option<String>,
-    /// Round 4 — `cx.audit.policy_access` envelope routing fragment.
+    /// Round 4 — `ck.audit.policy_access` envelope routing fragment.
     /// When present, the request is an audit-pipeline event (e.g. an
     /// `e2ee_late_recovery` access notice), NOT a push notify. The
     /// gateway writes the audit event, acks with 200, and skips the
@@ -45,7 +45,7 @@ pub struct NotifyRequest {
     pub notification: Notification,
 }
 
-/// Round 4 — typed `cx.audit.policy_access` envelope routing fragment
+/// Round 4 — typed `ck.audit.policy_access` envelope routing fragment
 /// carried alongside a `ck.push.notify` request. Receiving the
 /// `e2ee_late_recovery` access_kind here means soland routed an audit
 /// event through the gateway's HTTP surface; the gateway forwards it
@@ -55,7 +55,7 @@ pub struct NotifyRequest {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AuditEnvelopeMetadata {
-    /// `cx.audit.policy_access.access_kind`. The round-4 enum widens
+    /// `ck.audit.policy_access.access_kind`. The round-4 enum widens
     /// to include `e2ee_late_recovery`; floria specifically branches
     /// on that value to skip the push pipeline.
     pub access_kind: String,

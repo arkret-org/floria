@@ -12,7 +12,7 @@ parent Cokret spec's round-numbering for grouping wire-breaking changes.
 
 ## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `ck.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
@@ -23,7 +23,7 @@ parent Cokret spec's round-numbering for grouping wire-breaking changes.
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (cokret-spec @ b47ff6ec)
 
-- MEDIA-1: documented floria's `cx.call.media.token_exchange` role — proxy-to-soland for the v1 cycle; self-issue (option b) deferred to R3.1. Role decision lives in `src/media.rs` module docs.
+- MEDIA-1: documented floria's `ck.call.media.token_exchange` role — proxy-to-soland for the v1 cycle; self-issue (option b) deferred to R3.1. Role decision lives in `src/media.rs` module docs.
 - MEDIA-2: Cokret-native binding token scaffolding (`CokretNativeBackendToken`, `CokretNativeTokenPayload`, `CokretNativeMediaCaps`) per `bindings/cokret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
@@ -102,7 +102,7 @@ Push-gateway alignment with the round-4 protocol-review commits. See
 - **Added** `reason_code=historical_only` recognition on federation
   idempotency replays: floria treats them as diagnostic only and does NOT
   trigger a new push fanout.
-- **Added** `cx.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+- **Added** `ck.audit.policy_access{access_kind=e2ee_late_recovery}` routes
   through the audit pipeline rather than the push pipeline; late-recovery
   events never produce a wake-up.
 - **Added** DID method-name regex sweep tightened to
@@ -152,8 +152,8 @@ MUST upgrade soland and the principal-server fanout to a matching version.
 #### Internal
 
 - Documented that **ephemeral kinds bypass floria** (T04 cross-check) — the
-  four broadcast ephemeral signals (`cx.presence`, `cx.typing`,
-  `cx.receipt.read`, `cx.call.signal`) travel on dedicated
+  four broadcast ephemeral signals (`ck.presence`, `ck.typing`,
+  `ck.receipt.read`, `ck.call.signal`) travel on dedicated
   `ephemeral_envelope` / device-message channels in the Sync Service, are
   dropped at TTL, and MUST NOT enter floria's durable Event path. The
   `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects

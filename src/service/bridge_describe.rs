@@ -57,7 +57,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         .unwrap_or_default();
 
     let body = PushBridgeDescribeResponse {
-        contract: "cx.push.bridge.describe".to_owned(),
+        contract: "ck.push.bridge.describe".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the
         // cokret-spec revision the SDK is compiled against) and from the
@@ -156,7 +156,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // CXP-0008 / CXP-0009 / CXP-0010) — push surface
             // failure codes for Personal Agent lifecycle state and the
             // recording-artifact pipeline. Floria's notify pipeline
-            // already silently consumes the durable `cx.agent.*` event
+            // already silently consumes the durable `ck.agent.*` event
             // kinds and flushes the PSI cache when soland broadcasts
             // `consent_revoke{reason=agent_paused|agent_deactivated}`;
             // these descriptors expose the wire-form error codes so

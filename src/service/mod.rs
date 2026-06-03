@@ -36,7 +36,7 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
 // floria entirely. The four broadcast ephemeral signal kinds
-// (`cx.presence`, `cx.typing`, `ck.receipt.read`, `ck.call.signal`)
+// (`ck.presence`, `ck.typing`, `ck.receipt.read`, `ck.call.signal`)
 // travel on dedicated `ephemeral_envelope` / device-message channels
 // in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
 // durable Event-kind path. There is intentionally no code here that

@@ -48,7 +48,7 @@ wire-breaking list.
   replay, floria does not run a fresh push fanout. The event is
   diagnostic only.
 - **`e2ee_late_recovery` audit path** —
-  `cx.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+  `ck.audit.policy_access{access_kind=e2ee_late_recovery}` routes
   through the audit pipeline and never produces a push wakeup.
 
 ## Round R2/R3 notes
@@ -62,7 +62,7 @@ account_deactivate_fanout` (T07) and `POST /_cokret/edge/internal/
 consent_revoke` (T17) — consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the
-normative source. Ephemeral kinds (`cx.presence`, `cx.typing`,
+normative source. Ephemeral kinds (`ck.presence`, `ck.typing`,
 `ck.receipt.read`, `ck.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
 

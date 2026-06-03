@@ -91,7 +91,7 @@ const FORBIDDEN_PLAINTEXT_PARENT_LEAF: &[(&str, &str)] = &[
 /// retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 
-/// Round 4 — `cx.audit.policy_access.access_kind` value that diverts
+/// Round 4 — `ck.audit.policy_access.access_kind` value that diverts
 /// to the audit pipeline. floria MUST NOT push-fan-out when the
 /// inbound request carries this access_kind; it forwards to the audit
 /// sink and only then acks with 200. The wire literal mirrors the SDK
@@ -136,18 +136,18 @@ const AGENT_ACTOR_PRIVATE_KINDS: &[&str] = &[
 /// the normal push fanout path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AgentEventRouting {
-    /// Durable agent lifecycle (`cx.agent.{pause,resume,deactivate}`):
+    /// Durable agent lifecycle (`ck.agent.{pause,resume,deactivate}`):
     /// silently consumed — 200 OK, no provider dispatch.
     DurableLifecycle,
     /// Actor-private agent kind
-    /// (`cx.agent.{draft.propose,action_request,action_approve,
+    /// (`ck.agent.{draft.propose,action_request,action_approve,
     /// action_reject}`): dropped — 200 OK, no provider dispatch.
     ActorPrivateDrop,
 }
 
 /// Classify a top-level `event_kind` string against the Phase P2
-/// agent-routing table. Unknown kinds (including non-`cx.agent.*`
-/// strings and `cx.agent.*` kinds we don't yet recognize) return
+/// agent-routing table. Unknown kinds (including non-`ck.agent.*`
+/// strings and `ck.agent.*` kinds we don't yet recognize) return
 /// `None` and continue down the normal push pipeline.
 fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
     if AGENT_LIFECYCLE_SILENT_KINDS.contains(&event_kind) {
@@ -1394,14 +1394,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
     // Phase P2 (CXP-0008 / CXP-0009) — route Personal Agent event kinds.
     //
-    // The SDK exposes seven new `cx.agent.*` kinds. Floria does not
+    // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `cx.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
+    //   * `ck.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
     //     zero fanout. The authoritative capability-cache invalidation path for these state changes
     //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
     //     a push.
-    //   * `cx.agent.{draft.propose, action_request, action_approve, action_reject}` —
+    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` —
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.
@@ -1463,7 +1463,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             }
         }
     }
-    // Round 4 — route `cx.audit.policy_access{access_kind=
+    // Round 4 — route `ck.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's
     // pipeline advances. It does not do push fanout for this shape.

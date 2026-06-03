@@ -103,7 +103,7 @@ the destination device's capabilities. The decision tree:
                               │
                               ▼
             ┌─────────────────────────────────────┐
-            │ Realm has cx.profile.delivery.visible_required.v1? │
+            │ Realm has ck.profile.delivery.visible_required.v1? │
             └─────────────────────────────────────┘
                        │             │
                        │ Yes         │ No
@@ -111,7 +111,7 @@ the destination device's capabilities. The decision tree:
                   visible       ┌────────────────────────────┐
                                 │ Destination device         │
                                 │ profile includes           │
-                                │ cx.profile.delivery.blind_wakeup.v1? │
+                                │ ck.profile.delivery.blind_wakeup.v1? │
                                 └────────────────────────────┘
                                           │           │
                                           │ Yes       │ No
@@ -129,7 +129,7 @@ the destination device's capabilities. The decision tree:
 Rules:
 
 1. **Visible-required overrides everything.** If the realm has declared
-   `cx.profile.delivery.visible_required.v1`, all notifications are
+   `ck.profile.delivery.visible_required.v1`, all notifications are
    visible regardless of device capability. This is the regulated /
    high-assurance posture.
 2. **Blind wakeup needs both ends.** Both the realm AND the device must
