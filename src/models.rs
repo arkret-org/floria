@@ -46,7 +46,7 @@ pub struct NotifyRequest {
 }
 
 /// Round 4 — typed `cx.audit.policy_access` envelope routing fragment
-/// carried alongside a `cx.push.notify` request. Receiving the
+/// carried alongside a `ck.push.notify` request. Receiving the
 /// `e2ee_late_recovery` access_kind here means soland routed an audit
 /// event through the gateway's HTTP surface; the gateway forwards it
 /// to the configured audit sink and MUST NOT do any push fanout.
@@ -332,7 +332,7 @@ pub struct Device {
     /// are the Sync Service's responsibility). When absent the device
     /// is treated as delivery-eligible. Internal reasons never travel
     /// across this hop — only the wire-safe `reason_code` is honored,
-    /// matching the `cx.push.notify` privacy descriptor.
+    /// matching the `ck.push.notify` privacy descriptor.
     #[serde(default)]
     pub push_decision: Option<PushDecisionHint>,
     /// Round 4 (spec a77b995) — actor DID this device's user is
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
         let request: NotifyRequest = serde_json::from_value(json!({
-            "operation_id": "cx.push.notify",
+            "operation_id": "ck.push.notify",
             "idempotency_key": "notify-1",
             "origin_service_did": "did:web:sync.example.com",
             "destination_service_did": "did:web:push.example.com",
@@ -516,7 +516,7 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(request.operation_id.as_deref(), Some("cx.push.notify"));
+        assert_eq!(request.operation_id.as_deref(), Some("ck.push.notify"));
         assert_eq!(
             request.origin_service_did.as_deref(),
             Some("did:web:sync.example.com")

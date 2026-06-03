@@ -38,7 +38,7 @@ async fn caller_push_decision_dont_notify_skips_dispatch_and_records_reason() {
     let calls = pushkin.calls.clone();
     let service = test_service(vec![("com.example.app", pushkin)]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device_with_decision(
             "com.example.app",
             "muted-token",
@@ -66,7 +66,7 @@ async fn caller_push_decision_deliver_true_falls_through_to_dispatch() {
     let calls = pushkin.calls.clone();
     let service = test_service(vec![("com.example.app", pushkin)]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device_with_decision(
             "com.example.app",
             "wakeup-token",
@@ -94,7 +94,7 @@ async fn missing_push_decision_defaults_to_pass_through() {
 
     // No push_decision attached at all — floria must not assume
     // anything about the watch level and must deliver.
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "plain-token")]))
         .send(&service)
         .await;
@@ -123,7 +123,7 @@ async fn push_decision_internal_reason_field_is_rejected_as_unknown() {
         "internal_reason": "muted_short_circuit",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![entry]))
         .send(&service)
         .await;
@@ -160,7 +160,7 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
     body["notification"]["mention_redirect_target_actor_ids"] =
         json!(["did:web:alice.example", "did:web:bob.example",]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -190,7 +190,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     body["notification"]["mention_redirect_target_actor_ids"] =
         json!(["did:web:alice.example", "did:web:bob.example",]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -246,7 +246,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
     body["notification"]["mention_redirect_target_actor_ids"] = json!(["did:web:alice.example"]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -273,7 +273,7 @@ async fn mention_redirect_empty_list_is_a_no_op() {
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
     body["notification"]["mention_redirect_target_actor_ids"] = json!([]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -299,7 +299,7 @@ async fn mention_reference_v2_fields_are_not_push_payload_fields() {
     body["notification"]["subject_id"] = json!("ck:message:01JS0MSG0000000000000000");
     body["notification"]["display_name_at_time"] = json!("Alice");
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -318,7 +318,7 @@ async fn historical_only_reason_code_short_circuits_without_fanout() {
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
     body["reason_code"] = json!("historical_only");
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -344,7 +344,7 @@ async fn unknown_reason_code_is_rejected_as_schema_violation() {
     let mut body = payload(vec![device("com.example.app", "x")]);
     body["reason_code"] = json!("some_other_reason");
 
-    let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -365,7 +365,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
         "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -423,7 +423,7 @@ async fn audit_envelope_without_sink_is_temporarily_unavailable() {
         "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -450,7 +450,7 @@ async fn audit_envelope_late_recovery_without_original_event_id_is_rejected() {
         // missing late_recovery_original_event_id
     });
 
-    let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;

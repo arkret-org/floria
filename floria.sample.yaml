@@ -42,7 +42,7 @@ http:
     #       - sha256:<hex-digest>
     #     signature_key_id: did:web:sync.example.com#push
     #     signature_public_key_hex: replace-with-ed25519-public-key-hex
-    #     service_endpoint: https://push.example.com/api/v1/push/notify
+    #     service_endpoint: https://push.example.com/_cokret/edge/push/notify
     #     require_mtls: true
     #     mtls_cert_fingerprints:
     #       - aa:bb:cc
@@ -62,8 +62,8 @@ http:
     #   # backend: redis
     #   # redis_url: redis://127.0.0.1:6379/2
   internal_auth:
-    # Internal/operator routes (`/api/v1/internal/*`,
-    # `/api/v1/push/status/*`, `/api/v1/push/device/unregister`) fail
+    # Internal/operator routes (`/_cokret/edge/internal/*`,
+    # `/_cokret/edge/push/status/*`, `/_cokret/edge/push/device/unregister`) fail
     # closed unless one of these credentials is configured.
     # bearer_tokens:
     #   - replace-me-internal

@@ -91,7 +91,7 @@ http {
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
-    //     service_endpoint "https://push.example.com/api/v1/push/notify"
+    //     service_endpoint "https://push.example.com/_cokret/edge/push/notify"
     //     require_mtls true
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
@@ -133,7 +133,7 @@ http {
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | 由入口层注入、携带客户端证书 Subject DN 的 header |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | 由入口层注入、携带逗号分隔 SAN 列表的 header |
 | `notify_auth.service_principals` | object | — | 以 origin service DID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
-| `internal_auth.bearer_tokens` | string/string[] | — | `/api/v1/internal/*`、`/api/v1/push/status/*`、`/api/v1/push/device/unregister` 使用的内部/运维 bearer token |
+| `internal_auth.bearer_tokens` | string/string[] | — | `/_cokret/edge/internal/*`、`/_cokret/edge/push/status/*`、`/_cokret/edge/push/device/unregister` 使用的内部/运维 bearer token |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | 内部 bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀；两组内部凭据都为空时内部/运维路由 fail-closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
 | `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service DID 在单窗口内允许的 `/notify` 次数 |
@@ -167,7 +167,7 @@ http {
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
-        service_endpoint "https://push.example.com/api/v1/push/notify"
+        service_endpoint "https://push.example.com/_cokret/edge/push/notify"
         require_mtls true
         mtls_cert_fingerprints "aa:bb:cc"
       }
@@ -184,7 +184,7 @@ http {
 }
 ```
 
-生产部署时，应让 `/api/v1/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
+生产部署时，应让 `/_cokret/edge/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
 
 > **生产模式要求（P5）**：生产环境不要配置明文
 > `bearer_tokens`。开启 `production_mode=true` 后，floria 会在配置校验阶段拒绝

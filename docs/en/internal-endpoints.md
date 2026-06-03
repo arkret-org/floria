@@ -1,16 +1,16 @@
 # Internal Endpoints
 
-floria exposes a small set of routes under `/api/v1/internal/*` that
+floria exposes a small set of routes under `/_cokret/edge/internal/*` that
 are intended for in-cluster service-to-service traffic only. They are
-NOT the public `/api/v1/push/notify` surface and they have a
+NOT the public `/_cokret/edge/push/notify` surface and they have a
 different auth and rate-limit posture.
 
 ## Routes
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/v1/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
-| `/api/v1/internal/consent_revoke` | POST | Drops every cached PSI verdict for the affected principal so the next push goes through a fresh consent check |
+| `/_cokret/edge/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
+| `/_cokret/edge/internal/consent_revoke` | POST | Drops every cached PSI verdict for the affected principal so the next push goes through a fresh consent check |
 
 Both handlers live in `src/service/internal.rs` and are wired into
 the router in `src/service/mod.rs`. They share the same `AppState`
@@ -19,14 +19,14 @@ as `/notify` but never touch the public dedup cache or rate limiter.
 ## Auth posture
 
 floria enforces `http.internal_auth` bearer/shared-secret
-authentication on `/api/v1/internal/*` and the operator-only
-`/api/v1/push/status/*` / `/api/v1/push/device/unregister` routes. If
+authentication on `/_cokret/edge/internal/*` and the operator-only
+`/_cokret/edge/push/status/*` / `/_cokret/edge/push/device/unregister` routes. If
 no internal bearer token or token hash is configured, these routes fail
 closed with `503 service_unavailable`; missing or invalid credentials
 return `401 unauthenticated`.
 
 Prefer `bearer_token_hashes` in production configs and rotate the
-shared secret independently from `/api/v1/push/notify` caller
+shared secret independently from `/_cokret/edge/push/notify` caller
 credentials. Network isolation and service-mesh mTLS are still
 recommended defense-in-depth controls, but the handlers no longer rely
 on ingress topology for their only authorization boundary.
@@ -65,5 +65,5 @@ and `confirm`; production alerts should stay disabled until the
 TODO(P5-impl) handler exists.
 
 Trace spans are emitted with `service.name=floria`,
-`http.target=/api/v1/internal/<route>`, and the broadcast event id
+`http.target=/_cokret/edge/internal/<route>`, and the broadcast event id
 attached as a span attribute when present.

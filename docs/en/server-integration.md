@@ -9,9 +9,9 @@ Use these unauthenticated discovery endpoints during rollout:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/v1/integration/describe` | Lists supported integration surfaces and readiness checks |
-| `GET /api/v1/push/bridge/describe` | Lists provider capability metadata for configured bridge clients |
-| `GET /api/v1/push/describe` | Gateway profile and operational feature snapshot |
+| `GET /_cokret/edge/integration/describe` | Lists supported integration surfaces and readiness checks |
+| `GET /_cokret/edge/push/bridge/describe` | Lists provider capability metadata for configured bridge clients |
+| `GET /_cokret/edge/push/describe` | Gateway profile and operational feature snapshot |
 | `GET /ready` | Lightweight process readiness |
 | `GET /readyz` | Strict readiness, including provider registry and reachable Redis-backed dependencies |
 
@@ -38,11 +38,11 @@ The caller should set:
 
 ## Notify Request
 
-`POST /api/v1/push/notify` accepts `cx.push.notify` envelopes:
+`POST /_cokret/edge/push/notify` accepts `ck.push.notify` envelopes:
 
 ```json
 {
-  "operation_id": "cx.push.notify",
+  "operation_id": "ck.push.notify",
   "idempotency_key": "notify-01J...",
   "origin_service_did": "did:web:sync.example.com",
   "destination_service_did": "did:web:push.example.com",
@@ -105,7 +105,7 @@ tokens. Error responses use the standard `ok=false` envelope with
 
 ## Broadcast Endpoints
 
-The internal endpoints `POST /api/v1/internal/account_deactivate_fanout` and
-`POST /api/v1/internal/consent_revoke` are for soland's private broadcast path.
+The internal endpoints `POST /_cokret/edge/internal/account_deactivate_fanout` and
+`POST /_cokret/edge/internal/consent_revoke` are for soland's private broadcast path.
 Keep them on a private listener, service mesh, or reverse-proxy route. They are
 not mobile or third-party server APIs.

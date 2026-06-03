@@ -12,7 +12,7 @@ async fn accepted_devices_are_not_rejected() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -28,7 +28,7 @@ async fn notify_endpoint_accepts_active_payload_shape() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -44,7 +44,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
         .send(&service)
         .await;
 
@@ -57,8 +57,8 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(
         body["supported_profiles"],
         json!([
-            "cx.profile.push_gateway.v1",
-            "cx.profile.push_gateway.blind_wakeup.v1"
+            "ck.profile.push_gateway.v1",
+            "ck.profile.push_gateway.blind_wakeup.v1"
         ])
     );
     assert_eq!(body["supported_providers"], json!(["com.example.app"]));
@@ -86,7 +86,7 @@ async fn describe_separates_claim_levels() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -105,7 +105,7 @@ async fn describe_separates_claim_levels() {
         .expect("claimed_profiles present");
     assert!(
         !claimed.is_empty(),
-        "floria self-claims cx.profile.push_gateway.v1"
+        "floria self-claims ck.profile.push_gateway.v1"
     );
     for entry in claimed {
         assert_eq!(
@@ -157,7 +157,7 @@ async fn describe_does_not_advertise_media_token_self_issue() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -193,7 +193,7 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
         auth,
     );
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -212,10 +212,10 @@ async fn server_describe_alias_matches_push_describe() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut push_response = TestClient::get("http://127.0.0.1/api/v1/push/describe")
+    let mut push_response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
         .send(&service)
         .await;
-    let mut server_response = TestClient::get("http://127.0.0.1/api/v1/server/describe")
+    let mut server_response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
 
@@ -230,7 +230,7 @@ async fn server_describe_alias_matches_push_describe() {
 async fn integration_describe_lists_operational_surfaces() {
     let service = test_service(vec![]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/integration/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/integration/describe")
         .send(&service)
         .await;
 
@@ -267,7 +267,7 @@ async fn bridge_describe_lists_failure_codes() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
         .send(&service)
         .await;
 
@@ -305,7 +305,7 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept).with_kind("fcm"));
     let service = test_service(vec![("com.example.app", pushkin as Arc<dyn Pushkin>)]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
         .send(&service)
         .await;
 
@@ -345,7 +345,7 @@ async fn bridge_describe_omits_unknown_provider_kinds() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/api/v1/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
         .send(&service)
         .await;
 
@@ -368,7 +368,7 @@ async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -397,10 +397,10 @@ async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
 async fn notify_rejects_non_canonical_operation_id() {
     let service = test_service(vec![]);
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "cx.push.register_device",
+            "ck.push.register_device",
         ))
         .send(&service)
         .await;
@@ -409,7 +409,7 @@ async fn notify_rejects_non_canonical_operation_id() {
     let body = assert_notify_error(&mut response, "unsupported_feature", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("operation_id must be cx.push.notify")
+        json!("operation_id must be ck.push.notify")
     );
 }
 
@@ -417,7 +417,7 @@ async fn notify_rejects_non_canonical_operation_id() {
 async fn notify_method_not_allowed_returns_standard_error_envelope() {
     let service = test_service(vec![]);
 
-    let mut get_response = TestClient::get("http://127.0.0.1/api/v1/push/notify")
+    let mut get_response = TestClient::get("http://127.0.0.1/_cokret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(
@@ -433,7 +433,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
     );
     assert_notify_error(&mut get_response, "method_not_allowed", false).await;
 
-    let mut put_response = TestClient::put("http://127.0.0.1/api/v1/push/notify")
+    let mut put_response = TestClient::put("http://127.0.0.1/_cokret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(
@@ -442,7 +442,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
     );
     assert_notify_error(&mut put_response, "method_not_allowed", false).await;
 
-    let mut delete_response = TestClient::delete("http://127.0.0.1/api/v1/push/notify")
+    let mut delete_response = TestClient::delete("http://127.0.0.1/_cokret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(

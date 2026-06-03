@@ -65,7 +65,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // version so it moves in lockstep with the capability snapshot
         // rather than drifting as a hand-edited date.
         version: PROVIDER_CAPABILITIES_VERSION.to_owned(),
-        api_base_path: "/api/v1/push".to_owned(),
+        api_base_path: "/_cokret/edge/push".to_owned(),
         // `spec_version` = the cokret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.
@@ -80,7 +80,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             auth_modes: owned(describe_auth_modes(&state.notify_auth)),
         },
         notify: PushBridgeDescribeNotifyDescriptor {
-            notify_path: "/api/v1/push/notify".to_owned(),
+            notify_path: "/_cokret/edge/push/notify".to_owned(),
             operation_id: NOTIFY_OPERATION_ID.to_owned(),
             request_id_header: "X-Cokret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
@@ -138,7 +138,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "schema_violation",
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
-                "The request body or headers did not match the active cx.push.notify contract.",
+                "The request body or headers did not match the active ck.push.notify contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
                 "temporarily_unavailable",
@@ -194,7 +194,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "X-Cokret-Destination-Service-Did": state.notify_auth.gateway_service_did,
             }),
             // Default interop privacy baseline
-            // (`cx.profile.push_gateway.blind_wakeup.v1`): identifying
+            // (`ck.profile.push_gateway.blind_wakeup.v1`): identifying
             // fields (`event_id` / `flow_id` / `realm_id` / sender) MUST
             // NOT appear — only the opaque pseudonym, wakeup discriminator
             // and bounded counts. Identifying-field examples live under

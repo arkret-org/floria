@@ -5,7 +5,7 @@
 
 ## 决策摘要
 
-在 Cokret v1 中，`cx.call.media.token_exchange` 的**规范签发者**是
+在 Cokret v1 中，`ck.call.media.token_exchange` 的**规范签发者**是
 **soland**。当前 floria 二进制不在公开 router 或 describe 响应中暴露
 `/rtc/token` 本地签发面；如果部署层未来在 floria 前后接入代理，也只能作为
 **透明代理**把请求交给 soland，并将 soland 返回的字节原样回传给客户端。
@@ -43,7 +43,7 @@
 
 ## 何时这条决策可能在未来版本变化
 
-`cx.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
+`ck.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
 在受控的部署里（如 soland 与 floria 同主同时部署，且签发密钥已落在
 floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不是 v1 行
 为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。`media.rs`
@@ -55,5 +55,5 @@ floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不�
 |---|---|---|
 | floria 日志出现“minting token locally” | 走到了不该走的本地签发分支 | 立 bug；按 v1 该路径应不存在 |
 | soland 返回 `token_issuer_unauthorised` 但 floria 看起来正常 | 不是 floria 的问题 —— soland 端的 issuer-key 与 realm 绑定不一致；联系 soland 运维 |
-| floria 报 `legacy_single_endpoint_media_service` | realm 的 `cx.realm.media_service` 仍是 v1.0 的 `sfu_endpoint` 形状 | 运行 soland DEPLOYMENT.md 的 R3 迁移 |
+| floria 报 `legacy_single_endpoint_media_service` | realm 的 `ck.realm.media_service` 仍是 v1.0 的 `sfu_endpoint` 形状 | 运行 soland DEPLOYMENT.md 的 R3 迁移 |
 | floria 把 `participant_binding` 写进了非脱敏日志 | 日志库配置漂移 | 修日志字段过滤，确认不再写明文 |

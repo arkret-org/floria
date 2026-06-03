@@ -116,7 +116,7 @@ pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_
 /// per-principal capability cache. Pushing these lifecycle kinds to
 /// user devices would leak agent state into the operator surface.
 const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
-    &["cx.agent.pause", "cx.agent.resume", "cx.agent.deactivate"];
+    &["ck.agent.pause", "ck.agent.resume", "ck.agent.deactivate"];
 
 /// Phase P2 — actor-private Personal Agent event kinds. These never
 /// reach user-device push: they're controller-private state transitions
@@ -124,10 +124,10 @@ const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
 /// them with a 200 + zero-fanout ack — there is no partial routing
 /// implementation behind this; drop is the complete behaviour.
 const AGENT_ACTOR_PRIVATE_KINDS: &[&str] = &[
-    "cx.agent.draft.propose",
-    "cx.agent.action_request",
-    "cx.agent.action_approve",
-    "cx.agent.action_reject",
+    "ck.agent.draft.propose",
+    "ck.agent.action_request",
+    "ck.agent.action_approve",
+    "ck.agent.action_reject",
 ];
 
 /// Phase P2 — classification of an inbound `event_kind` field. `None`
@@ -691,9 +691,9 @@ fn validate_active_ref(
 //
 // floria exposes two push-gateway capability profiles:
 //
-//   * `cx.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
+//   * `ck.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
 //     `wakeup_kind`, no plaintext metadata. Maps to `caller.allow_plaintext_metadata = false`.
-//   * `cx.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
+//   * `ck.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
 //     plaintext-eligible service kind (sync / principal) AND the per-principal
 //     `allow_plaintext_metadata` flag is set. Maps to `caller.allow_plaintext_metadata = true`.
 //
@@ -722,7 +722,7 @@ fn validate_notification_contract(
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
              sender_actor_display_name or flow/realm name metadata under the default \
-             `cx.profile.push_gateway.blind_wakeup.v1` profile"
+             `ck.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
 
@@ -765,7 +765,7 @@ fn validate_notification_contract(
                 return Err(format!(
                     "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
                      plaintext `content.{forbidden}` under the default \
-                     `cx.profile.push_gateway.blind_wakeup.v1` profile"
+                     `ck.profile.push_gateway.blind_wakeup.v1` profile"
                 ));
             }
         }
@@ -806,7 +806,7 @@ fn validate_plaintext_identity_metadata(
             return Err(format!(
                 "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
                  plaintext identity metadata in `{path}` under the default \
-                 `cx.profile.push_gateway.blind_wakeup.v1` profile"
+                 `ck.profile.push_gateway.blind_wakeup.v1` profile"
             ));
         }
         validate_plaintext_identity_tree(&path, value)?;
@@ -848,7 +848,7 @@ fn validate_plaintext_identity_tree(path: &str, value: &Value) -> Result<(), Str
                     return Err(format!(
                         "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
                          plaintext identity metadata in `{next_path}` under the default \
-                         `cx.profile.push_gateway.blind_wakeup.v1` profile"
+                         `ck.profile.push_gateway.blind_wakeup.v1` profile"
                     ));
                 }
                 validate_plaintext_identity_tree(&next_path, value)?;

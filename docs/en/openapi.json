@@ -11,7 +11,7 @@
     }
   ],
   "paths": {
-    "/api/v1/push/notify": {
+    "/_cokret/edge/push/notify": {
       "post": {
         "operationId": "notify",
         "summary": "Submit a minimized push wakeup request",
@@ -100,7 +100,7 @@
         }
       }
     },
-    "/api/v1/push/bridge/describe": {
+    "/_cokret/edge/push/bridge/describe": {
       "get": {
         "operationId": "bridgeDescribe",
         "summary": "Describe configured provider bridge capabilities",
@@ -118,7 +118,7 @@
         }
       }
     },
-    "/api/v1/integration/describe": {
+    "/_cokret/edge/integration/describe": {
       "get": {
         "operationId": "integrationDescribe",
         "summary": "Describe floria integration surfaces",
@@ -172,7 +172,7 @@
         ],
         "properties": {
           "operation_id": {
-            "const": "cx.push.notify"
+            "const": "ck.push.notify"
           },
           "idempotency_key": {
             "type": "string",

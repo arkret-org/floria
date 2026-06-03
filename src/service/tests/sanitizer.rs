@@ -24,7 +24,7 @@ async fn sanitizer_rejects_binding_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -52,7 +52,7 @@ async fn sanitizer_rejects_subject_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -70,7 +70,7 @@ async fn sanitizer_rejects_expected_previous_generation() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["expected_previous_generation"] = json!(7);
 
-    let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -90,7 +90,7 @@ async fn sanitizer_rejects_attestation_evidence() {
         "tee_quote": "deadbeef",
     });
 
-    let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;

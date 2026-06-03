@@ -9,7 +9,7 @@ server-side push gateway; mobile clients should not call floria directly.
 |-----------|----------------|
 | Mobile app | Obtains and refreshes APNs, FCM, WebPush, or OEM provider tokens |
 | chime | Owns client registration UX, platform permission prompts, and local token state |
-| soland / principal server | Stores device routes, maps account state to `cx.push.notify`, and calls floria |
+| soland / principal server | Stores device routes, maps account state to `ck.push.notify`, and calls floria |
 | floria | Delivers minimized wakeups to configured provider adapters |
 
 ## Registration Flow
@@ -23,7 +23,7 @@ server-side push gateway; mobile clients should not call floria directly.
 5. The principal server calls floria only when it needs a wakeup.
 
 Do not send provider tokens through floria discovery endpoints. Tokens appear
-only inside authenticated `/api/v1/push/notify` calls from the trusted server.
+only inside authenticated `/_cokret/edge/push/notify` calls from the trusted server.
 
 ## Payload Contract
 
@@ -59,6 +59,6 @@ without exposing raw provider tokens.
 
 For local testing, run floria with `examples/minimal.kdl` or the full
 `floria.sample.kdl`, then have the server call
-`POST /api/v1/push/notify` with a test app id that matches one configured
+`POST /_cokret/edge/push/notify` with a test app id that matches one configured
 provider. Mobile-side tests should assert that receiving a provider wakeup
 causes the app to sync, not that the provider payload carries plaintext state.

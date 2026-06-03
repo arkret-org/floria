@@ -45,21 +45,21 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
         version: "2026-05-07",
         service: "floria",
         service_kind: "push_gateway",
-        api_base_path: "/api/v1",
-        describe_path: "/api/v1/integration/describe",
+        api_base_path: "/_cokret/edge",
+        describe_path: "/_cokret/edge/integration/describe",
         dependencies: vec![
             IntegrationDependencyDescriptor {
                 service: "soland",
                 purpose: "principal_outbound_push_delivery",
                 required_contract: "cokret.rest.outbound_push_bridge.v1",
-                discovery_path: "/api/v1/push/outbound/bridge/describe",
+                discovery_path: "/_cokret/edge/push/outbound/bridge/describe",
                 mode: "remote_principal_contract",
             },
             IntegrationDependencyDescriptor {
                 service: "chime",
                 purpose: "client_sdk_consumption",
                 required_contract: "cx.push.bridge.describe",
-                discovery_path: "/api/v1/push/bridge/describe",
+                discovery_path: "/_cokret/edge/push/bridge/describe",
                 mode: "sdk_contract_discovery",
             },
         ],
@@ -67,34 +67,34 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationSurfaceDescriptor {
                 name: "push_bridge",
                 method: "GET",
-                path: "/api/v1/push/bridge/describe",
+                path: "/_cokret/edge/push/bridge/describe",
                 contract: "cx.push.bridge.describe",
                 stability: "active",
-                todo: "GET /api/v1/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
+                todo: "GET /_cokret/edge/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
             },
             IntegrationSurfaceDescriptor {
                 name: "push_notify",
                 method: "POST",
-                path: "/api/v1/push/notify",
+                path: "/_cokret/edge/push/notify",
                 contract: "cx.push.notify.v1",
                 stability: "active",
-                todo: "POST /api/v1/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
+                todo: "POST /_cokret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
             },
             IntegrationSurfaceDescriptor {
                 name: "gateway_describe",
                 method: "GET",
-                path: "/api/v1/push/describe",
-                contract: "cx.profile.push_gateway.v1",
+                path: "/_cokret/edge/push/describe",
+                contract: "ck.profile.push_gateway.v1",
                 stability: "active",
-                todo: "GET /api/v1/push/describe is a profile-level snapshot kept in sync with bridge/describe.",
+                todo: "GET /_cokret/edge/push/describe is a profile-level snapshot kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
                 name: "server_describe_alias",
                 method: "GET",
-                path: "/api/v1/server/describe",
-                contract: "cx.profile.push_gateway.v1",
+                path: "/_cokret/describe",
+                contract: "ck.profile.push_gateway.v1",
                 stability: "active",
-                todo: "Alias of GET /api/v1/push/describe for generic service discovery; responses are identical.",
+                todo: "Alias of GET /_cokret/edge/push/describe for generic service discovery; responses are identical.",
             },
             IntegrationSurfaceDescriptor {
                 name: "health",
@@ -133,17 +133,17 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             "compose_flow": {
                 "step_1": {
                     "service": "soland",
-                    "path": "/api/v1/push/outbound/bridge/fetch",
+                    "path": "/_cokret/edge/push/outbound/bridge/fetch",
                     "method": "POST"
                 },
                 "step_2": {
                     "service": "floria",
-                    "path": "/api/v1/push/bridge/describe",
+                    "path": "/_cokret/edge/push/bridge/describe",
                     "method": "GET"
                 },
                 "step_3": {
                     "service": "floria",
-                    "path": "/api/v1/push/notify",
+                    "path": "/_cokret/edge/push/notify",
                     "method": "POST"
                 }
             }

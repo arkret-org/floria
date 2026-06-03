@@ -18,7 +18,7 @@ async fn notify_supports_header_idempotency_key_replay() {
     let request_body = payload(vec![device("com.example.app", "cached")]);
 
     for _ in 0..2 {
-        let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("idempotency-key", "notify-123", true)
             .json(&request_body)
             .send(&service)
@@ -38,14 +38,14 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
         Duration::from_secs(60),
     );
 
-    let first = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let first = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .add_header("idempotency-key", "notify-123", true)
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut second = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .add_header("idempotency-key", "notify-123", true)
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
@@ -66,7 +66,7 @@ async fn notify_rejects_mismatched_header_and_body_idempotency_keys() {
     let request_body =
         with_idempotency_key(payload(vec![device("com.example.app", "one")]), "body-key");
 
-    let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .add_header("idempotency-key", "header-key", true)
         .json(&request_body)
         .send(&service)
@@ -91,7 +91,7 @@ async fn notify_dedup_cache_serves_repeated_success_without_redispatch() {
     let request_body = payload(vec![device("com.example.app", "cached")]);
 
     for _ in 0..2 {
-        let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .json(&request_body)
             .send(&service)
             .await;
@@ -143,7 +143,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
         }"#;
 
     for request_body in [first, second] {
-        let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("content-type", "application/json", true)
             .text(request_body)
             .send(&service)

@@ -37,7 +37,7 @@ use redis::Commands;
 use crate::auth::redact_url_credentials;
 use crate::models::NotifyResponse;
 
-/// Lightweight status snapshot for the `GET /api/v1/push/status/{key}`
+/// Lightweight status snapshot for the `GET /_cokret/edge/push/status/{key}`
 /// endpoint. Derived from the dedup cache when the request completed,
 /// or from the retry queue when the request is still pending.
 #[derive(Debug, Clone, serde::Serialize)]

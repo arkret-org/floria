@@ -7,7 +7,7 @@ audit report; it records what must be ready before scheduling review.
 
 Review focus:
 
-1. `/api/v1/push/notify` authentication, including HTTP Message Signatures,
+1. `/_cokret/edge/push/notify` authentication, including HTTP Message Signatures,
    bearer fallback, mTLS header binding, and production-mode constraints.
 2. Replay protection: nonce store, idempotency keys, Redis failure behavior,
    and dedup collision handling.
@@ -84,7 +84,7 @@ The review focuses on the following adversaries and capabilities:
 3. **Compromised Redis instance** — can read/modify the dedup, nonce,
    rate-limit, and retry-queue keyspaces; goal is to forge idempotency
    responses, replay nonces, or surface dead-letter content.
-4. **In-cluster eavesdropper** — can observe `/api/v1/internal/*`
+4. **In-cluster eavesdropper** — can observe `/_cokret/edge/internal/*`
    traffic; goal is to read PII from broadcast events or learn
    account-deactivation timing.
 
@@ -104,7 +104,7 @@ implemented:
 
 1. **ROST-FLO-1..3 mention reference v2** — floria is a push gateway,
    not the Message AST authoring or rendering layer. The public
-   `cx.push.notify` payload must not carry mention-preview fields such
+   `ck.push.notify` payload must not carry mention-preview fields such
    as `subject_id` or `display_name_at_time`; the typed wire model uses
    `serde(deny_unknown_fields)` and the round4 test
    `mention_reference_v2_fields_are_not_push_payload_fields` proves the
@@ -113,7 +113,7 @@ implemented:
    `mention_redirect_target_actor_ids`, which carries DID targets only.
 2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
    tokens. The local `media.rs` helpers pin wire shapes and fail closed;
-   `/api/v1/push/describe` does not advertise an RTC/media token
+   `/_cokret/edge/push/describe` does not advertise an RTC/media token
    self-issue feature, and the production router does not expose a
    public `/rtc/token` minting route. The canonical issuer remains
    soland unless a future release wires a real media-service keystore.

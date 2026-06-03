@@ -18,7 +18,7 @@ mod notify;
 mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
-const NOTIFY_OPERATION_ID: &str = "cx.push.notify";
+const NOTIFY_OPERATION_ID: &str = "ck.push.notify";
 const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
 const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
 const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
@@ -36,11 +36,11 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
 // floria entirely. The four broadcast ephemeral signal kinds
-// (`cx.presence`, `cx.typing`, `cx.receipt.read`, `cx.call.signal`)
+// (`cx.presence`, `cx.typing`, `ck.receipt.read`, `ck.call.signal`)
 // travel on dedicated `ephemeral_envelope` / device-message channels
 // in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
 // durable Event-kind path. There is intentionally no code here that
-// branches on those kind strings — `wakeup_kind` on a `cx.push.notify`
+// branches on those kind strings — `wakeup_kind` on a `ck.push.notify`
 // is a closed enum (`message` / `mention` / `reaction` / `call_invite`),
 // so an
 // ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
@@ -60,35 +60,36 @@ fn notify_route(path: &'static str) -> Router {
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
-        .push(notify_route("api/v1/push/notify"))
+        .push(notify_route("_cokret/edge/push/notify"))
         .push(
-            Router::with_path("api/v1/integration/describe")
+            Router::with_path("_cokret/edge/integration/describe")
                 .get(integration_describe::integration_describe),
         )
         .push(
-            Router::with_path("api/v1/push/bridge/describe").get(bridge_describe::bridge_describe),
+            Router::with_path("_cokret/edge/push/bridge/describe")
+                .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
-        .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
+        .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
+        .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
-            Router::with_path("api/v1/internal/account_deactivate_fanout")
+            Router::with_path("_cokret/edge/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("api/v1/internal/consent_revoke")
+            Router::with_path("_cokret/edge/internal/consent_revoke")
                 .hoop(internal::require_internal_auth)
                 .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("api/v1/push/status/{idempotency_key}")
+            Router::with_path("_cokret/edge/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
-            Router::with_path("api/v1/push/device/unregister")
+            Router::with_path("_cokret/edge/push/device/unregister")
                 .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )
@@ -101,35 +102,36 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
     let use_forwarded_for = access_log.x_forwarded_for;
     Router::with_hoop(affix_state::inject(state))
         .hoop(AccessLogger { use_forwarded_for })
-        .push(notify_route("api/v1/push/notify"))
+        .push(notify_route("_cokret/edge/push/notify"))
         .push(
-            Router::with_path("api/v1/integration/describe")
+            Router::with_path("_cokret/edge/integration/describe")
                 .get(integration_describe::integration_describe),
         )
         .push(
-            Router::with_path("api/v1/push/bridge/describe").get(bridge_describe::bridge_describe),
+            Router::with_path("_cokret/edge/push/bridge/describe")
+                .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("api/v1/push/describe").get(server_describe::describe))
-        .push(Router::with_path("api/v1/server/describe").get(server_describe::describe))
+        .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
+        .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
-            Router::with_path("api/v1/internal/account_deactivate_fanout")
+            Router::with_path("_cokret/edge/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("api/v1/internal/consent_revoke")
+            Router::with_path("_cokret/edge/internal/consent_revoke")
                 .hoop(internal::require_internal_auth)
                 .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("api/v1/push/status/{idempotency_key}")
+            Router::with_path("_cokret/edge/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
-            Router::with_path("api/v1/push/device/unregister")
+            Router::with_path("_cokret/edge/push/device/unregister")
                 .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )

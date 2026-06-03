@@ -51,4 +51,4 @@ groups:
         labels: { severity: ticket, service: floria }
         annotations:
           summary: "floria dead-letter ring grew >100 entries in 1h"
-          description: "Inspect /admin/retry/dead-letter or the PG overlay."
+          description: "Inspect /_cokret/local/admin/retry/dead-letter or the PG overlay."

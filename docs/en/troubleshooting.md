@@ -36,7 +36,7 @@ and the alert rules in `docs/en/prometheus-alerts.yml`.
 
 **Symptom**: `floria_retry_queue_depth` keeps climbing; alert
 `FloriaRetryQueueBackedUp` fires; dead-letter ring fills (visible
-through `/admin/retry/dead-letter` or PG overlay).
+through `/_cokret/local/admin/retry/dead-letter` or PG overlay).
 
 **Triage**:
 

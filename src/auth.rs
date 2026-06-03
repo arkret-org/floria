@@ -23,7 +23,7 @@ const SIGNATURE_HEADER: &str = "signature";
 pub struct AuthenticatedNotifyCaller {
     pub origin_service_did: String,
     /// Whether this caller is gated for the visible-notification
-    /// profile (`cx.profile.push_gateway.visible_notification.v1`).
+    /// profile (`ck.profile.push_gateway.visible_notification.v1`).
     ///
     /// Set ONLY when the principal has both `allow_plaintext_metadata`
     /// flipped on AND a `service_type` that is on the plaintext-eligible
@@ -1238,7 +1238,7 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "cx.push.notify",
+            "operation_id": "ck.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1258,12 +1258,12 @@ mod tests {
         let (content_digest, signature_input, signature) = sign_request(
             seed_hex,
             "POST",
-            "http://127.0.0.1/api/v1/push/notify",
+            "http://127.0.0.1/_cokret/edge/push/notify",
             "127.0.0.1",
             &body_bytes,
         );
 
-        let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("host", "127.0.0.1", true)
             .add_header("content-digest", content_digest, true)
             .add_header("signature-input", signature_input, true)
@@ -1292,7 +1292,7 @@ mod tests {
         principal.mtls_cert_fingerprints = vec!["aa:bb:cc".to_owned()];
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "cx.push.notify",
+            "operation_id": "ck.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1312,12 +1312,12 @@ mod tests {
         let (content_digest, signature_input, signature) = sign_request(
             seed_hex,
             "POST",
-            "http://127.0.0.1/api/v1/push/notify",
+            "http://127.0.0.1/_cokret/edge/push/notify",
             "127.0.0.1",
             &body_bytes,
         );
 
-        let response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("host", "127.0.0.1", true)
             .add_header("content-digest", content_digest, true)
             .add_header("signature-input", signature_input, true)
@@ -1347,7 +1347,7 @@ mod tests {
         principal.require_mtls = true;
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "cx.push.notify",
+            "operation_id": "ck.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1367,12 +1367,12 @@ mod tests {
         let (content_digest, signature_input, signature) = sign_request(
             seed_hex,
             "POST",
-            "http://127.0.0.1/api/v1/push/notify",
+            "http://127.0.0.1/_cokret/edge/push/notify",
             "127.0.0.1",
             &body_bytes,
         );
 
-        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("host", "127.0.0.1", true)
             .add_header("content-digest", content_digest, true)
             .add_header("signature-input", signature_input, true)
@@ -1412,7 +1412,7 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "cx.push.notify",
+            "operation_id": "ck.push.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1431,13 +1431,13 @@ mod tests {
         let (content_digest, signature_input, signature) = sign_request(
             seed_hex,
             "POST",
-            "http://127.0.0.1/api/v1/push/notify",
+            "http://127.0.0.1/_cokret/edge/push/notify",
             "127.0.0.1",
             &body_bytes,
         );
         let tampered_body = json!({"hello": "world"});
 
-        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("host", "127.0.0.1", true)
             .add_header("content-digest", content_digest, true)
             .add_header("signature-input", signature_input, true)
@@ -1468,7 +1468,7 @@ mod tests {
         principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
-        let body = json!({"operation_id": "cx.push.notify"});
+        let body = json!({"operation_id": "ck.push.notify"});
         let body_bytes = serde_json::to_vec(&body).unwrap();
 
         let seed = hex::decode(seed_hex).unwrap();
@@ -1491,7 +1491,7 @@ mod tests {
         );
         let signing_string = [
             "\"@method\": post".to_owned(),
-            "\"@target-uri\": http://127.0.0.1/api/v1/push/notify".to_owned(),
+            "\"@target-uri\": http://127.0.0.1/_cokret/edge/push/notify".to_owned(),
             format!("\"content-digest\": {digest}"),
             "\"x-cokret-origin-service-did\": did:web:sync.example.com".to_owned(),
             "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
@@ -1508,7 +1508,7 @@ mod tests {
             base64::engine::general_purpose::STANDARD.encode(signature.to_bytes())
         );
 
-        let mut response = TestClient::post("http://127.0.0.1/api/v1/push/notify")
+        let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
             .add_header("host", "127.0.0.1", true)
             .add_header("content-digest", digest, true)
             .add_header("signature-input", signature_input, true)

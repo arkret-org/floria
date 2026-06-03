@@ -110,7 +110,7 @@ http {
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
-    //     service_endpoint "https://push.example.com/api/v1/push/notify"
+    //     service_endpoint "https://push.example.com/_cokret/edge/push/notify"
     //     require_mtls true
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
@@ -152,7 +152,7 @@ http {
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | Ingress-provided header carrying the client certificate Subject DN |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | Ingress-provided header carrying the comma-joined SAN list |
 | `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service DID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
-| `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/api/v1/internal/*`, `/api/v1/push/status/*`, and `/api/v1/push/device/unregister` |
+| `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/_cokret/edge/internal/*`, `/_cokret/edge/push/status/*`, and `/_cokret/edge/push/device/unregister` |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | SHA-256 internal bearer token digests, optionally prefixed with `sha256:`; when both internal credential lists are empty, internal/operator routes fail closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
 | `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service DID per window |
@@ -186,7 +186,7 @@ http {
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
-        service_endpoint "https://push.example.com/api/v1/push/notify"
+        service_endpoint "https://push.example.com/_cokret/edge/push/notify"
         require_mtls true
         mtls_cert_fingerprints "aa:bb:cc"
       }
@@ -203,7 +203,7 @@ http {
 }
 ```
 
-In production, keep `/api/v1/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
+In production, keep `/_cokret/edge/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
 > **Production-mode requirement (P5)**: do not configure plaintext
 > `bearer_tokens` in production. With `production_mode=true`, floria

@@ -167,7 +167,7 @@ Operational signals:
 
 ## Media token issuer role in v1 (proxy posture)
 
-floria's role in the `cx.call.media.token_exchange` flow is **not an
+floria's role in the `ck.call.media.token_exchange` flow is **not an
 issuer** in v1. The current floria HTTP router and describe endpoints do
 not expose a public `/rtc/token` minting surface. If a deployment adds a
 separate proxy in front of soland, the canonical issuer is still soland
@@ -177,7 +177,7 @@ re-signing, or mutating tokens. See
 the Chinese summary of this decision and the rationale.
 
 The local `media.rs` signing helpers are fail-closed scaffolds. If you
-see floria attempting to mint a token locally, or `/api/v1/push/describe`
+see floria attempting to mint a token locally, or `/_cokret/edge/push/describe`
 advertising an RTC/media token self-issue feature, that is a bug.
 
 ## Takedown notification metric placeholder

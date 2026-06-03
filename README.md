@@ -20,7 +20,7 @@ adapt to your local toolchain.
 
 ## Realm vs Space
 
-`floria` forwards `cx.device.push_route` and `cx.push.notify` events that
+`floria` forwards `ck.device.push_route` and `ck.push.notify` events that
 target a specific security boundary. After the Phase 1–4 terminology
 inversion:
 
@@ -57,13 +57,13 @@ Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`appeal_id`, `attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
 `policy_frontier_digest`, `trust_domain`, `reset_event_id`) and added two
-new internal broadcast endpoints — `POST /api/v1/internal/
-account_deactivate_fanout` (T07) and `POST /api/v1/internal/
+new internal broadcast endpoints — `POST /_cokret/edge/internal/
+account_deactivate_fanout` (T07) and `POST /_cokret/edge/internal/
 consent_revoke` (T17) — consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the
 normative source. Ephemeral kinds (`cx.presence`, `cx.typing`,
-`cx.receipt.read`, `cx.call.signal`) are confirmed to bypass floria
+`ck.receipt.read`, `ck.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
 
 ## Cross-project task tracking
@@ -82,8 +82,8 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 
 ## Supported features
 
-- `POST /api/v1/push/notify` as the canonical Cokret notify endpoint
-- `GET /api/v1/push/describe` gateway profile discovery (`/api/v1/server/describe` is an identical alias)
+- `POST /_cokret/edge/push/notify` as the canonical Cokret notify endpoint
+- `GET /_cokret/edge/push/describe` gateway profile discovery (`/_cokret/describe` is an identical alias)
 - `GET /health`
 - `GET /ready`
 - `GET /readyz`
@@ -138,8 +138,8 @@ Quick notes:
 
 ## Cokret notify semantics
 
-- `/api/v1/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
-- `cx.push.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
+- `/_cokret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
+- `ck.push.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
