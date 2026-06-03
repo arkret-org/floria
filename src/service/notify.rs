@@ -2435,10 +2435,7 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
         );
     }
     if let Some(value) = notification.content.as_ref() {
-        normalized.insert(
-            "content".to_owned(),
-            canonical_json_value(&Value::Object(value.clone())),
-        );
+        normalized.insert("content".to_owned(), Value::Object(value.clone()));
     }
     if let Some(value) = notification.event_id.as_ref() {
         normalized.insert("event_id".to_owned(), Value::String(value.clone()));
@@ -2461,7 +2458,7 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(scope) = notification.effective_scope.as_ref()
         && let Ok(value) = serde_json::to_value(scope)
     {
-        normalized.insert("effective_scope".to_owned(), canonical_json_value(&value));
+        normalized.insert("effective_scope".to_owned(), value);
     }
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));
@@ -2493,7 +2490,7 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     }
     normalized.insert(
         "counts".to_owned(),
-        canonical_json_value(&serde_json::to_value(&notification.counts).ok()?),
+        serde_json::to_value(&notification.counts).ok()?,
     );
 
     let mut devices = notification
@@ -2515,13 +2512,10 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
                 );
             }
             if let Some(data) = device.data.as_ref() {
-                normalized.insert(
-                    "data".to_owned(),
-                    canonical_json_value(&Value::Object(data.clone())),
-                );
+                normalized.insert("data".to_owned(), Value::Object(data.clone()));
             }
             let tweaks = serde_json::to_value(&device.tweaks).ok()?;
-            normalized.insert("tweaks".to_owned(), canonical_json_value(&tweaks));
+            normalized.insert("tweaks".to_owned(), tweaks);
             Some(Value::Object(normalized))
         })
         .collect::<Option<Vec<_>>>()
@@ -2530,28 +2524,14 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     devices.dedup();
     normalized.insert("devices".to_owned(), Value::Array(devices));
 
-    serde_json::to_vec(&Value::Object(normalized))
+    // Canonicalize the whole fingerprint tree via the SDK so the
+    // blind-wakeup digest is byte-identical to every other contrix
+    // service (soland/yougen/chime). `canonical_json_bytes` recursively
+    // sorts object keys and emits the v1 canonical encoding, replacing
+    // floria's former local `canonical_json_value` helper.
+    contrix::canonical::canonical_json_bytes(&Value::Object(normalized))
         .ok()
         .map(|bytes| request_hash(&bytes))
-}
-
-fn canonical_json_value(value: &Value) -> Value {
-    match value {
-        Value::Array(values) => Value::Array(values.iter().map(canonical_json_value).collect()),
-        Value::Object(object) => {
-            let mut keys = object.keys().cloned().collect::<Vec<_>>();
-            keys.sort_unstable();
-
-            let mut normalized = Map::new();
-            for key in keys {
-                if let Some(value) = object.get(&key) {
-                    normalized.insert(key, canonical_json_value(value));
-                }
-            }
-            Value::Object(normalized)
-        }
-        _ => value.clone(),
-    }
 }
 
 fn canonical_sort_key(value: &Value) -> String {
