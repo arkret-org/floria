@@ -239,16 +239,19 @@ impl WebpushPushkin {
         {
             payload.insert("push_hint".to_owned(), Value::String(push_hint.to_owned()));
         }
+        // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) before
+        // they reach the WebPush payload so the exact figure can't be
+        // used as a per-`push_target_id` activity correlator.
         if let Some(unread) = notification.counts.unread {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(unread.min(sdk::MAX_COUNT_VALUE).into()),
+                Value::Number(crate::sanitize::bucket_count(unread).into()),
             );
         }
         if let Some(missed_calls) = notification.counts.missed_calls {
             payload.insert(
                 "badge".to_owned(),
-                Value::Number(missed_calls.min(sdk::MAX_COUNT_VALUE).into()),
+                Value::Number(crate::sanitize::bucket_count(missed_calls).into()),
             );
         }
 
@@ -677,7 +680,9 @@ mod tests {
             payload.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
+        // §5.1 — unread=2 is bucketed to the `2-5` representative value 5;
+        // missed_calls=1 stays in the `1` bucket.
+        assert_eq!(payload.get("unread_count"), Some(&Value::Number(5.into())));
         assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
 
         // T4.3 — stable correlation identifiers are stripped.

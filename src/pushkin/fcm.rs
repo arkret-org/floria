@@ -326,8 +326,8 @@ impl FcmPushkin {
         //     so the client knows it has work to pick up.
         //   * `push_hint` survives ONLY when it's one of the SDK's allow-listed literals (no
         //     l10n_key:* form that could embed a stable token).
-        //   * Counts are clamped at SDK::MAX_COUNT_VALUE so a 4-byte counter can't be smuggled
-        //     through.
+        //   * Counts are bucketed (0 / 1 / 2-5 / 6+) per §5.1 so the absolute figure can't ride the
+        //     wire as a per-`push_target_id` activity correlator.
         //
         // The caller-supplied `default_payload` is still respected so
         // operators can plug in static client-config keys
@@ -377,21 +377,25 @@ impl FcmPushkin {
 
         let mut emitted_count = false;
         if self.send_badge_counts {
+            // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) so the
+            // exact figure never reaches FCM as a per-`push_target_id`
+            // activity correlator. Bucketing supersedes the old bare
+            // clamp.
             if let Some(unread) = notification.counts.unread
                 && unread > 0
             {
-                let clamped = unread.min(sdk::MAX_COUNT_VALUE);
+                let bucketed = crate::sanitize::bucket_count(unread);
                 data.insert(
                     "unread_count".to_owned(),
-                    Value::String(clamped.to_string()),
+                    Value::String(bucketed.to_string()),
                 );
                 emitted_count = true;
             }
             if let Some(missed_calls) = notification.counts.missed_calls
                 && missed_calls > 0
             {
-                let clamped = missed_calls.min(sdk::MAX_COUNT_VALUE);
-                data.insert("badge".to_owned(), Value::String(clamped.to_string()));
+                let bucketed = crate::sanitize::bucket_count(missed_calls);
+                data.insert("badge".to_owned(), Value::String(bucketed.to_string()));
                 emitted_count = true;
             }
         }
@@ -739,10 +743,12 @@ mod tests {
             payload.get("prio"),
             Some(&Value::String("normal".to_owned()))
         );
+        // §5.1 — unread=2 is bucketed to the `2-5` representative value 5.
         assert_eq!(
             payload.get("unread_count"),
-            Some(&Value::String("2".to_owned()))
+            Some(&Value::String("5".to_owned()))
         );
+        // missed_calls=1 → `1` bucket → badge "1".
         assert_eq!(payload.get("badge"), Some(&Value::String("1".to_owned())));
 
         for forbidden in [

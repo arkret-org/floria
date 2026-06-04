@@ -100,18 +100,20 @@ fn merge_notification_data(
     );
 
     if send_badge_counts {
-        // Clamp counts to SDK MAX_COUNT_VALUE so a 4-byte stable
-        // counter can't be smuggled through as a correlation tag.
+        // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) before
+        // they reach the provider. A bare clamp still let `unread = 37`
+        // ride the wire as a per-`push_target_id` activity correlator;
+        // bucketing destroys the exact figure while preserving ordering.
         if let Some(unread) = notification.counts.unread {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(unread.min(sdk::MAX_COUNT_VALUE).into()),
+                Value::Number(crate::sanitize::bucket_count(unread).into()),
             );
         }
         if let Some(missed_calls) = notification.counts.missed_calls {
             payload.insert(
                 "badge".to_owned(),
-                Value::Number(missed_calls.min(sdk::MAX_COUNT_VALUE).into()),
+                Value::Number(crate::sanitize::bucket_count(missed_calls).into()),
             );
         }
     }
@@ -219,8 +221,19 @@ fn fallback_summary(notification: &Notification, sender: &str) -> String {
         return maybe_prefix_sender(notification.scope_title().is_some(), sender, body);
     }
 
+    // §5.1 minimization — never render the absolute unread integer into
+    // the provider-visible alert text. Even on the visible profile the
+    // provider can read this string, so the count is bucketed to the
+    // same coarse phrasing the wire data uses.
     match notification.counts.unread {
-        Some(unread) if unread > 0 => format!("You have {unread} unread messages"),
+        Some(unread) if unread >= crate::sanitize::BUCKET_SIX_PLUS => {
+            format!(
+                "You have {}+ unread messages",
+                crate::sanitize::BUCKET_SIX_PLUS
+            )
+        }
+        Some(unread) if unread > 1 => "You have several unread messages".to_owned(),
+        Some(1) => "You have a new message".to_owned(),
         _ => format!("{sender} sent an update"),
     }
 }
@@ -342,11 +355,14 @@ mod tests {
             payload.data.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
+        // §5.1 — counts are bucketed (0 / 1 / 2-5 / 6+). unread=2 falls
+        // in the `2-5` bucket whose representative value is 5; the exact
+        // figure never reaches the wire.
         assert_eq!(
             payload.data.get("unread_count"),
-            Some(&Value::Number(2.into()))
+            Some(&Value::Number(5.into()))
         );
-        // missed_calls → badge (clamped at MAX_COUNT_VALUE)
+        // missed_calls=1 → `1` bucket → badge 1.
         assert_eq!(payload.data.get("badge"), Some(&Value::Number(1.into())));
     }
 

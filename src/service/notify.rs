@@ -30,48 +30,17 @@ use crate::models::{
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
 
-// Round 4 (spec a77b995) — additional forbidden-key list maintained
-// locally as a defense-in-depth layer on top of the SDK's
-// `is_forbidden_payload_key`. These cover proof / CAS / attestation
-// material that would leak if it ever made it onto a push wire — the
-// SDK's blind sanitizer covers most of the round-3 surface, but the
-// round-4 protocol-review closures add new authenticator fields
-// (`binding_proof.signature`, `subject_proof.signature`,
-// `expected_previous_generation`, `attestation_evidence`) that are
-// rejected here regardless of profile.
+// Round 4 (spec a77b995) — the leaf-key forbidden list now lives in the
+// single authoritative `crate::sanitize` module
+// ([`crate::sanitize::FORBIDDEN_INBOUND_KEYS`] /
+// [`crate::sanitize::is_forbidden_inbound_key`]) so the `/notify` ingress
+// reject and the pushkin egress strip can never drift apart. The ingress
+// walker below additionally enforces the path-shaped proof-signature
+// pairs in `FORBIDDEN_PLAINTEXT_PARENT_LEAF`.
 //
-// Matched case-insensitively against the leaf key name of any nested
-// payload field. Path-shaped matches (`binding_proof.signature`) also
-// match when the parent key + leaf key form that path, so callers
-// can't smuggle a `signature` under an unrelated parent and have it
-// pass.
-const FORBIDDEN_PLAINTEXT_LEAF_KEYS: &[&str] = &[
-    "expected_previous_generation",
-    "attestation_evidence",
-    // Phase P2 (spec 37ce729 / SDK 4d5a1af) — legacy B-B field-naming
-    // aliases that were renamed in the candidate-stage breaking pass.
-    // The new wire shape carries `size_bytes` / `flow_content` /
-    // `message_content` / `content_only`; the legacy forms `size` /
-    // `flow_body` / `message_body` / `body_only` are fail-closed on the
-    // push wire so a caller still pinned to the old SDK can't smuggle
-    // mismatched semantics through. This is a hard reject, not a
-    // silent rename — the gateway never translates between the two
-    // forms.
-    "size",
-    "flow_body",
-    "message_body",
-    "body_only",
-    // Spec 9dabf26 — content ciphertext and metadata moved to the
-    // typed message/flow carriers. None of those carriers belong on
-    // the push wire; fail closed for both legacy and current names.
-    "encrypted_payload",
-    "encrypted_content",
-    "encrypted_metadata",
-    "metadata",
-    "fields",
-    "track",
-    "track_name",
-];
+// Note: `encrypted_content` is covered by the SDK
+// `is_forbidden_payload_key`, so it is not duplicated in the local set;
+// the ingress walker ORs the SDK predicate in below.
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -447,10 +416,7 @@ fn reject_forbidden_plaintext_fields(path: &str, value: &Value) -> Result<(), St
                 } else {
                     format!("{path}.{key}")
                 };
-                if FORBIDDEN_PLAINTEXT_LEAF_KEYS
-                    .iter()
-                    .any(|forbidden| forbidden.eq_ignore_ascii_case(&leaf))
-                {
+                if crate::sanitize::is_forbidden_inbound_key(&leaf) {
                     return Err(format!(
                         "field `{next_path}` is forbidden on the push wire model \
                          (round-4 protocol-review closure)"
@@ -747,27 +713,22 @@ fn validate_notification_contract(
     // we surface a more specific reason code first so operators can
     // tell the two failure classes apart.
     if !caller.allow_plaintext_metadata {
-        for forbidden in [
-            "title",
-            "body",
-            "subtitle",
-            "alert",
-            "preview",
-            "summary",
-            "metadata",
-            "encrypted_metadata",
-            "encrypted_content",
-            "fields",
-            "track",
-            "track_name",
-        ] {
-            if content.contains_key(forbidden) {
-                return Err(format!(
-                    "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-                     plaintext `content.{forbidden}` under the default \
-                     `ck.profile.push_gateway.blind_wakeup.v1` profile"
-                ));
-            }
+        // Visible rendering keys (title/body/...) plus the inbound-forbidden
+        // correlation keys (metadata/encrypted_*/fields/track*) are both
+        // sourced from the single authoritative `crate::sanitize` module so
+        // this list can't drift from the ingress walker / egress strip.
+        let forbidden_content = content.keys().find(|key| {
+            crate::sanitize::BLIND_FORBIDDEN_CONTENT_TEXT_KEYS
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(key))
+                || crate::sanitize::is_forbidden_inbound_key(key)
+        });
+        if let Some(forbidden) = forbidden_content {
+            return Err(format!(
+                "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
+                 plaintext `content.{forbidden}` under the default \
+                 `ck.profile.push_gateway.blind_wakeup.v1` profile"
+            ));
         }
     }
 

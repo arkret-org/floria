@@ -30,8 +30,9 @@ const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
 // inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
 // when present so two Flows that share a name in different Circles do
 // not collide. `circle_id` is gateway-routing only; it MUST NOT be
-// echoed back to providers (the local strip list in
-// `pushkin/mod.rs::LOCAL_FORBIDDEN_FIELDS` enforces that).
+// echoed back to providers (the shared strip set in
+// `crate::sanitize::STRIP_ONLY_KEYS` / `is_forbidden_egress_key`
+// enforces that).
 const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass

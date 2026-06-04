@@ -563,62 +563,6 @@ impl std::fmt::Display for ProviderPayloadRejection {
     }
 }
 
-/// Round R2/R3 (2026-05-20) — extra correlation / governance identifiers
-/// that surfaced with the moderation-appeal, audit-attestation,
-/// cross-signing-reset, and policy-frontier-hash wire additions.
-///
-/// These names are NOT yet on the SDK's `is_forbidden_payload_key` list
-/// (it predates round R2/R3), so floria strips them locally as
-/// defence-in-depth. Any of these on the blind-wakeup wire is a hard
-/// correlation leak — `appeal_id` links a push back to a specific
-/// moderation appeal thread; `attestation_evidence` / `attestation_chain`
-/// / `audit_purpose` / `audit_policy_version_digest` reveal audit-agent
-/// posture; `policy_frontier_digest` is a stable per-policy correlator;
-/// `trust_domain` discloses deployment scope; `reset_event_id` links
-/// pushes back to a cross-signing reset event.
-///
-/// CKP-0007 adds `circle_id` and `effective_scope` to the list: both
-/// drive gateway-internal routing but are NEVER allowed to surface on
-/// the plaintext wire — `circle_id` would leak the encryption
-/// sub-boundary an observer is looking at, and `effective_scope`
-/// reveals the realm/circle binding the principal server stamped.
-// TODO(circle-rollout-P2C.5): once the SDK ships
-// `is_forbidden_payload_key` coverage for these names, drop the local
-// list.
-const LOCAL_FORBIDDEN_FIELDS: &[&str] = &[
-    "appeal_id",
-    "attestation_evidence",
-    "audit_purpose",
-    "attestation_chain",
-    "audit_policy_version_digest",
-    "policy_frontier_digest",
-    "trust_domain",
-    "reset_event_id",
-    // CKP-0007 Circle primitive.
-    "circle_id",
-    "effective_scope",
-    "scope_circle_id",
-    // Spec 9dabf26 message/flow carrier split. Provider payloads stay
-    // blind and must not leak protocol content or track selectors.
-    // (`encrypted_content` and `sender_actor_display_name` are already
-    // covered by the SDK `is_forbidden_payload_key`, so they are NOT
-    // duplicated here.)
-    "encrypted_payload",
-    "encrypted_metadata",
-    "metadata",
-    "fields",
-    "track",
-    "track_name",
-];
-
-/// Returns `true` if `key` matches a round R2/R3 locally-stripped
-/// forbidden name (case-insensitive).
-fn is_local_forbidden_field(key: &str) -> bool {
-    LOCAL_FORBIDDEN_FIELDS
-        .iter()
-        .any(|name| name.eq_ignore_ascii_case(key))
-}
-
 fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // Drop forbidden top-level keys. We do *not* touch keys that are
     // provider-defined wrappers like `aps`, `android`, `notification`,
@@ -626,14 +570,14 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // they appear in the blind-wakeup contract, so anything that gets
     // here with one of those keys gets stripped.
     //
-    // SDK's `is_forbidden_payload_key` now covers `realm_id` (the
-    // renamed security-boundary id) AND the renamed container
-    // `space_id`. The local R23 list adds the round-R23 governance
-    // identifiers and CKP-0007's `circle_id` / `effective_scope`.
-    map.retain(|key, _| {
-        !cokret::blind_payload_sanitizer::is_forbidden_payload_key(key)
-            && !is_local_forbidden_field(key)
-    });
+    // SDK's `is_forbidden_payload_key` covers `realm_id` (the renamed
+    // security-boundary id) AND the renamed container `space_id`. The
+    // shared `crate::sanitize::is_forbidden_egress_key` adds floria's
+    // round-R2/R3 governance identifiers and CKP-0007's `circle_id` /
+    // `effective_scope` / `scope_circle_id` on top — the same authoritative
+    // sets the `/notify` ingress reuses, so the two defence layers can't
+    // drift.
+    map.retain(|key, _| !crate::sanitize::is_forbidden_egress_key(key));
     for value in map.values_mut() {
         strip_value_recursive(value);
     }
@@ -693,14 +637,14 @@ pub fn build_blind_provider_data(notification: &Notification) -> Map<String, ser
             serde_json::Value::String(push_hint.to_owned()),
         );
     }
-    if let Some(unread) = notification
-        .counts
-        .unread
-        .filter(|value| *value <= sdk::MAX_COUNT_VALUE)
-    {
+    // §5.1 — the absolute unread count is an activity side channel.
+    // Bucket it (0 / 1 / 2-5 / 6+) before it reaches the provider so it
+    // can't be used to rebuild a cumulative per-`push_target_id`
+    // activity profile. `bucket_count` also clamps below MAX_COUNT_VALUE.
+    if let Some(unread) = notification.counts.unread {
         data.insert(
             "unread_count".to_owned(),
-            serde_json::Value::Number(unread.into()),
+            serde_json::Value::Number(crate::sanitize::bucket_count(unread).into()),
         );
     }
     data

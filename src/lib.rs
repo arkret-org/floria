@@ -16,6 +16,7 @@ pub mod push_contact_cache;
 pub mod pushkin;
 pub mod rate_limit;
 pub mod retry_queue;
+pub mod sanitize;
 pub mod service;
 
 use std::sync::Arc;

@@ -463,17 +463,15 @@ impl ApnsPushkin {
         }
 
         let badge = if self.send_badge_counts {
-            let mut badge = notification.counts.unread.unwrap_or(0);
-            if let Some(missed_calls) = notification.counts.missed_calls {
-                badge += missed_calls;
-            }
-            if badge == 0
-                && notification.counts.unread.is_none()
-                && notification.counts.missed_calls.is_none()
-            {
+            let raw = notification.counts.unread.unwrap_or(0)
+                + notification.counts.missed_calls.unwrap_or(0);
+            if notification.counts.unread.is_none() && notification.counts.missed_calls.is_none() {
                 None
             } else {
-                Some(badge)
+                // §5.1 — bucket the badge (0 / 1 / 2-5 / 6+) so the exact
+                // cumulative figure never reaches APNS as a
+                // per-`push_target_id` activity correlator.
+                Some(crate::sanitize::bucket_count(raw))
             }
         } else {
             None
@@ -929,7 +927,8 @@ mod tests {
                             "I'm floating in a most peculiar way."
                         ]
                     },
-                    "badge": 3
+                    // §5.1 — unread=3 bucketed to the `2-5` representative 5.
+                    "badge": 5
                 }
             })
         );
@@ -997,7 +996,8 @@ mod tests {
                         "loc-key": "SINGLE_UNREAD",
                         "loc-args": []
                     },
-                    "badge": 2
+                    // §5.1 — unread=2 bucketed to the `2-5` representative 5.
+                    "badge": 5
                 }
             })
         );

@@ -166,7 +166,10 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
-    assert_eq!(data.get("unread_count"), Some(&json!(3)));
+    // §5.1 — the absolute count is bucketed (0 / 1 / 2-5 / 6+). unread=3
+    // falls in the `2-5` bucket whose representative value is 5; the
+    // exact figure never reaches the provider.
+    assert_eq!(data.get("unread_count"), Some(&json!(5)));
     for forbidden in [
         "event_id",
         "message_id",
@@ -299,9 +302,10 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
             "blind provider data must never carry `{forbidden}`"
         );
     }
-    // The allow-listed blind fields still survive.
+    // The allow-listed blind fields still survive. §5.1 — unread=3 is
+    // bucketed to the `2-5` representative value 5.
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
-    assert_eq!(data.get("unread_count"), Some(&json!(3)));
+    assert_eq!(data.get("unread_count"), Some(&json!(5)));
 }
 
 // ---------------------------------------------------------------------------
