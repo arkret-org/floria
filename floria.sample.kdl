@@ -94,12 +94,12 @@ http {
     poll_interval_ms 1000
     batch_size 32
   }
-  // CXP-0007 Circle primitive — when #true, the per-(provider, scope)
+  // CKP-0007 Circle primitive — when #true, the per-(provider, scope)
   // delivery counter `floria_notify_delivery_total` labels `scope_id`
   // with the `circle_id` instead of the parent `realm_id`. Default
   // #false bounds label cardinality by realm count.
   metrics_detailed_circle_labels #false
-  // CXP-0007 — per-Circle rate-limit caps applied on top of
+  // CKP-0007 — per-Circle rate-limit caps applied on top of
   // notify_rate_limits. Both knobs default to null (no per-Circle cap).
   circle_rate_limits {
     // per_circle_qps 200

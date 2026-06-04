@@ -175,7 +175,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         // (renamed security boundary) MUST stay off the wire.
         "space_id",
         "realm_id",
-        // CXP-0007 — Circle routing identifiers MUST NOT leak.
+        // CKP-0007 — Circle routing identifiers MUST NOT leak.
         "circle_id",
         "effective_scope",
         "scope_circle_id",
@@ -194,7 +194,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
 }
 
 // ---------------------------------------------------------------------------
-// CXP-0007 Circle primitive — privacy invariants.
+// CKP-0007 Circle primitive — privacy invariants.
 //
 // Circle routing metadata (`circle_id`, `effective_scope`,
 // `scope_circle_id`) drives gateway-internal routing only. It MUST
@@ -224,7 +224,7 @@ fn sanitizer_strips_circle_routing_identifiers() {
     for forbidden in ["circle_id", "effective_scope", "scope_circle_id"] {
         assert!(
             sanitized.get(forbidden).is_none(),
-            "CXP-0007 circle identifier `{forbidden}` survived the sanitizer"
+            "CKP-0007 circle identifier `{forbidden}` survived the sanitizer"
         );
     }
     assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));

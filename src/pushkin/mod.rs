@@ -577,7 +577,7 @@ impl std::fmt::Display for ProviderPayloadRejection {
 /// `trust_domain` discloses deployment scope; `reset_event_id` links
 /// pushes back to a cross-signing reset event.
 ///
-/// CXP-0007 adds `circle_id` and `effective_scope` to the list: both
+/// CKP-0007 adds `circle_id` and `effective_scope` to the list: both
 /// drive gateway-internal routing but are NEVER allowed to surface on
 /// the plaintext wire — `circle_id` would leak the encryption
 /// sub-boundary an observer is looking at, and `effective_scope`
@@ -594,7 +594,7 @@ const LOCAL_FORBIDDEN_FIELDS: &[&str] = &[
     "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
-    // CXP-0007 Circle primitive.
+    // CKP-0007 Circle primitive.
     "circle_id",
     "effective_scope",
     "scope_circle_id",
@@ -629,7 +629,7 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // SDK's `is_forbidden_payload_key` now covers `realm_id` (the
     // renamed security-boundary id) AND the renamed container
     // `space_id`. The local R23 list adds the round-R23 governance
-    // identifiers and CXP-0007's `circle_id` / `effective_scope`.
+    // identifiers and CKP-0007's `circle_id` / `effective_scope`.
     map.retain(|key, _| {
         !cokret::blind_payload_sanitizer::is_forbidden_payload_key(key)
             && !is_local_forbidden_field(key)

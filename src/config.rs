@@ -116,7 +116,7 @@ pub struct HttpConfig {
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
-    /// CXP-0007 Circle primitive — when `true`, the per-(provider,
+    /// CKP-0007 Circle primitive — when `true`, the per-(provider,
     /// scope) delivery counter (`floria_notify_delivery_total`) labels
     /// `scope_id` with the `circle_id` instead of the parent
     /// `realm_id` when a Circle is set. Default `false` keeps the
@@ -125,7 +125,7 @@ pub struct HttpConfig {
     /// needed.
     #[serde(default)]
     pub metrics_detailed_circle_labels: bool,
-    /// CXP-0007 Circle primitive — per-Circle rate limits and
+    /// CKP-0007 Circle primitive — per-Circle rate limits and
     /// concurrency caps. Default disabled.
     #[serde(default)]
     pub circle_rate_limits: CircleRateLimitConfig,
@@ -133,7 +133,7 @@ pub struct HttpConfig {
     extra: Map<String, Value>,
 }
 
-/// CXP-0007 Circle primitive — per-Circle rate-limit configuration.
+/// CKP-0007 Circle primitive — per-Circle rate-limit configuration.
 /// Defaults leave both knobs unset (no Circle-specific limits applied).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
@@ -1940,12 +1940,12 @@ fn http_schema() -> Value {
             "metrics_detailed_circle_labels": {
                 "type": "boolean",
                 "default": false,
-                "description": "CXP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count."
+                "description": "CKP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count."
             },
             "circle_rate_limits": {
                 "type": "object",
                 "additionalProperties": false,
-                "description": "CXP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
+                "description": "CKP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
                 "properties": {
                     "per_circle_qps": {
                         "type": ["integer", "null"],

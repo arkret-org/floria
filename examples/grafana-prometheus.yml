@@ -59,7 +59,7 @@ scrape_configs:
       - regex: __meta_kubernetes_pod_label_pod_template_(.+)
         action: labeldrop
     metric_relabel_configs:
-      # CXP-0007 cardinality guard: drop any series carrying the
+      # CKP-0007 cardinality guard: drop any series carrying the
       # `_unknown` scope label so dashboards do not show a placeholder
       # bucket. (floria emits `_unknown` defensively when a request
       # arrives without realm/circle context.)

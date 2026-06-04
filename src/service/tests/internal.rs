@@ -440,7 +440,7 @@ async fn consent_revoke_accepts_agent_paused_reason() {
 
     let service = test_service_with_internal_state(None, Some(cache.clone()));
 
-    // Phase P2 (CXP-0008) — soland attaches `reason=agent_paused`
+    // Phase P2 (CKP-0008) — soland attaches `reason=agent_paused`
     // when the controller pauses a native Personal Agent so the
     // downstream capability cache is invalidated. floria treats every
     // reason identically (full PSI cache evict), but the field must
@@ -469,7 +469,7 @@ async fn consent_revoke_accepts_agent_deactivated_reason() {
 
     let service = test_service_with_internal_state(None, Some(cache.clone()));
 
-    // Phase P2 (CXP-0009) — agent deactivation invalidates the
+    // Phase P2 (CKP-0009) — agent deactivation invalidates the
     // capability cache alongside the soland-side agent_key revoke
     // cascade.
     let mut response = internal_auth(TestClient::post(

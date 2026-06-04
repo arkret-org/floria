@@ -28,9 +28,9 @@ identifiers stay off the provider wire.
 | `policy_frontier_digest` | R3 | Stable policy frontier correlator — same linkability class as the audit policy version |
 | `trust_domain` | R3 | Deployment-scope leakage — exposes whether the principal is on a federation edge |
 | `reset_event_id` | R3 | Links a push to a cross-signing reset event, exposing key-rotation timing |
-| `circle_id` | CXP-0007 | Encryption sub-boundary id — would tell an observer which Circle inside a Realm a push is destined for |
-| `effective_scope` | CXP-0007 | Reveals the realm/circle binding the principal server stamped on the request |
-| `scope_circle_id` | CXP-0007 | Same class as `circle_id`; an alias used by some draft schemas |
+| `circle_id` | CKP-0007 | Encryption sub-boundary id — would tell an observer which Circle inside a Realm a push is destined for |
+| `effective_scope` | CKP-0007 | Reveals the realm/circle binding the principal server stamped on the request |
+| `scope_circle_id` | CKP-0007 | Same class as `circle_id`; an alias used by some draft schemas |
 
 The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
@@ -52,7 +52,7 @@ Do not remove the local sweep until all of these are true:
 
 1. The SDK helper rejects every name above case-insensitively.
 2. The SDK helper is documented as the canonical blind-wakeup
-   forbidden-key source for Round R2/R3 and CXP-0007 and later.
+   forbidden-key source for Round R2/R3 and CKP-0007 and later.
 3. floria tests pass after deleting `ROUND23_LOCAL_FORBIDDEN` and
    changing `sanitized_provider_payload` to rely on the SDK helper
    only.
@@ -62,7 +62,7 @@ Do not remove the local sweep until all of these are true:
 ## Spec round upgrade checklist
 
 Use this when bumping floria to a newer cokret-spec round (R4 →
-R5, CXP-0007 → CXP-0008, etc.):
+R5, CKP-0007 → CKP-0008, etc.):
 
 - [ ] Diff the new round's `forbidden_payload_keys` table against
       `ROUND23_LOCAL_FORBIDDEN`. Add any newly forbidden names to

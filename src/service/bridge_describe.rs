@@ -153,7 +153,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "The caller requested a non-canonical notify operation or unsupported contract feature.",
             ),
             // CARD-1 (R3 spec-sync 2026-05-27, `_before_todos.md` §0.7,
-            // CXP-0008 / CXP-0009 / CXP-0010) — push surface
+            // CKP-0008 / CKP-0009 / CKP-0010) — push surface
             // failure codes for Personal Agent lifecycle state and the
             // recording-artifact pipeline. Floria's notify pipeline
             // already silently consumes the durable `ck.agent.*` event

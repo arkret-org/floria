@@ -188,7 +188,7 @@ pub struct Notification {
     /// model entirely so it does NOT appear on this struct.
     #[serde(default)]
     pub realm_id: Option<String>,
-    /// CXP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
+    /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
     /// of the encryption sub-boundary this notification belongs to. When
     /// present, routing / dedup / per-(provider,realm,circle) circuit
     /// breaker stats key off this id rather than the parent realm so two
@@ -197,7 +197,7 @@ pub struct Notification {
     /// on the wire only to drive gateway-internal routing.
     #[serde(default)]
     pub circle_id: Option<String>,
-    /// CXP-0007 — reducer-stamped envelope scope binding mirrored on the
+    /// CKP-0007 — reducer-stamped envelope scope binding mirrored on the
     /// push wire model (`event_envelope.effective_scope`). Carries the
     /// `{realm_id}` (Realm-default scope) or `{realm_id, circle_id}`
     /// (Circle scope) discriminator the principal server stamped onto
@@ -246,7 +246,7 @@ pub struct Notification {
 }
 
 impl Notification {
-    /// CXP-0007 — the most-specific scope id the gateway should key
+    /// CKP-0007 — the most-specific scope id the gateway should key
     /// per-(provider, scope) state off (rate limits, circuit breaker
     /// windows, retry queues). Precedence:
     ///   1. `circle_id` (encryption sub-boundary)

@@ -88,7 +88,7 @@ static NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER: LazyLock<IntCounterVec> = LazyLoc
     .expect("register floria_notify_delivery_outcome_by_app_total")
 });
 
-// CXP-0007 — per-(provider, scope) delivery breakdown. The scope label
+// CKP-0007 — per-(provider, scope) delivery breakdown. The scope label
 // is `realm_id` by default; when the operator opts in to
 // `http.metrics_detailed_circle_labels = true` and the request carried
 // a `circle_id`, the label becomes the circle id instead so dashboards
@@ -408,7 +408,7 @@ pub fn notify_delivery_outcome_by_app(app_id: &str, outcome: &str, count: usize)
         .inc_by(count as u64);
 }
 
-/// CXP-0007 — per-(provider, scope) delivery counter. `scope_kind` is
+/// CKP-0007 — per-(provider, scope) delivery counter. `scope_kind` is
 /// `circle` when the caller passed a circle id AND the operator opted
 /// in to detailed labels via `http.metrics_detailed_circle_labels`;
 /// otherwise `realm`. Empty `scope_id` is rendered as `_unknown` to

@@ -102,7 +102,7 @@
         },
         "circle_rate_limits": {
           "additionalProperties": false,
-          "description": "CXP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
+          "description": "CKP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
           "properties": {
             "per_circle_concurrency": {
               "description": "Max in-flight notify dispatches for a single Circle.",
@@ -159,7 +159,7 @@
         },
         "metrics_detailed_circle_labels": {
           "default": false,
-          "description": "CXP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count.",
+          "description": "CKP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count.",
           "type": "boolean"
         },
         "notify_auth": {

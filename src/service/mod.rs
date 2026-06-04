@@ -26,7 +26,7 @@ const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
 // prefix `ck:realm:`. The push wire model carries `realm_id`, never the
 // container-level `space_id` (which is on the forbidden-key list).
 const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
-// CXP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
+// CKP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
 // inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
 // when present so two Flows that share a name in different Circles do
 // not collide. `circle_id` is gateway-routing only; it MUST NOT be

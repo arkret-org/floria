@@ -105,7 +105,7 @@ const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
 pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
 
-/// Phase P2 (CXP-0008 / CXP-0009) — durable Personal Agent lifecycle
+/// Phase P2 (CKP-0008 / CKP-0009) — durable Personal Agent lifecycle
 /// event kinds. When the inbound `/notify` request carries a top-level
 /// `event_kind` matching one of these, floria silently consumes the
 /// request: it answers 200 with an empty fanout body so the caller's
@@ -539,7 +539,7 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.realm_id",
         ACTIVE_REALM_ID_PREFIX,
     )?;
-    // CXP-0007 — `circle_id` is the encryption-sub-boundary id when the
+    // CKP-0007 — `circle_id` is the encryption-sub-boundary id when the
     // notification is scoped into a Circle. Validated for prefix shape
     // here; consistency with `effective_scope` is enforced separately
     // in `validate_effective_scope_consistency`.
@@ -563,7 +563,7 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
     Ok(())
 }
 
-/// CXP-0007 — assert that `notification.effective_scope` (the
+/// CKP-0007 — assert that `notification.effective_scope` (the
 /// reducer-stamped envelope binding) is consistent with the routing
 /// fields the caller supplied (`realm_id` / `circle_id`). Mismatch
 /// means either the principal server stamped a different scope onto
@@ -726,7 +726,7 @@ fn validate_notification_contract(
         ));
     }
 
-    // CXP-0007 — `effective_scope` must agree with the routing fields
+    // CKP-0007 — `effective_scope` must agree with the routing fields
     // when set. This catches operator misconfigurations (caller
     // updated `realm_id` but forgot `circle_id`, or stamped a Circle
     // scope on the envelope but kept `circle_id` blank in the push
@@ -1392,7 +1392,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     }
-    // Phase P2 (CXP-0008 / CXP-0009) — route Personal Agent event kinds.
+    // Phase P2 (CKP-0008 / CKP-0009) — route Personal Agent event kinds.
     //
     // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
@@ -2445,7 +2445,7 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // CXP-0007 — `circle_id` and `effective_scope` are routing-affecting
+    // CKP-0007 — `circle_id` and `effective_scope` are routing-affecting
     // (two pushes for the same Flow in different Circles must not
     // collide in the dedup cache).
     if let Some(value) = notification.circle_id() {

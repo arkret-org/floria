@@ -754,7 +754,7 @@ mod tests {
             // security id (`realm_id`) AND the renamed container id
             // (`space_id`).
             "space_id",
-            // CXP-0007 — Circle routing identifiers MUST NOT reach
+            // CKP-0007 — Circle routing identifiers MUST NOT reach
             // the provider plaintext payload.
             "circle_id",
             "effective_scope",

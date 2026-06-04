@@ -12,7 +12,7 @@ parent Cokret spec's round-numbering for grouping wire-breaking changes.
 
 ## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `ck.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CKP-0011 shareable object addressing / `ck.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
@@ -33,9 +33,9 @@ parent Cokret spec's round-numbering for grouping wire-breaking changes.
 
 ## [Unreleased]
 
-### CXP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
+### CKP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
 
-Push-gateway alignment with the CXP-0007 Circle primitive landing in
+Push-gateway alignment with the CKP-0007 Circle primitive landing in
 cokret-rust-sdk P1.
 
 #### Added
@@ -76,7 +76,7 @@ cokret-rust-sdk P1.
 - Dockerfile: pinned `rust:1.94-bookworm` → `rust:1.92-bookworm` to
   match the new MSRV floor.
 - Round-23 local forbidden-key list: drops `realm_id` (SDK now covers
-  it) and adds CXP-0007's `circle_id`, `effective_scope`, and
+  it) and adds CKP-0007's `circle_id`, `effective_scope`, and
   `scope_circle_id`.
 
 #### Fixed
