@@ -450,6 +450,66 @@ async fn notify_rejects_body_destination_service_did_mismatch() {
 }
 
 #[tokio::test]
+async fn notify_rejects_mismatched_recipient_service_did() {
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        notify_auth_config(),
+    );
+    let mut request_body = payload(vec![device("com.example.app", "accept")]);
+    request_body["notification"]["recipient_service_did"] =
+        json!("did:web:other-gateway.example.com");
+
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_DID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&request_body)
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
+    let body = assert_notify_error(&mut response, "capability_denied", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("recipient_service_did does not match this gateway")
+    );
+}
+
+#[tokio::test]
+async fn notify_accepts_matching_recipient_service_did() {
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        notify_auth_config(),
+    );
+    let mut request_body = payload(vec![device("com.example.app", "accept")]);
+    request_body["notification"]["recipient_service_did"] = json!("did:web:push.example.com");
+
+    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_DID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&request_body)
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn production_mode_rejects_anonymous_requests() {
     let mut config = NotifyAuthConfig::default();
     config.production_mode = true;

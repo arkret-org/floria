@@ -292,7 +292,49 @@ fn validate_destination_service_did(
         });
     }
 
+    // Spec push-notifications.md §3.1 (commit 0a5ab85): if the request
+    // extension carries `notification.recipient_service_did`, its value MUST
+    // equal the target service's `ck.server.describe.service_did` (i.e. this
+    // gateway's `gateway_service_did`). `push_target_id` is a per-
+    // `(recipient_service_did, ...)` pairwise pseudonym, so a mismatched
+    // `recipient_service_did` means the pseudonym was minted for a different
+    // service scope and MUST NOT be honored here. The gateway cannot verify
+    // the pseudonym derivation (no service secret), but it MUST enforce the
+    // declared scope binding rather than treat the field as decorative.
+    if let Some(recipient) = optional_notification_string_field(raw, "recipient_service_did")?
+        && let Some(expected) = auth.gateway_service_did.as_deref()
+        && recipient != expected
+    {
+        return Err(AuthFailure {
+            status: StatusCode::FORBIDDEN,
+            code: "capability_denied",
+            message: "recipient_service_did does not match this gateway".to_owned(),
+        });
+    }
+
     Ok(())
+}
+
+fn optional_notification_string_field<'a>(
+    raw: &'a Value,
+    field: &str,
+) -> Result<Option<&'a str>, AuthFailure> {
+    match raw.pointer(&format!("/notification/{field}")) {
+        Some(Value::String(value)) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(trimmed))
+            }
+        }
+        Some(Value::Null) | None => Ok(None),
+        Some(_) => Err(AuthFailure {
+            status: StatusCode::BAD_REQUEST,
+            code: "schema_violation",
+            message: format!("notification.{field} must be a string"),
+        }),
+    }
 }
 
 fn optional_string_field<'a>(raw: &'a Value, field: &str) -> Result<Option<&'a str>, AuthFailure> {
