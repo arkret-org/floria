@@ -609,7 +609,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `wakeup_kind` (closed enum)
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` / `unread_count` (clamped at SDK MAX_COUNT_VALUE)
-pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
+pub fn build_blind_routing_data(notification: &Notification) -> Map<String, serde_json::Value> {
     use cokret::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
@@ -637,6 +637,12 @@ pub fn build_blind_provider_data(notification: &Notification) -> Map<String, ser
             serde_json::Value::String(push_hint.to_owned()),
         );
     }
+    data
+}
+
+pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
+    let mut data = build_blind_routing_data(notification);
+
     // §5.1 — the absolute unread count is an activity side channel.
     // Bucket it (0 / 1 / 2-5 / 6+) before it reaches the provider so it
     // can't be used to rebuild a cumulative per-`push_target_id`

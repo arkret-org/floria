@@ -24,8 +24,8 @@ use crate::auth::{
 use crate::config::NotifyAuthConfig;
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, Notification, NotificationContext, NotifyResponse, ProviderRetry,
-    RejectedDevice, redact_push_token,
+    DeliveryReceipt, Notification, NotificationContext, NotifyRequest, NotifyResponse,
+    ProviderRetry, RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -196,18 +196,15 @@ fn parse_optional_idempotency_key(
     Ok(Some(value.to_owned()))
 }
 
-fn resolve_idempotency_key(req: &Request, raw: &Value) -> Result<Option<String>, String> {
+fn resolve_idempotency_key(
+    req: &Request,
+    body_key: Option<&str>,
+) -> Result<Option<String>, String> {
     let header = parse_optional_idempotency_key(
         req.header::<String>("idempotency-key").as_deref(),
         "Idempotency-Key header",
     )?;
-    let body = match raw.get("idempotency_key") {
-        None => Ok(None),
-        Some(Value::String(value)) => {
-            parse_optional_idempotency_key(Some(value), "idempotency_key")
-        }
-        Some(_) => Err("idempotency_key must be a string".to_owned()),
-    }?;
+    let body = parse_optional_idempotency_key(body_key, "idempotency_key")?;
 
     if let (Some(header), Some(body)) = (header.as_deref(), body.as_deref())
         && header != body
@@ -218,12 +215,9 @@ fn resolve_idempotency_key(req: &Request, raw: &Value) -> Result<Option<String>,
     Ok(header.or(body))
 }
 
-fn validate_notify_operation_id(raw: &Value) -> Result<(), String> {
-    let Some(value) = raw.get("operation_id") else {
+fn validate_notify_operation_id(value: Option<&str>) -> Result<(), String> {
+    let Some(value) = value else {
         return Ok(());
-    };
-    let Value::String(value) = value else {
-        return Err("operation_id must be a string".to_owned());
     };
     if value.trim() == NOTIFY_OPERATION_ID {
         return Ok(());
@@ -232,14 +226,17 @@ fn validate_notify_operation_id(raw: &Value) -> Result<(), String> {
 }
 
 fn validate_origin_service_did(
-    raw: &Value,
+    origin_service_did: Option<&str>,
     caller: &AuthenticatedNotifyCaller,
     auth_enabled: bool,
 ) -> Result<(), AuthFailure> {
     if !auth_enabled {
         return Ok(());
     }
-    let Some(origin_service_did) = optional_string_field(raw, "origin_service_did")? else {
+    let Some(origin_service_did) = origin_service_did
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: "capability_denied",
@@ -257,7 +254,8 @@ fn validate_origin_service_did(
 }
 
 fn validate_destination_service_did(
-    raw: &Value,
+    body_destination: Option<&str>,
+    recipient_service_did: Option<&str>,
     req: &Request,
     auth: &NotifyAuthConfig,
     auth_enabled: bool,
@@ -266,7 +264,9 @@ fn validate_destination_service_did(
         return Ok(());
     }
 
-    let body_destination = optional_string_field(raw, "destination_service_did")?;
+    let body_destination = body_destination
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let header_destination = req
         .header::<String>(DESTINATION_SERVICE_DID_HEADER)
         .map(|value| value.trim().to_owned())
@@ -304,7 +304,9 @@ fn validate_destination_service_did(
     // service scope and MUST NOT be honored here. The gateway cannot verify
     // the pseudonym derivation (no service secret), but it MUST enforce the
     // declared scope binding rather than treat the field as decorative.
-    if let Some(recipient) = optional_notification_string_field(raw, "recipient_service_did")?
+    if let Some(recipient) = recipient_service_did
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         && let Some(expected) = auth.gateway_service_did.as_deref()
         && recipient != expected
     {
@@ -316,40 +318,6 @@ fn validate_destination_service_did(
     }
 
     Ok(())
-}
-
-fn optional_notification_string_field<'a>(
-    raw: &'a Value,
-    field: &str,
-) -> Result<Option<&'a str>, AuthFailure> {
-    match raw.pointer(&format!("/notification/{field}")) {
-        Some(Value::String(value)) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(trimmed))
-            }
-        }
-        Some(Value::Null) | None => Ok(None),
-        Some(_) => Err(AuthFailure {
-            status: StatusCode::BAD_REQUEST,
-            code: "schema_violation",
-            message: format!("notification.{field} must be a string"),
-        }),
-    }
-}
-
-fn optional_string_field<'a>(raw: &'a Value, field: &str) -> Result<Option<&'a str>, AuthFailure> {
-    match raw.get(field) {
-        Some(Value::String(value)) => Ok(Some(value.trim())),
-        Some(_) => Err(AuthFailure {
-            status: StatusCode::BAD_REQUEST,
-            code: "schema_violation",
-            message: format!("{field} must be a string"),
-        }),
-        None => Ok(None),
-    }
 }
 
 fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
@@ -1076,14 +1044,6 @@ fn notify_rate_limit_checks(
     checks
 }
 
-fn optional_json_string(raw: &Value, pointer: &str) -> Option<String> {
-    raw.pointer(pointer)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
 fn optional_owned_string(value: Option<&String>) -> Option<String> {
     value
         .map(String::as_str)
@@ -1092,12 +1052,19 @@ fn optional_owned_string(value: Option<&String>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn request_destination_service_did(req: &Request, raw: &Value) -> Option<String> {
-    optional_json_string(raw, "/destination_service_did").or_else(|| {
-        req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-    })
+fn request_destination_service_did(
+    req: &Request,
+    body_destination: Option<&str>,
+) -> Option<String> {
+    body_destination
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+        })
 }
 
 fn audit_event_type(event: &AuditEvent) -> &'static str {
@@ -1286,8 +1253,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = request_hash(body.as_ref());
 
-    let raw = match serde_json::from_slice::<Value>(&body) {
-        Ok(raw) => raw,
+    let request = match serde_json::from_slice::<NotifyRequest>(&body) {
+        Ok(request) => request,
         Err(error) => {
             tracing::warn!(error = %error, "expected JSON request body");
             finish_error(
@@ -1302,7 +1269,23 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     };
-    if let Err(message) = validate_notify_operation_id(&raw) {
+    let request_value = match serde_json::to_value(&request) {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(error = %error, "failed to build typed request validation view");
+            finish_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "failed to validate typed request",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    };
+    if let Err(message) = validate_notify_operation_id(request.operation_id.as_deref()) {
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
@@ -1314,7 +1297,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    if let Err(error) = validate_origin_service_did(&raw, &caller, state.notify_auth.enabled()) {
+    if let Err(error) = validate_origin_service_did(
+        request.origin_service_did.as_deref(),
+        &caller,
+        state.notify_auth.enabled(),
+    ) {
         finish_error(
             res,
             error.status,
@@ -1326,9 +1313,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    if let Err(error) =
-        validate_destination_service_did(&raw, req, &state.notify_auth, state.notify_auth.enabled())
-    {
+    if let Err(error) = validate_destination_service_did(
+        request.destination_service_did.as_deref(),
+        request.notification.recipient_service_did.as_deref(),
+        req,
+        &state.notify_auth,
+        state.notify_auth.enabled(),
+    ) {
         finish_error(
             res,
             error.status,
@@ -1340,7 +1331,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    if let Err(message) = validate_notify_contract_shape(&raw) {
+    if let Err(message) = validate_notify_contract_shape(&request_value) {
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
@@ -1359,9 +1350,9 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // no provider call is issued and no per-device dedup state is
     // touched. Any other `reason_code` value is rejected — floria
     // only honors the well-known no-op shape on the request side.
-    match raw.get("reason_code") {
+    match request.reason_code.as_deref() {
         None => {}
-        Some(Value::String(value)) if value == HISTORICAL_ONLY_REASON => {
+        Some(value) if value == HISTORICAL_ONLY_REASON => {
             tracing::info!(
                 request_id = %request_id,
                 "answering 200 no-fanout ack for reason_code=historical_only"
@@ -1405,168 +1396,122 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     //
     // Either case answers 200 so the caller's pipeline advances; the
     // `accepted` count is 0 and the rejected list is empty.
-    if let Some(event_kind_value) = raw.get("event_kind") {
-        match event_kind_value {
-            Value::String(kind) => {
-                if let Some(routing) = classify_agent_event_kind(kind.trim()) {
-                    match routing {
-                        AgentEventRouting::DurableLifecycle => {
-                            tracing::info!(
-                                request_id = %request_id,
-                                event_kind = %kind,
-                                "answering 200 no-fanout ack: durable agent lifecycle \
-                                 event silently consumed (capability cache invalidation \
-                                 flows through consent_revoke)"
-                            );
-                        }
-                        AgentEventRouting::ActorPrivateDrop => {
-                            tracing::info!(
-                                request_id = %request_id,
-                                event_kind = %kind,
-                                "answering 200 no-fanout ack: actor_private agent event \
-                                 dropped by default (no controller-private subscription \
-                                 mechanism wired up yet)"
-                            );
-                        }
-                    }
-                    let response = NotifyResponse {
-                        request_id: request_id.clone(),
-                        accepted: 0,
-                        rejected: Vec::new(),
-                        provider_retries: Vec::new(),
-                        delivery_receipts: Vec::new(),
-                    };
-                    finish_json(res, StatusCode::OK, response, started);
-                    return;
+    if let Some(kind) = request.event_kind.as_deref() {
+        if let Some(routing) = classify_agent_event_kind(kind.trim()) {
+            match routing {
+                AgentEventRouting::DurableLifecycle => {
+                    tracing::info!(
+                        request_id = %request_id,
+                        event_kind = %kind,
+                        "answering 200 no-fanout ack: durable agent lifecycle \
+                         event silently consumed (capability cache invalidation \
+                         flows through consent_revoke)"
+                    );
                 }
-                // Any other `event_kind` string falls through — floria
-                // does not gate non-agent kinds at this layer.
+                AgentEventRouting::ActorPrivateDrop => {
+                    tracing::info!(
+                        request_id = %request_id,
+                        event_kind = %kind,
+                        "answering 200 no-fanout ack: actor_private agent event \
+                         dropped by default (no controller-private subscription \
+                         mechanism wired up yet)"
+                    );
+                }
             }
-            Value::Null => {
-                // Tolerate explicit null — the field is optional on the
-                // wire.
-            }
-            _ => {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    "schema_violation",
-                    "event_kind must be a string when present",
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
+            let response = NotifyResponse {
+                request_id: request_id.clone(),
+                accepted: 0,
+                rejected: Vec::new(),
+                provider_retries: Vec::new(),
+                delivery_receipts: Vec::new(),
+            };
+            finish_json(res, StatusCode::OK, response, started);
+            return;
         }
+        // Any other `event_kind` string falls through — floria does not
+        // gate non-agent kinds at this layer.
     }
     // Round 4 — route `ck.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's
     // pipeline advances. It does not do push fanout for this shape.
-    if let Some(audit_envelope) = raw.get("audit_envelope") {
-        match audit_envelope {
-            Value::Object(map) => {
-                let access_kind = map
-                    .get("access_kind")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .unwrap_or_default();
-                if access_kind.is_empty() {
-                    finish_error(
-                        res,
-                        StatusCode::BAD_REQUEST,
-                        "schema_violation",
-                        "audit_envelope.access_kind must be a non-empty string",
-                        None,
-                        Some(&request_id),
-                        started,
-                    );
-                    return;
-                }
-                if access_kind == E2EE_LATE_RECOVERY_ACCESS_KIND
-                    && map
-                        .get("late_recovery_original_event_id")
-                        .and_then(Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .is_none()
-                {
-                    finish_error(
-                        res,
-                        StatusCode::BAD_REQUEST,
-                        "schema_violation",
-                        "audit_envelope.access_kind=e2ee_late_recovery requires \
-                         late_recovery_original_event_id",
-                        None,
-                        Some(&request_id),
-                        started,
-                    );
-                    return;
-                }
-                let late_recovery_original_event_id = map
-                    .get("late_recovery_original_event_id")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned);
-                let audit_event = AuditEvent::PolicyAccess {
-                    request_id: request_id.clone(),
-                    origin_service_did: caller.origin_service_did.clone(),
-                    destination_service_did: request_destination_service_did(req, &raw),
-                    access_kind: access_kind.to_owned(),
-                    late_recovery_original_event_id,
-                    notification_event_id: optional_json_string(&raw, "/notification/event_id"),
-                    notification_flow_id: optional_json_string(&raw, "/notification/flow_id"),
-                    notification_realm_id: optional_json_string(&raw, "/notification/realm_id"),
-                };
-                if let Err(message) = record_required_audit_event(&state, &audit_event).await {
-                    tracing::error!(
-                        request_id = %request_id,
-                        error = %message,
-                        "failed to write policy_access audit event"
-                    );
-                    finish_error(
-                        res,
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "temporarily_unavailable",
-                        &message,
-                        None,
-                        Some(&request_id),
-                        started,
-                    );
-                    return;
-                }
-                tracing::info!(
-                    request_id = %request_id,
-                    access_kind = %access_kind,
-                    "answering 200 audit-pipeline ack after audit sink write; SKIPPING push fanout"
-                );
-                let response = NotifyResponse {
-                    request_id: request_id.clone(),
-                    accepted: 0,
-                    rejected: Vec::new(),
-                    provider_retries: Vec::new(),
-                    delivery_receipts: Vec::new(),
-                };
-                finish_json(res, StatusCode::OK, response, started);
-                return;
-            }
-            _ => {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    "schema_violation",
-                    "audit_envelope must be a JSON object",
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
+    if let Some(audit_envelope) = request.audit_envelope.as_ref() {
+        let access_kind = audit_envelope.access_kind.trim();
+        if access_kind.is_empty() {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "audit_envelope.access_kind must be a non-empty string",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
         }
+        let late_recovery_original_event_id =
+            optional_owned_string(audit_envelope.late_recovery_original_event_id.as_ref());
+        if access_kind == E2EE_LATE_RECOVERY_ACCESS_KIND
+            && late_recovery_original_event_id.is_none()
+        {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "audit_envelope.access_kind=e2ee_late_recovery requires \
+                 late_recovery_original_event_id",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+        let audit_event = AuditEvent::PolicyAccess {
+            request_id: request_id.clone(),
+            origin_service_did: caller.origin_service_did.clone(),
+            destination_service_did: request_destination_service_did(
+                req,
+                request.destination_service_did.as_deref(),
+            ),
+            access_kind: access_kind.to_owned(),
+            late_recovery_original_event_id,
+            notification_event_id: optional_owned_string(request.notification.event_id.as_ref()),
+            notification_flow_id: optional_owned_string(request.notification.flow_id.as_ref()),
+            notification_realm_id: optional_owned_string(request.notification.realm_id.as_ref()),
+        };
+        if let Err(message) = record_required_audit_event(&state, &audit_event).await {
+            tracing::error!(
+                request_id = %request_id,
+                error = %message,
+                "failed to write policy_access audit event"
+            );
+            finish_error(
+                res,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                &message,
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+        tracing::info!(
+            request_id = %request_id,
+            access_kind = %access_kind,
+            "answering 200 audit-pipeline ack after audit sink write; SKIPPING push fanout"
+        );
+        let response = NotifyResponse {
+            request_id: request_id.clone(),
+            accepted: 0,
+            rejected: Vec::new(),
+            provider_retries: Vec::new(),
+            delivery_receipts: Vec::new(),
+        };
+        finish_json(res, StatusCode::OK, response, started);
+        return;
     }
-    let idempotency_key = match resolve_idempotency_key(req, &raw) {
+    let idempotency_key = match resolve_idempotency_key(req, request.idempotency_key.as_deref()) {
         Ok(idempotency_key) => idempotency_key,
         Err(message) => {
             finish_error(
@@ -1582,50 +1527,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
 
-    let Some(notification_value) = raw.get("notification").cloned() else {
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            "schema_violation",
-            "missing notification field",
-            None,
-            Some(&request_id),
-            started,
-        );
-        return;
-    };
-
-    if !notification_value.is_object() {
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            "schema_violation",
-            "notification must be an object",
-            None,
-            Some(&request_id),
-            started,
-        );
-        return;
-    }
-
-    let notification_object = notification_value.as_object().cloned();
-
-    let notification: Notification = match serde_json::from_value(notification_value) {
-        Ok(notification) => notification,
-        Err(error) => {
-            tracing::warn!(error = %error, "invalid notification payload");
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                "schema_violation",
-                "invalid notification payload",
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-    };
+    let notification_object = request_value
+        .get("notification")
+        .and_then(Value::as_object)
+        .cloned();
+    let notification = request.notification;
 
     // T1.1 — for blind-only callers, additionally run the SDK
     // sanitizer over each device's `data.default_payload` subtree so

@@ -7,25 +7,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NotifyRequest {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_service_did: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination_service_did: Option<String>,
-    #[serde(default)]
-    pub app_id: Option<String>,
-    #[serde(default)]
-    pub priority: Option<String>,
-    #[serde(default)]
-    pub ttl_seconds: Option<u64>,
-    #[serde(default)]
-    pub collapse_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_kind: Option<String>,
     /// Round 4 (spec a77b995) — caller-supplied wire-safe `reason_code`
     /// on the inbound request. When set to
     /// [`cokret::ERROR_CODE_HISTORICAL_ONLY`] the request is a soland
@@ -33,14 +27,14 @@ pub struct NotifyRequest {
     /// gateway answers a 200 idempotency-style ack instead. Other values
     /// are rejected with `schema_violation` (floria only honors the
     /// `historical_only` no-op shape).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
     /// Round 4 — `ck.audit.policy_access` envelope routing fragment.
     /// When present, the request is an audit-pipeline event (e.g. an
     /// `e2ee_late_recovery` access notice), NOT a push notify. The
     /// gateway writes the audit event, acks with 200, and skips the
     /// push pipeline entirely.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_envelope: Option<AuditEnvelopeMetadata>,
     pub notification: Notification,
 }
@@ -156,32 +150,32 @@ pub struct DeliveryReceipt {
     pub request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Notification {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_title: Option<String>,
     /// Human-readable label for the Realm security boundary. Container
     /// Space names do not surface on the push wire model.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub realm_title: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prio: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub membership: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_actor_display_name: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<Map<String, Value>>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_id: Option<String>,
     /// Security-boundary id (`ck:realm:`). Container `space_id` is
     /// forbidden on the push wire model and does not appear on this struct.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub realm_id: Option<String>,
     /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
     /// of the encryption sub-boundary this notification belongs to. When
@@ -190,7 +184,7 @@ pub struct Notification {
     /// flows with the same name in different Circles do not collide.
     /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
     /// on the wire only to drive gateway-internal routing.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub circle_id: Option<String>,
     /// CKP-0007 — reducer-stamped envelope scope binding mirrored on the
     /// push wire model (`event_envelope.effective_scope`). Carries the
@@ -199,27 +193,27 @@ pub struct Notification {
     /// the originating Event. When present and inconsistent with the
     /// notification's `realm_id` / `circle_id` the request is rejected
     /// with `effective_scope_mismatch`.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effective_scope: Option<EffectiveScope>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_is_target: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_target_id: Option<String>,
     /// Service DID of the recipient Principal Server this push is scoped
     /// to. Spec 0a5ab85: `push_target_id` cell_subject is composite over
     /// `(recipient_service_did, principal_id, device_id, push_route)`;
     /// dispatch MUST validate the inbound binding matches this scope.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipient_service_did: Option<String>,
     /// Receiver's accepted Realm delivery-binding frontier when the
     /// notify originated from a federation hop. Receiver returns
     /// `delivery_binding_stale` if its accepted frontier is ahead.
     /// Delivery binding is a Realm-level concept. Spec 0a5ab85 §4.1.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery_binding_frontier: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wakeup_kind: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_hint: Option<String>,
     /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
     /// fragment that mirrors the SDK's
@@ -231,9 +225,9 @@ pub struct Notification {
     /// device passes the routing gate. The receiver gets to verify its
     /// inclusion via this plaintext field WITHOUT needing to decrypt
     /// the message blob.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mention_redirect_target_actor_ids: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub devices: Vec<Device>,
     #[serde(default)]
     pub counts: Counts,
@@ -311,12 +305,12 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Device {
     pub push_key: String,
     pub app_id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<Map<String, Value>>,
     #[serde(default)]
     pub tweaks: Tweaks,
@@ -327,7 +321,7 @@ pub struct Device {
     /// is treated as delivery-eligible. Internal reasons never travel
     /// across this hop — only the wire-safe `reason_code` is honored,
     /// matching the `ck.edge.push.notify` privacy descriptor.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_decision: Option<PushDecisionHint>,
     /// Round 4 (spec a77b995) — actor DID this device's user is
     /// registered as on the recipient principal server. Used as the
@@ -335,7 +329,7 @@ pub struct Device {
     /// [`Notification::mention_redirect_target_actor_ids`] allow-list.
     /// MUST be a DID (the SDK enforces the round-4 tightened DID regex
     /// upstream); floria treats it as an opaque token.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_actor_id: Option<String>,
 }
 
@@ -347,7 +341,7 @@ pub struct Device {
 /// skip the device, it forwards the decision here so the rejection
 /// surfaces with a stable wire reason (e.g. `not_mentioned`) in the
 /// delivery receipt.
-#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PushDecisionHint {
     /// `true` if the dispatcher should fan the device out to the
@@ -493,10 +487,7 @@ mod tests {
             "idempotency_key": "notify-1",
             "origin_service_did": "did:web:sync.example.com",
             "destination_service_did": "did:web:push.example.com",
-            "app_id": "app.example.android",
-            "priority": "high",
-            "ttl_seconds": 900,
-            "collapse_key": "space-1",
+            "event_kind": "ck.message",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "realm_id": "ck:realm:01JS0SP000000000000000000",
@@ -515,8 +506,7 @@ mod tests {
             request.origin_service_did.as_deref(),
             Some("did:web:sync.example.com")
         );
-        assert_eq!(request.priority.as_deref(), Some("high"));
-        assert_eq!(request.ttl_seconds, Some(900));
+        assert_eq!(request.event_kind.as_deref(), Some("ck.message"));
         assert_eq!(request.notification.devices.len(), 1);
     }
 

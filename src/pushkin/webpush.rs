@@ -19,8 +19,8 @@ use web_push::{
 };
 
 use super::{
-    AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections, random_collapse_key,
-    sanitized_provider_payload,
+    AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
+    max_connections, random_collapse_key, sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
@@ -214,31 +214,9 @@ impl WebpushPushkin {
     /// are all dropped: the SW pulls them server-side from an e2ee
     /// envelope keyed on `push_target_id`.
     fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
-        use cokret::blind_payload_sanitizer as sdk;
-
         let mut payload = device.default_payload_lossy();
 
-        if let Some(push_target_id) = notification.push_target_id.as_deref()
-            && sdk::is_valid_push_target_id(push_target_id)
-        {
-            payload.insert(
-                "push_target_id".to_owned(),
-                Value::String(push_target_id.to_owned()),
-            );
-        }
-        if let Some(wakeup_kind) = notification.wakeup_kind()
-            && sdk::is_valid_wakeup_kind(wakeup_kind)
-        {
-            payload.insert(
-                "wakeup_kind".to_owned(),
-                Value::String(wakeup_kind.to_owned()),
-            );
-        }
-        if let Some(push_hint) = notification.push_hint.as_deref()
-            && sdk::is_valid_push_hint(push_hint)
-        {
-            payload.insert("push_hint".to_owned(), Value::String(push_hint.to_owned()));
-        }
+        payload.extend(build_blind_routing_data(notification));
         // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) before
         // they reach the WebPush payload so the exact figure can't be
         // used as a per-`push_target_id` activity correlator.
@@ -264,16 +242,7 @@ impl WebpushPushkin {
                     rejection = %rejection,
                     "webpush default_payload contained forbidden field, falling back to minimal payload"
                 );
-                let mut minimal = Map::new();
-                if let Some(push_target_id) = notification.push_target_id.as_deref()
-                    && sdk::is_valid_push_target_id(push_target_id)
-                {
-                    minimal.insert(
-                        "push_target_id".to_owned(),
-                        Value::String(push_target_id.to_owned()),
-                    );
-                }
-                minimal
+                build_blind_routing_data(notification)
             }
         }
     }

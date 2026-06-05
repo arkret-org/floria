@@ -17,8 +17,8 @@ use tokio::time::sleep;
 
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
-    AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, inflight_limit, max_connections,
-    sanitized_provider_payload, truncate_str,
+    AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, build_blind_routing_data, inflight_limit,
+    max_connections, sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
@@ -88,9 +88,6 @@ static FCM_BATCH_OUTCOMES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|
 const FCM_MAX_TRIES: usize = 3;
 const FCM_RETRY_DELAY_BASE_SECS: u64 = 10;
 const FCM_RETRY_DELAY_QUOTA_SECS: u64 = 60;
-const FCM_MAX_BYTES_PER_FIELD: usize = 1024;
-const FCM_MAX_FIREBASE_MESSAGE_SIZE: usize = 4096;
-const FCM_MAX_OVERFLOW_FIELDS: usize = FCM_MAX_FIREBASE_MESSAGE_SIZE / FCM_MAX_BYTES_PER_FIELD - 1;
 const GOOGLE_OAUTH_SCOPE: &str = "https://www.googleapis.com/auth/firebase.messaging";
 const GOOGLE_TOKEN_URI: &str = "https://oauth2.googleapis.com/token";
 
@@ -333,38 +330,9 @@ impl FcmPushkin {
         // operators can plug in static client-config keys
         // (`client=android`, theme overrides, …) — but it goes through
         // the same sanitizer and any forbidden key is stripped.
-        use cokret::blind_payload_sanitizer as sdk;
-
         let mut data = default_payload;
-        let mut overflow_fields = 0usize;
 
-        if let Some(push_target_id) = notification.push_target_id.as_deref()
-            && sdk::is_valid_push_target_id(push_target_id)
-        {
-            let (value, truncated) = truncate_str(push_target_id, FCM_MAX_BYTES_PER_FIELD);
-            if truncated {
-                overflow_fields += 1;
-            }
-            data.insert("push_target_id".to_owned(), Value::String(value));
-        }
-        if let Some(wakeup_kind) = notification.wakeup_kind()
-            && sdk::is_valid_wakeup_kind(wakeup_kind)
-        {
-            let (value, truncated) = truncate_str(wakeup_kind, FCM_MAX_BYTES_PER_FIELD);
-            if truncated {
-                overflow_fields += 1;
-            }
-            data.insert("wakeup_kind".to_owned(), Value::String(value));
-        }
-        if let Some(push_hint) = notification.push_hint.as_deref()
-            && sdk::is_valid_push_hint(push_hint)
-        {
-            let (value, truncated) = truncate_str(push_hint, FCM_MAX_BYTES_PER_FIELD);
-            if truncated {
-                overflow_fields += 1;
-            }
-            data.insert("push_hint".to_owned(), Value::String(value));
-        }
+        data.extend(build_blind_routing_data(notification));
 
         data.insert(
             "prio".to_owned(),
@@ -411,14 +379,6 @@ impl FcmPushkin {
             || emitted_count;
         if !has_routable_context {
             return Ok(None);
-        }
-
-        if overflow_fields > FCM_MAX_OVERFLOW_FIELDS {
-            tracing::warn!(
-                pushkin = self.name(),
-                overflow_fields,
-                "payload contains too many overflowing fields; notification likely to be rejected by Firebase"
-            );
         }
 
         // Final defence — even if some caller plugged a forbidden key

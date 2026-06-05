@@ -24,8 +24,8 @@ use tokio::time::sleep;
 
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
-    AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections,
-    sanitized_provider_payload,
+    AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
+    max_connections, sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
@@ -168,8 +168,6 @@ impl CustomPushkin {
         //   * `wakeup_kind`      — closed enum, validated by the SDK
         //   * `push_hint`        — only when SDK-validated literal
         //   * `push_target_id`   — opaque pseudonym
-        use cokret::blind_payload_sanitizer as sdk;
-
         let mut payload = Map::new();
         payload.insert(
             "delivered_at".to_owned(),
@@ -185,27 +183,7 @@ impl CustomPushkin {
             "push_key_hash".to_owned(),
             Value::String(device.redacted_push_key()),
         );
-        if let Some(push_target_id) = notification.push_target_id.as_deref()
-            && sdk::is_valid_push_target_id(push_target_id)
-        {
-            payload.insert(
-                "push_target_id".to_owned(),
-                Value::String(push_target_id.to_owned()),
-            );
-        }
-        if let Some(wakeup_kind) = notification.wakeup_kind()
-            && sdk::is_valid_wakeup_kind(wakeup_kind)
-        {
-            payload.insert(
-                "wakeup_kind".to_owned(),
-                Value::String(wakeup_kind.to_owned()),
-            );
-        }
-        if let Some(push_hint) = notification.push_hint.as_deref()
-            && sdk::is_valid_push_hint(push_hint)
-        {
-            payload.insert("push_hint".to_owned(), Value::String(push_hint.to_owned()));
-        }
+        payload.extend(build_blind_routing_data(notification));
         sanitized_provider_payload(payload).map_err(|rejection| {
             DispatchError::remote(format!("custom pushkin payload rejected: {rejection}"))
         })

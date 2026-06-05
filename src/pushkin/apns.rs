@@ -18,7 +18,10 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use super::reqwest_support::header_value;
-use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, sanitized_provider_payload};
+use super::{
+    AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
+    sanitized_provider_payload,
+};
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
@@ -513,23 +516,7 @@ impl ApnsPushkin {
         // Allowed blind-wakeup fields are emitted alongside `aps` so
         // service extensions can still detect the wakeup kind and pull
         // the matching server-side record.
-        use cokret::blind_payload_sanitizer as sdk;
-        if let Some(push_target_id) = notification.push_target_id.as_deref()
-            && sdk::is_valid_push_target_id(push_target_id)
-        {
-            default_payload.insert(
-                "push_target_id".to_owned(),
-                Value::String(push_target_id.to_owned()),
-            );
-        }
-        if let Some(wakeup_kind) = notification.wakeup_kind()
-            && sdk::is_valid_wakeup_kind(wakeup_kind)
-        {
-            default_payload.insert(
-                "wakeup_kind".to_owned(),
-                Value::String(wakeup_kind.to_owned()),
-            );
-        }
+        default_payload.extend(build_blind_routing_data(notification));
 
         // Final defence — strip anything forbidden that snuck in via
         // the device default_payload or future builder bugs. Note

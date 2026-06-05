@@ -1,11 +1,10 @@
 use serde_json::{Map, Value};
 
-use super::{sanitized_provider_payload, truncate_str};
+use super::{build_blind_routing_data, sanitized_provider_payload, truncate_str};
 use crate::models::Notification;
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;
-const CONTENT_BODY_MAX_BYTES: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AndroidNotificationPayload {
@@ -66,26 +65,7 @@ fn merge_notification_data(
     // from the e2ee wakeup payload it pulls server-side, never from the
     // provider wire format. `push_hint` survives only when it matches
     // the SDK's closed enum (validated via `sanitized_provider_payload`).
-    use cokret::blind_payload_sanitizer as sdk;
-
-    if let Some(push_target_id) = notification.push_target_id.as_deref()
-        && sdk::is_valid_push_target_id(push_target_id)
-    {
-        let (value, _) = truncate_str(push_target_id, CONTENT_BODY_MAX_BYTES);
-        payload.insert("push_target_id".to_owned(), Value::String(value));
-    }
-    if let Some(wakeup_kind) = notification.wakeup_kind()
-        && sdk::is_valid_wakeup_kind(wakeup_kind)
-    {
-        let (value, _) = truncate_str(wakeup_kind, CONTENT_BODY_MAX_BYTES);
-        payload.insert("wakeup_kind".to_owned(), Value::String(value));
-    }
-    if let Some(push_hint) = notification.push_hint.as_deref()
-        && sdk::is_valid_push_hint(push_hint)
-    {
-        let (value, _) = truncate_str(push_hint, CONTENT_BODY_MAX_BYTES);
-        payload.insert("push_hint".to_owned(), Value::String(value));
-    }
+    payload.extend(build_blind_routing_data(notification));
 
     payload.insert(
         "prio".to_owned(),
