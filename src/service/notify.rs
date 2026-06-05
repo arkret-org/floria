@@ -84,8 +84,11 @@ pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_
 /// `agent_deactivated`) is the authoritative way to invalidate the
 /// per-principal capability cache. Pushing these lifecycle kinds to
 /// user devices would leak agent state into the operator surface.
-const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
-    &["ck.self.agent.pause", "ck.self.agent.resume", "ck.self.agent.deactivate"];
+const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] = &[
+    "ck.self.agent.pause",
+    "ck.self.agent.resume",
+    "ck.self.agent.deactivate",
+];
 
 /// Phase P2 — actor-private Personal Agent event kinds. These never
 /// reach user-device push: they're controller-private state transitions
@@ -539,9 +542,8 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.flow_id",
         ACTIVE_FLOW_ID_PREFIX,
     )?;
-    // Realm/Space reversal — Realm/Space/Flow id. The security boundary
-    // is now Realm (`ck:realm:`); the new container-level `space_id` is
-    // forbidden on the wire and rejected by the sanitizer below.
+    // The notification routing boundary is the Realm (`ck:realm:`);
+    // container-level `space_id` is not part of the push wire model.
     validate_active_ref(
         notification.get("realm_id"),
         "notification.realm_id",
@@ -556,16 +558,10 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.circle_id",
         ACTIVE_CIRCLE_ID_PREFIX,
     )?;
-    // SDK's `is_forbidden_payload_key` now lists `realm_id` (spec
-    // 59ac1d4 Realm/Space inversion) so the pushkin-level strip is
-    // covered there. We still hard-reject `space_id` at the inbound
-    // contract layer because it is forbidden on the wire model
-    // entirely — not just as a forbidden payload key.
+    // `space_id` is forbidden at the inbound contract layer because push
+    // routing is Realm/Circle-scoped, not container-scoped.
     if notification.get("space_id").is_some() {
-        return Err(
-            "notification.space_id is forbidden on the push wire model (Realm/Space rework)"
-                .to_owned(),
-        );
+        return Err("notification.space_id is forbidden on the push wire model".to_owned());
     }
 
     Ok(())
@@ -721,12 +717,8 @@ fn validate_notification_contract(
             || notification.flow_title.is_some()
             || notification.realm_title.is_some())
     {
-        // Realm/Space reversal — `space_name` is gone from the wire
-        // model; the security-boundary name is now `realm_title`. The
-        // blind-profile blanket ban below stays as the active
-        // enforcement — a follow-up `TODO(circle-rollout-P2C.3):` will
-        // split this into Realm- vs Container-policy decisions once
-        // the access-policy schema lands the corresponding split.
+        // Blind wakeups cannot carry human-readable Realm or Flow names.
+        // Container Space names are not part of this push wire model.
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
              sender_actor_display_name or flow/realm name metadata under the default \

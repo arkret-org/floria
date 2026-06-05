@@ -161,11 +161,8 @@ pub struct DeliveryReceipt {
 pub struct Notification {
     #[serde(default)]
     pub flow_title: Option<String>,
-    /// Realm/Space reversal: the security-boundary's human-readable label
-    /// is now `realm_title` (was `space_name`). Matches the spec's
-    /// forbidden-wire-fields replacement `notification.realm_title`. The
-    /// new container-level Space concept does not surface a wire name on
-    /// this struct.
+    /// Human-readable label for the Realm security boundary. Container
+    /// Space names do not surface on the push wire model.
     #[serde(default)]
     pub realm_title: Option<String>,
     #[serde(default)]
@@ -182,10 +179,8 @@ pub struct Notification {
     pub message_id: Option<String>,
     #[serde(default)]
     pub flow_id: Option<String>,
-    /// Realm/Space reversal: the security boundary's id is now `realm_id`
-    /// (typed `ck:realm:`). The old container-level `place_id` becomes
-    /// the new `space_id` — that one is forbidden on the push wire
-    /// model entirely so it does NOT appear on this struct.
+    /// Security-boundary id (`ck:realm:`). Container `space_id` is
+    /// forbidden on the push wire model and does not appear on this struct.
     #[serde(default)]
     pub realm_id: Option<String>,
     /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
@@ -219,8 +214,7 @@ pub struct Notification {
     /// Receiver's accepted Realm delivery-binding frontier when the
     /// notify originated from a federation hop. Receiver returns
     /// `delivery_binding_stale` if its accepted frontier is ahead.
-    /// (Realm/Space reversal: delivery-binding is a Realm-level concept.)
-    /// Spec 0a5ab85 §4.1.
+    /// Delivery binding is a Realm-level concept. Spec 0a5ab85 §4.1.
     #[serde(default)]
     pub delivery_binding_frontier: Option<String>,
     #[serde(default)]

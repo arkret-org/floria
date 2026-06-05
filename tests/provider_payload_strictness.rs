@@ -144,7 +144,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     // only the SDK-allowed blind fields make it out.
     let notification: Notification = serde_json::from_value(json!({
         "flow_title": "Mission Control",
-        // Realm/Space reversal — security-boundary label is now `realm_title`.
+        // Security-boundary label.
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
@@ -239,7 +239,7 @@ fn sanitizer_strips_nested_circle_metadata() {
     // an APNs `aps` block, an Android `notification` block) must also
     // get stripped by the recursive walk. The strings here are
     // opaque to the sanitizer (it walks by key name, not value
-    // shape), so any cx-prefixed string works.
+    // shape), so any ck-prefixed string works.
     let payload = json!({
         "client": "android",
         "extra_block": {

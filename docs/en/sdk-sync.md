@@ -19,7 +19,7 @@ identifiers stay off the provider wire.
 
 | Field | Round | Rationale |
 |-------|-------|-----------|
-| `realm_id` | R2 | Stable security-boundary identifier after the Realm/Space rework — leaking it on a provider wire would let an observer pivot pushes back to a tenant scope |
+| `realm_id` | R2 | Stable security-boundary identifier; leaking it on a provider wire would let an observer pivot pushes back to a tenant scope |
 | `appeal_id` | R2 | Links a push to a moderation appeal thread; visible in provider logs would expose that the user is under review |
 | `attestation_evidence` | R3 | Reveals audit-agent or device posture (TPM PCR digests, key attestation chain) |
 | `audit_purpose` | R3 | Reveals audit routing intent (which downstream audit channel the push will divert to) |

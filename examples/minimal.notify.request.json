@@ -1,10 +1,7 @@
 {
   "operation_id": "ck.edge.push.notify",
   "notification": {
-    "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
-    "message_id": "ck:message:01964000-0000-7000-8000-000000000000",
-    "flow_id": "ck:flow:01964000-0000-7000-8000-000000000000",
-    "space_id": "ck:space:01964000-0000-7000-8000-000000000000",
+    "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",
     "push_hint": "new_message",

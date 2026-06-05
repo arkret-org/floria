@@ -22,9 +22,8 @@ const NOTIFY_OPERATION_ID: &str = "ck.edge.push.notify";
 const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
 const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
 const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
-// Realm/Space reversal: the security boundary is now Realm with typed
-// prefix `ck:realm:`. The push wire model carries `realm_id`, never the
-// container-level `space_id` (which is on the forbidden-key list).
+// Push routing is Realm-scoped with typed prefix `ck:realm:`. The push
+// wire model carries `realm_id`, never container-level `space_id`.
 const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
 // CKP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
 // inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
