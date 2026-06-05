@@ -899,6 +899,8 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
 
 // T1.1 — thin wrapper over the SDK's shared `is_valid_push_hint` so the
 // allowed `push_hint` vocabulary cannot drift between chime / floria.
+// The blind-wakeup profile only permits coarse hints; actual reaction
+// emoji or other message content must never appear in `push_hint`.
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
     if cokret::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
         return Ok(());
@@ -2547,4 +2549,18 @@ fn enqueue_retry(
     );
     queue.enqueue(envelope);
     app_metrics::notify_retry_enqueued(pushkin);
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::E2EE_LATE_RECOVERY_ACCESS_KIND;
+
+    #[test]
+    fn e2ee_late_recovery_access_kind_matches_sdk_wire_repr() {
+        let sdk_wire = serde_json::to_value(cokret::AccessKind::E2EELateRecovery).unwrap();
+
+        assert_eq!(sdk_wire, json!(E2EE_LATE_RECOVERY_ACCESS_KIND));
+    }
 }
