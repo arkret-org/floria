@@ -167,7 +167,7 @@ Operational signals:
 
 ## Media token issuer role in v1 (proxy posture)
 
-floria's role in the `ck.call.media.token_exchange` flow is **not an
+floria's role in the `ck.self.call.media.token_exchange` flow is **not an
 issuer** in v1. The current floria HTTP router and describe endpoints do
 not expose a public `/rtc/token` minting surface. If a deployment adds a
 separate proxy in front of soland, the canonical issuer is still soland

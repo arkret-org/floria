@@ -20,7 +20,7 @@ adapt to your local toolchain.
 
 ## Realm vs Space
 
-`floria` forwards `ck.device.push_route` and `ck.push.notify` events that
+`floria` forwards `ck.device.push_route` and `ck.edge.push.notify` events that
 target a specific security boundary. After the Phase 1–4 terminology
 inversion:
 
@@ -139,7 +139,7 @@ Quick notes:
 ## Cokret notify semantics
 
 - `/_cokret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
-- `ck.push.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
+- `ck.edge.push.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields

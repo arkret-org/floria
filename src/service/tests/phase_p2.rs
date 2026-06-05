@@ -27,7 +27,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.agent.pause");
+    body["event_kind"] = json!("ck.self.agent.pause");
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -53,7 +53,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.agent.resume");
+    body["event_kind"] = json!("ck.self.agent.resume");
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -73,7 +73,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.agent.deactivate");
+    body["event_kind"] = json!("ck.self.agent.deactivate");
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)

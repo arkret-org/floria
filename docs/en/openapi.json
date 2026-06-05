@@ -172,7 +172,7 @@
         ],
         "properties": {
           "operation_id": {
-            "const": "ck.push.notify"
+            "const": "ck.edge.push.notify"
           },
           "idempotency_key": {
             "type": "string",

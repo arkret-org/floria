@@ -85,7 +85,7 @@ pub(super) const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_
 /// per-principal capability cache. Pushing these lifecycle kinds to
 /// user devices would leak agent state into the operator surface.
 const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] =
-    &["ck.agent.pause", "ck.agent.resume", "ck.agent.deactivate"];
+    &["ck.self.agent.pause", "ck.self.agent.resume", "ck.self.agent.deactivate"];
 
 /// Phase P2 — actor-private Personal Agent event kinds. These never
 /// reach user-device push: they're controller-private state transitions

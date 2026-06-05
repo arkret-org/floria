@@ -400,7 +400,7 @@ async fn notify_rejects_non_canonical_operation_id() {
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "ck.push.register_device",
+            "ck.edge.push.register_device",
         ))
         .send(&service)
         .await;
@@ -409,7 +409,7 @@ async fn notify_rejects_non_canonical_operation_id() {
     let body = assert_notify_error(&mut response, "unsupported_feature", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("operation_id must be ck.push.notify")
+        json!("operation_id must be ck.edge.push.notify")
     );
 }
 

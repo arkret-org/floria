@@ -428,7 +428,7 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
     let obj = notification.as_object_mut().unwrap();
     obj.extend(extra_notification_fields);
     json!({
-        "operation_id": "ck.push.notify",
+        "operation_id": "ck.edge.push.notify",
         "origin_service_did": "did:web:sync.example.com",
         "destination_service_did": "did:web:push.example.com",
         "notification": notification,

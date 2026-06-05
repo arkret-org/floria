@@ -138,7 +138,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "schema_violation",
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
-                "The request body or headers did not match the active ck.push.notify contract.",
+                "The request body or headers did not match the active ck.edge.push.notify contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
                 "temporarily_unavailable",

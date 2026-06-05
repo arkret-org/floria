@@ -9,7 +9,7 @@ server-side push gateway; mobile clients should not call floria directly.
 |-----------|----------------|
 | Mobile app | Obtains and refreshes APNs, FCM, WebPush, or OEM provider tokens |
 | chime | Owns client registration UX, platform permission prompts, and local token state |
-| soland / principal server | Stores device routes, maps account state to `ck.push.notify`, and calls floria |
+| soland / principal server | Stores device routes, maps account state to `ck.edge.push.notify`, and calls floria |
 | floria | Delivers minimized wakeups to configured provider adapters |
 
 ## Registration Flow
