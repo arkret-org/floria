@@ -252,6 +252,19 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"readyz"));
     assert!(surface_names.contains(&"metrics"));
 
+    let push_notify_surface = surfaces
+        .iter()
+        .find(|surface| surface["name"] == json!("push_notify"))
+        .expect("push_notify surface");
+    assert_eq!(
+        push_notify_surface["path"],
+        json!("/_cokret/edge/push/notify")
+    );
+    assert_eq!(
+        push_notify_surface["contract"],
+        json!("ck.edge.push.notify")
+    );
+
     let metrics_surface = surfaces
         .iter()
         .find(|surface| surface["name"] == json!("metrics"))

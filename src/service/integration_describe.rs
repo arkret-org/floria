@@ -76,7 +76,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 name: "push_notify",
                 method: "POST",
                 path: "/_cokret/edge/push/notify",
-                contract: "ck.push.notify.v1",
+                contract: "ck.edge.push.notify",
                 stability: "active",
                 todo: "POST /_cokret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
             },
