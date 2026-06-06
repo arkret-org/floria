@@ -41,7 +41,8 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 // in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
 // durable Event-kind path. There is intentionally no code here that
 // branches on those kind strings — `wakeup_kind` on a `ck.edge.push.notify`
-// is a closed enum (`message` / `mention` / `reaction` / `call_invite`),
+// is a closed enum (`message` / `mention` / `reaction` / `call_invite` /
+// `reminder` / `scheduled_send` / `expiry_invalidation`),
 // so an
 // ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
 // future caller ever pipes an ephemeral as a durable Event, the
