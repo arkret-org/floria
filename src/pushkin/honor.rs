@@ -448,7 +448,7 @@ mod tests {
         Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: Some("low".to_owned()),
+            priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(

@@ -160,7 +160,7 @@ pub struct Notification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub realm_title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prio: Option<String>,
+    pub priority: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub membership: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -297,7 +297,7 @@ impl Notification {
     }
 
     pub fn is_low_priority(&self) -> bool {
-        self.prio.as_deref() == Some("low")
+        self.priority.as_deref() == Some("low")
     }
 }
 
@@ -456,7 +456,33 @@ pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{Counts, DeliveryReceipt, NotifyRequest, NotifyResponse};
+    use super::{Counts, DeliveryReceipt, Notification, NotifyRequest, NotifyResponse};
+
+    #[test]
+    fn notification_uses_priority_wire_field() {
+        let notification: Notification = serde_json::from_value(json!({
+            "priority": "low",
+            "devices": []
+        }))
+        .unwrap();
+
+        assert_eq!(notification.priority.as_deref(), Some("low"));
+        assert!(notification.is_low_priority());
+    }
+
+    #[test]
+    fn notification_rejects_legacy_prio_wire_field() {
+        let err = serde_json::from_value::<Notification>(json!({
+            "prio": "low",
+            "devices": []
+        }))
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("unknown field `prio`"),
+            "expected legacy prio to be rejected, got: {err}"
+        );
+    }
 
     #[test]
     fn counts_accept_active_fields() {

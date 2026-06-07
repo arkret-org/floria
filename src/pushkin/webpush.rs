@@ -306,7 +306,7 @@ impl WebpushPushkin {
 
         let mut builder = WebPushMessageBuilder::new(subscription);
         builder.set_ttl(self.ttl);
-        builder.set_urgency(if notification.prio.as_deref() == Some("low") {
+        builder.set_urgency(if notification.is_low_priority() {
             Urgency::Low
         } else {
             Urgency::Normal
@@ -591,7 +591,7 @@ mod tests {
         Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: Some("low".to_owned()),
+            priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(

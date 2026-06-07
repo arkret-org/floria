@@ -582,7 +582,7 @@ impl Pushkin for ApnsPushkin {
         let Some(payload) = self.build_payload(notification, default_payload)? else {
             return Ok(vec![]);
         };
-        let priority = if notification.prio.as_deref() == Some("low") {
+        let priority = if notification.is_low_priority() {
             5
         } else {
             10
@@ -859,7 +859,7 @@ mod tests {
         let notification = Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
@@ -944,7 +944,7 @@ mod tests {
         let notification = Notification {
             flow_title: None,
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: None,
             content: None,

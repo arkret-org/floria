@@ -810,7 +810,7 @@ mod sanitize_tests {
         let notification = Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: None,

@@ -28,13 +28,10 @@ pub struct AuthenticatedNotifyCaller {
     /// Set ONLY when the principal has both `allow_plaintext_metadata`
     /// flipped on AND a `service_type` that is on the plaintext-eligible
     /// allow-list (see [`crate::config::is_plaintext_eligible_service_kind`]).
-    /// Anonymous callers (auth disabled) keep the legacy behaviour
-    /// (set to `true`) to avoid breaking existing development setups,
-    /// but the request still has to walk through the visible-profile
-    /// gate at the notify ingress before any plaintext metadata can
-    /// be propagated to a provider adapter. (`production_mode` rejects
-    /// anonymous callers outright, so this dev-only default never relaxes
-    /// the privacy baseline in production.)
+    /// Anonymous callers (auth disabled) stay on the blind-wakeup
+    /// profile. Development deployments may still exercise blind
+    /// routing without credentials, but plaintext visible metadata now
+    /// requires an explicitly configured principal.
     pub allow_plaintext_metadata: bool,
 }
 
@@ -68,7 +65,7 @@ pub fn authenticate_notify_request(
         }
         return Ok(AuthenticatedNotifyCaller {
             origin_service_did: "<anonymous>".to_owned(),
-            allow_plaintext_metadata: true,
+            allow_plaintext_metadata: false,
         });
     }
 

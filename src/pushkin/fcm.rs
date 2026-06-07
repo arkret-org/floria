@@ -217,7 +217,7 @@ impl FcmPushkin {
         message.insert("data".to_owned(), Value::Object(data_strings));
         message.insert("token".to_owned(), Value::String(device.push_key.clone()));
 
-        let priority = Value::String(if notification.prio.as_deref() == Some("low") {
+        let priority = Value::String(if notification.is_low_priority() {
             "normal".to_owned()
         } else {
             "high".to_owned()
@@ -335,8 +335,8 @@ impl FcmPushkin {
         data.extend(build_blind_routing_data(notification));
 
         data.insert(
-            "prio".to_owned(),
-            Value::String(if notification.prio.as_deref() == Some("low") {
+            "priority".to_owned(),
+            Value::String(if notification.is_low_priority() {
                 "normal".to_owned()
             } else {
                 "high".to_owned()
@@ -645,7 +645,7 @@ mod tests {
         Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: Some("low".to_owned()),
+            priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
@@ -700,7 +700,7 @@ mod tests {
             Some(&Value::String("message".to_owned()))
         );
         assert_eq!(
-            payload.get("prio"),
+            payload.get("priority"),
             Some(&Value::String("normal".to_owned()))
         );
         // §5.1 — unread=2 is bucketed to the `2-5` representative value 5.
@@ -773,7 +773,7 @@ mod tests {
         let notification = Notification {
             flow_title: None,
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: None,
             content: None,

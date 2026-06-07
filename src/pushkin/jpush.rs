@@ -305,7 +305,7 @@ impl JpushPushkin {
         options.insert(
             "priority".to_owned(),
             Value::Number(
-                match payload.prio.as_deref() {
+                match payload.priority.as_deref() {
                     Some("low") => 0_u64,
                     _ => 1_u64,
                 }
@@ -614,7 +614,7 @@ mod tests {
         Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(

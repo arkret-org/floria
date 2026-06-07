@@ -2321,8 +2321,8 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.realm_title() {
         normalized.insert("realm_title".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.prio.as_ref() {
-        normalized.insert("prio".to_owned(), Value::String(value.clone()));
+    if let Some(value) = notification.priority.as_ref() {
+        normalized.insert("priority".to_owned(), Value::String(value.clone()));
     }
     if let Some(value) = notification.membership.as_ref() {
         normalized.insert("membership".to_owned(), Value::String(value.clone()));

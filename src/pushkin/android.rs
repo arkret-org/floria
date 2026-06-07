@@ -46,7 +46,7 @@ pub(super) fn build_android_notification_payload(
         title,
         body,
         data: default_payload,
-        priority: if notification.prio.as_deref() == Some("low") {
+        priority: if notification.is_low_priority() {
             AndroidPriority::Normal
         } else {
             AndroidPriority::High
@@ -68,9 +68,9 @@ fn merge_notification_data(
     payload.extend(build_blind_routing_data(notification));
 
     payload.insert(
-        "prio".to_owned(),
+        "priority".to_owned(),
         Value::String(
-            if notification.prio.as_deref() == Some("low") {
+            if notification.is_low_priority() {
                 "normal"
             } else {
                 "high"
@@ -257,7 +257,7 @@ mod tests {
         Notification {
             flow_title: Some("Mission Control".to_owned()),
             realm_title: None,
-            prio: None,
+            priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: Some(
@@ -349,12 +349,12 @@ mod tests {
     #[test]
     fn low_priority_maps_to_normal() {
         let mut notification = message_notification();
-        notification.prio = Some("low".to_owned());
+        notification.priority = Some("low".to_owned());
 
         let payload = build_android_notification_payload(&notification, Map::new(), true).unwrap();
         assert_eq!(payload.priority, AndroidPriority::Normal);
         assert_eq!(
-            payload.data.get("prio"),
+            payload.data.get("priority"),
             Some(&Value::String("normal".to_owned()))
         );
     }
@@ -365,7 +365,7 @@ mod tests {
             &Notification {
                 flow_title: Some("Nebula".to_owned()),
                 realm_title: None,
-                prio: None,
+                priority: None,
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
                 content: None,

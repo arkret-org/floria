@@ -269,14 +269,19 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             "message_id": "ck:message:01JS0MSG0000000000000000",
             "flow_id": "ck:flow:01JS0FLOW000000000000000",
             "realm_id": "ck:realm:01JS0SP000000000000000000",
-            "flow_title": "Engineering",
-            "sender_actor_display_name": "Alice",
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "push_hint": "new_message",
             "devices": devices
         }
     })
+}
+
+pub(super) fn visible_payload(devices: Vec<Value>) -> Value {
+    let mut body = payload(devices);
+    body["notification"]["flow_title"] = json!("Engineering");
+    body["notification"]["sender_actor_display_name"] = json!("Alice");
+    body
 }
 
 pub(super) fn with_idempotency_key(mut request_body: Value, idempotency_key: &str) -> Value {

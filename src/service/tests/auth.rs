@@ -210,7 +210,7 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
             "did:web:push.example.com",
             true,
         )
-        .json(&payload(vec![device("com.example.app", "accept")]))
+        .json(&visible_payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
 
@@ -230,6 +230,30 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
     assert!(
         msg.contains("sender_actor_display_name") || msg.contains("flow/realm name"),
         "expected sender_actor_display_name / flow/realm mention, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .json(&visible_payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::PRECONDITION_FAILED
+    );
+    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
+    let msg = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        msg.starts_with("plaintext_in_blind_profile"),
+        "expected plaintext_in_blind_profile reason code, got: {msg}"
     );
 }
 
@@ -633,7 +657,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
             "did:web:push.example.com",
             true,
         )
-        .json(&payload(vec![device("com.example.app", "accept")]))
+        .json(&visible_payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
 
