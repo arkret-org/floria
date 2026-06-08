@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use cokret::push_gateway_api::{
     PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
-    PushBridgeDescribeNotifyDescriptor, PushBridgeDescribePrivacyDescriptor,
-    PushBridgeDescribeResponse, PushBridgeFailureCodeDescriptor,
+    PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
+    PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
 };
 use salvo::http::StatusCode;
 use salvo::prelude::*;
@@ -56,7 +56,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         .map(|limiter| describe_rate_limit_scopes(limiter.config()))
         .unwrap_or_default();
 
-    let body = PushBridgeDescribeResponse {
+    let body = PushBridgeDescribeOutcome {
         contract: "ck.push.bridge.describe".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the

@@ -192,11 +192,11 @@ pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res:
     };
 
     #[derive(serde::Deserialize)]
-    struct UnregisterRequest {
+    struct InternalDeviceUnregisterRequestBody {
         app_id: String,
         push_key: String,
     }
-    let body: UnregisterRequest = match req.parse_json().await {
+    let body: InternalDeviceUnregisterRequestBody = match req.parse_json().await {
         Ok(body) => body,
         Err(error) => {
             tracing::warn!(error = %error, "invalid device_unregister body");

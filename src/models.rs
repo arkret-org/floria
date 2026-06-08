@@ -9,7 +9,7 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct NotifyRequest {
+pub struct PushNotifyRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -60,7 +60,7 @@ pub struct AuditEnvelopeMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NotifyResponse {
+pub struct PushNotifyOutcome {
     pub request_id: String,
     pub accepted: usize,
     pub rejected: Vec<RejectedDevice>,
@@ -70,7 +70,7 @@ pub struct NotifyResponse {
     pub delivery_receipts: Vec<DeliveryReceipt>,
 }
 
-impl NotifyResponse {
+impl PushNotifyOutcome {
     pub fn with_request_id(&self, request_id: impl Into<String>) -> Self {
         let mut cloned = self.clone();
         cloned.request_id = request_id.into();
@@ -456,7 +456,7 @@ pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{Counts, DeliveryReceipt, Notification, NotifyRequest, NotifyResponse};
+    use super::{Counts, DeliveryReceipt, Notification, PushNotifyOutcome, PushNotifyRequestBody};
 
     #[test]
     fn notification_uses_priority_wire_field() {
@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
-        let request: NotifyRequest = serde_json::from_value(json!({
+        let request: PushNotifyRequestBody = serde_json::from_value(json!({
             "operation_id": "ck.edge.push.notify",
             "idempotency_key": "notify-1",
             "origin_service_did": "did:web:sync.example.com",
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
-        let response = NotifyResponse {
+        let response = PushNotifyOutcome {
             request_id: "ck:request:123".to_owned(),
             accepted: 1,
             rejected: vec![super::RejectedDevice::new(

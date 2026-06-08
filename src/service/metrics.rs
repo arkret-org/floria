@@ -9,7 +9,7 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use crate::metrics as app_metrics;
-use crate::models::{DeliveryReceipt, Notification, NotifyResponse};
+use crate::models::{DeliveryReceipt, Notification, PushNotifyOutcome};
 
 /// Cardinality guard threshold for `metrics_detailed_circle_labels`.
 /// Once the count of unique circle_ids observed since startup crosses
@@ -125,7 +125,7 @@ pub(super) struct ErrorBody<'a> {
     pub(super) retry_after_ms: Option<u64>,
 }
 
-pub(super) fn record_notify_delivery_outcomes(response: &NotifyResponse) {
+pub(super) fn record_notify_delivery_outcomes(response: &PushNotifyOutcome) {
     record_delivery_receipt_outcomes(
         &response.delivery_receipts,
         response.accepted,

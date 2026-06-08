@@ -49,7 +49,7 @@ async fn caller_push_decision_dont_notify_skips_dispatch_and_records_reason() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     // Caller's `dont_notify` decision propagates to RejectedDevice with
     // the wire-safe reason code.
     assert_eq!(body.accepted, 0);
@@ -77,7 +77,7 @@ async fn caller_push_decision_deliver_true_falls_through_to_dispatch() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     // `deliver=true` is treated as pass-through — floria does not
     // surface the `watch_allows` reason on accepted devices because
     // delivery receipts already cover the success path.
@@ -100,7 +100,7 @@ async fn missing_push_decision_defaults_to_pass_through() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(body.accepted, 1);
     assert_eq!(body.rejected.len(), 0);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -166,7 +166,7 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(body.accepted, 1);
     assert!(body.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -196,7 +196,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
@@ -252,7 +252,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
@@ -279,7 +279,7 @@ async fn mention_redirect_empty_list_is_a_no_op() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 1);
     assert!(resp.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -324,7 +324,7 @@ async fn historical_only_reason_code_short_circuits_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert!(resp.rejected.is_empty());
     assert!(resp.delivery_receipts.is_empty());
@@ -371,7 +371,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert!(resp.rejected.is_empty());
     // Push pipeline MUST be skipped — the request is an audit

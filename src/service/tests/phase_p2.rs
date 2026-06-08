@@ -35,7 +35,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert!(resp.rejected.is_empty());
     assert!(resp.delivery_receipts.is_empty());
@@ -61,7 +61,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
@@ -81,7 +81,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 0);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
@@ -111,7 +111,7 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
             StatusCode::OK,
             "actor_private agent kind {kind} should be dropped (200 OK)"
         );
-        let resp = response.take_json::<NotifyResponse>().await.unwrap();
+        let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
         assert_eq!(resp.accepted, 0, "kind {kind} unexpectedly fanned out");
         assert_eq!(
             calls.load(Ordering::SeqCst),
@@ -139,7 +139,7 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<NotifyResponse>().await.unwrap();
+    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(resp.accepted, 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }

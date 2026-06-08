@@ -35,7 +35,7 @@ use blake2::digest::Digest;
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
-use crate::models::NotifyResponse;
+use crate::models::PushNotifyOutcome;
 
 /// Lightweight status snapshot for the `GET /_cokret/edge/push/status/{key}`
 /// endpoint. Derived from the dedup cache when the request completed,
@@ -52,15 +52,15 @@ pub struct NotifyStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedNotifyResponse {
-    pub response: NotifyResponse,
+pub struct CachedPushNotifyOutcome {
+    pub response: PushNotifyOutcome,
 }
 
 #[derive(Debug)]
 struct CacheEntry {
     expires_at: Instant,
     request_fingerprint: String,
-    response: CachedNotifyResponse,
+    response: CachedPushNotifyOutcome,
 }
 
 #[derive(Debug)]
@@ -136,7 +136,7 @@ impl NotifyDeduplicator {
         }
     }
 
-    pub fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
+    pub fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
             NotifyDedupBackend::Redis(backend) => backend.lookup(key, request_fingerprint),
@@ -150,7 +150,12 @@ impl NotifyDeduplicator {
         }
     }
 
-    pub fn insert_success(&self, key: &str, request_fingerprint: &str, response: NotifyResponse) {
+    pub fn insert_success(
+        &self,
+        key: &str,
+        request_fingerprint: &str,
+        response: PushNotifyOutcome,
+    ) {
         if self.ttl.is_zero() {
             return;
         }
@@ -247,7 +252,7 @@ impl NotifyDeduplicator {
 }
 
 impl MemoryNotifyDeduplicator {
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -275,7 +280,7 @@ impl MemoryNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyResponse,
+        response: PushNotifyOutcome,
     ) {
         let now = Instant::now();
         let mut entries = self
@@ -288,7 +293,7 @@ impl MemoryNotifyDeduplicator {
             CacheEntry {
                 expires_at: now + ttl,
                 request_fingerprint: request_fingerprint.to_owned(),
-                response: CachedNotifyResponse { response },
+                response: CachedPushNotifyOutcome { response },
             },
         );
     }
@@ -326,7 +331,7 @@ impl MemoryNotifyDeduplicator {
         entries.insert(key, now + ttl);
     }
 
-    fn cached_response(&self, key: &str) -> Option<NotifyResponse> {
+    fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -365,7 +370,7 @@ impl RedisNotifyDeduplicator {
         }
     }
 
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyResponse> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
             Err(error) => {
@@ -394,8 +399,8 @@ impl RedisNotifyDeduplicator {
                 return None;
             }
         }?;
-        match serde_json::from_str::<NotifyResponse>(&response_json) {
-            Ok(response) => Some(CachedNotifyResponse { response }),
+        match serde_json::from_str::<PushNotifyOutcome>(&response_json) {
+            Ok(response) => Some(CachedPushNotifyOutcome { response }),
             Err(error) => {
                 tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to deserialize cached Redis notify response");
                 None
@@ -427,7 +432,7 @@ impl RedisNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyResponse,
+        response: PushNotifyOutcome,
     ) {
         let ttl_seconds = ttl_seconds(ttl);
         let response_key = self.response_key(key);
@@ -508,7 +513,7 @@ impl RedisNotifyDeduplicator {
             .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
     }
 
-    fn cached_response(&self, key: &str) -> Option<NotifyResponse> {
+    fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {
         let mut connection = self.connection().ok()?;
         let response_key = self.response_key(key);
         let response_json: Option<String> = connection
@@ -516,7 +521,7 @@ impl RedisNotifyDeduplicator {
             .ok()
             .flatten();
         let response_json = response_json?;
-        serde_json::from_str::<NotifyResponse>(&response_json).ok()
+        serde_json::from_str::<PushNotifyOutcome>(&response_json).ok()
     }
 
     /// Wrap the dynamic component of the key in Redis cluster hash
@@ -575,7 +580,7 @@ mod tests {
     #[test]
     fn returns_inserted_response_before_expiry() {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
-        let response = NotifyResponse {
+        let response = PushNotifyOutcome {
             request_id: "request-1".to_owned(),
             accepted: 1,
             rejected: vec![RejectedDevice::new(Some("com.example.app"), "push_key")],
@@ -599,7 +604,7 @@ mod tests {
         dedup.insert_success(
             &key,
             &key,
-            NotifyResponse {
+            PushNotifyOutcome {
                 request_id: "request-1".to_owned(),
                 accepted: 0,
                 rejected: vec![],
@@ -632,7 +637,7 @@ mod tests {
         dedup.insert_success(
             &key,
             &first_fingerprint,
-            NotifyResponse {
+            PushNotifyOutcome {
                 request_id: "request-1".to_owned(),
                 accepted: 1,
                 rejected: vec![],
@@ -703,8 +708,8 @@ mod tests {
         Ok(())
     }
 
-    fn sample_response(index: usize) -> NotifyResponse {
-        NotifyResponse {
+    fn sample_response(index: usize) -> PushNotifyOutcome {
+        PushNotifyOutcome {
             request_id: format!("request-{index}"),
             accepted: 1,
             rejected: vec![],

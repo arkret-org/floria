@@ -24,8 +24,8 @@ use crate::auth::{
 use crate::config::NotifyAuthConfig;
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, Notification, NotificationContext, NotifyRequest, NotifyResponse,
-    ProviderRetry, RejectedDevice, redact_push_token,
+    DeliveryReceipt, Notification, NotificationContext, ProviderRetry, PushNotifyOutcome,
+    PushNotifyRequestBody, RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -1253,7 +1253,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = request_hash(body.as_ref());
 
-    let request = match serde_json::from_slice::<NotifyRequest>(&body) {
+    let request = match serde_json::from_slice::<PushNotifyRequestBody>(&body) {
         Ok(request) => request,
         Err(error) => {
             tracing::warn!(error = %error, "expected JSON request body");
@@ -1357,7 +1357,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 request_id = %request_id,
                 "answering 200 no-fanout ack for reason_code=historical_only"
             );
-            let response = NotifyResponse {
+            let response = PushNotifyOutcome {
                 request_id: request_id.clone(),
                 accepted: 0,
                 rejected: Vec::new(),
@@ -1418,7 +1418,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     );
                 }
             }
-            let response = NotifyResponse {
+            let response = PushNotifyOutcome {
                 request_id: request_id.clone(),
                 accepted: 0,
                 rejected: Vec::new(),
@@ -1501,7 +1501,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             access_kind = %access_kind,
             "answering 200 audit-pipeline ack after audit sink write; SKIPPING push fanout"
         );
-        let response = NotifyResponse {
+        let response = PushNotifyOutcome {
             request_id: request_id.clone(),
             accepted: 0,
             rejected: Vec::new(),
@@ -2078,7 +2078,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 "returning success with cached delivered devices"
             );
         }
-        let response = NotifyResponse {
+        let response = PushNotifyOutcome {
             request_id: context.request_id.clone(),
             accepted: delivered_now + skipped_delivered,
             rejected,
@@ -2223,7 +2223,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
 
-    let response = NotifyResponse {
+    let response = PushNotifyOutcome {
         request_id: context.request_id.clone(),
         accepted: delivered_now + skipped_delivered,
         rejected,
@@ -2259,7 +2259,7 @@ fn cache_success_response(
     state: &Arc<AppState>,
     key: &str,
     request_fingerprint: &str,
-    response: &NotifyResponse,
+    response: &PushNotifyOutcome,
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         deduplicator.insert_success(key, request_fingerprint, response.clone());

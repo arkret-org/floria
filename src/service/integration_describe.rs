@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 #[derive(Debug, Serialize)]
-struct IntegrationDescribeResponse {
+struct IntegrationDescribeOutcome {
     contract: &'static str,
     version: &'static str,
     service: &'static str,
@@ -40,7 +40,7 @@ struct IntegrationSurfaceDescriptor {
 #[handler]
 pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response) {
     res.status_code(StatusCode::OK);
-    res.render(Json(IntegrationDescribeResponse {
+    res.render(Json(IntegrationDescribeOutcome {
         contract: "cokret.rest.integration_manifest.v1",
         version: "2026-05-07",
         service: "floria",

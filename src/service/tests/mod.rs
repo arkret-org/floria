@@ -16,7 +16,7 @@ use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext, NotifyResponse, RejectedDevice};
+use crate::models::{Device, Notification, NotificationContext, PushNotifyOutcome, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
@@ -329,7 +329,7 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     rejected_devices: Vec<RejectedDevice>,
     provider_retries: usize,
 ) {
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert!(!body.request_id.is_empty());
     assert_eq!(body.accepted, accepted);
     assert_eq!(body.rejected, rejected_devices);

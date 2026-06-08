@@ -10,7 +10,7 @@ use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
 #[derive(Debug, Serialize)]
-struct GatewayDescribeResponse {
+struct PushGatewayDescribeOutcome {
     service_did: Option<String>,
     operation_id: &'static str,
     supported_profiles: Vec<&'static str>,
@@ -146,7 +146,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         })
         .collect();
 
-    let body = GatewayDescribeResponse {
+    let body = PushGatewayDescribeOutcome {
         service_did: state.notify_auth.gateway_service_did.clone(),
         operation_id: NOTIFY_OPERATION_ID,
         supported_profiles,

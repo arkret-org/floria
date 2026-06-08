@@ -364,7 +364,7 @@ async fn bridge_describe_omits_unknown_provider_kinds() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    // The SDK `PushBridgeDescribeResponse` skip-serializes an empty
+    // The SDK `PushBridgeDescribeOutcome` skip-serializes an empty
     // `provider_capabilities`, so an all-unknown-kind registry yields no
     // such key at all (rather than an explicit `[]`).
     let caps = body.get("provider_capabilities");
@@ -387,7 +387,7 @@ async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<NotifyResponse>().await.unwrap();
+    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
     assert_eq!(body.accepted, 1);
     assert_eq!(body.delivery_receipts.len(), 1);
     let receipt = &body.delivery_receipts[0];
