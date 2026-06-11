@@ -7,46 +7,46 @@ license = "Apache-2.0"
 description = "cokret-compatible push gateway service with APNS, FCM, WebPush, and domestic Android OEM providers."
 
 [dependencies]
-anyhow = "1.0.102"
-async-trait = "0.1.89"
-base64 = "0.22.1"
-blake2 = "0.10.6"
-chacha20poly1305 = "0.10"
-rand = "0.10"
 # `full-surface` is required to expose `cokret::http_signature`.
-cokret = { path = "../cokret-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
-ed25519-dalek = "2.2.0"
-futures = { version = "0.3.32", default-features = false, features = ["std"] }
-globset = "0.4.18"
-hex = "0.4.3"
-isahc = { version = "2.0.0", default-features = false, features = ["http2"] }
-lru = "0.18.0"
-kdl = "6.7.1"
-jsonwebtoken = "10.4.0"
-md-5 = "0.11.0"
-redis = "1.2.2"
-reqwest = { version = "0.13.4", default-features = false, features = ["form", "http2", "json", "rustls"] }
-salvo = { version = "0.93.0", features = ["affix-state", "logging"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-serde-saphyr = "0.0.27"
-prometheus = "0.14.0"
-sha2 = "0.11.0"
-subtle = "2.6.1"
-thiserror = "2.0.18"
-tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json", "registry"] }
-tracing-opentelemetry = { version = "0.33.0", default-features = false, features = ["tracing-log"] }
-opentelemetry = { version = "0.32.0", default-features = false, features = ["trace"] }
-opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic"] }
-postgres = "0.19.13"
-sentry = { version = "0.48.2", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
-sentry-tracing = "0.48.2"
-uuid = { version = "1.23.3", features = ["serde", "v4"] }
-web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"], optional = true }
-x509-parser = "0.18.1"
+anyhow = {workspace = true}
+async-trait = {workspace = true}
+base64 = {workspace = true}
+blake2 = {workspace = true}
+chacha20poly1305 = {workspace = true}
+cokret = {workspace = true,default-features = false,features = ["full-surface"]}
+ed25519-dalek = {workspace = true}
+futures = {workspace = true,default-features = false,features = ["std"]}
+globset = {workspace = true}
+hex = {workspace = true}
+isahc = {workspace = true,default-features = false,features = ["http2"]}
+jsonwebtoken = {workspace = true}
+kdl = {workspace = true}
+lru = {workspace = true}
+md-5 = {workspace = true}
+opentelemetry = {workspace = true,default-features = false,features = ["trace"]}
+opentelemetry-otlp = {workspace = true,default-features = false,features = ["trace", "grpc-tonic"]}
+opentelemetry_sdk = {workspace = true,default-features = false,features = ["trace", "rt-tokio"]}
+postgres = {workspace = true}
+prometheus = {workspace = true}
+rand = {workspace = true}
+redis = {workspace = true}
+reqwest = {workspace = true,default-features = false,features = ["form", "http2", "json", "rustls"]}
+salvo = {workspace = true,features = ["affix-state", "logging"]}
+sentry = {workspace = true,default-features = false,features = ["backtrace", "contexts", "panic", "reqwest", "rustls"]}
+sentry-tracing = {workspace = true}
+serde = {workspace = true,features = ["derive"]}
+serde-saphyr = {workspace = true}
+serde_json = {workspace = true}
+sha2 = {workspace = true}
+subtle = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true,features = ["macros", "rt-multi-thread", "sync", "time"]}
+tracing = {workspace = true}
+tracing-opentelemetry = {workspace = true,default-features = false,features = ["tracing-log"]}
+tracing-subscriber = {workspace = true,features = ["env-filter", "fmt", "json", "registry"]}
+uuid = {workspace = true,features = ["serde", "v4"]}
+web-push = {workspace = true,default-features = false,features = ["isahc-client"],optional = true}
+x509-parser = {workspace = true}
 
 [features]
 default = []
@@ -54,4 +54,49 @@ webpush-provider = ["dep:web-push"]
 
 [dev-dependencies]
 # T8.2 — property tests for the provider-payload sanitizer.
-proptest = { version = "1", default-features = false, features = ["std"] }
+proptest = {workspace = true,default-features = false,features = ["std"]}
+
+[workspace]
+resolver = "3"
+
+[workspace.dependencies]
+anyhow = "1.0.102"
+async-trait = "0.1.89"
+base64 = "0.22.1"
+blake2 = "0.10.6"
+chacha20poly1305 = "0.10"
+cokret = {path = "../cokret-rust-sdk/crates/sdk",default-features = false}
+ed25519-dalek = "2.2.0"
+futures = {version = "0.3.32",default-features = false}
+globset = "0.4.18"
+hex = "0.4.3"
+isahc = {version = "2.0.0",default-features = false}
+jsonwebtoken = "10.4.0"
+kdl = "6.7.1"
+lru = "0.18.0"
+md-5 = "0.11.0"
+opentelemetry = {version = "0.32.0",default-features = false}
+opentelemetry-otlp = {version = "0.32.0",default-features = false}
+opentelemetry_sdk = {version = "0.32.1",default-features = false}
+postgres = "0.19.13"
+prometheus = "0.14.0"
+proptest = {version = "1",default-features = false}
+rand = "0.10"
+redis = "1.2.2"
+reqwest = {version = "0.13.4",default-features = false}
+salvo = "0.93.0"
+sentry = {version = "0.48.2",default-features = false}
+sentry-tracing = "0.48.2"
+serde = "1.0.228"
+serde-saphyr = "0.0.27"
+serde_json = "1.0.150"
+sha2 = "0.11.0"
+subtle = "2.6.1"
+thiserror = "2.0.18"
+tokio = "1.52.3"
+tracing = "0.1.44"
+tracing-opentelemetry = {version = "0.33.0",default-features = false}
+tracing-subscriber = "0.3.23"
+uuid = "1.23.3"
+web-push = {version = "0.11.0",default-features = false}
+x509-parser = "0.18.1"
