@@ -26,4 +26,4 @@ jobs:
         run: cargo install typos-cli --version 1.44.0 --locked
 
       - name: Run typos
-        run: typos --config typos.toml --force-exclude .
+        run: typos --config .typos.toml --force-exclude .
