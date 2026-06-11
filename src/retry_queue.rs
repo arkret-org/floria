@@ -25,7 +25,7 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use rand::RngCore;
+use rand::RngExt;
 use redis::Commands;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -67,7 +67,7 @@ impl RetryQueueCipher {
 
     fn seal(&self, plaintext: &[u8]) -> Result<String> {
         let mut nonce_bytes = [0u8; RETRY_NONCE_LEN];
-        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        rand::rng().fill(&mut nonce_bytes);
         #[allow(deprecated)]
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = self
@@ -721,7 +721,7 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
 }
 
 /// Apply ±10% jitter to a backoff duration. The implementation uses
-/// `rand::thread_rng` so a fork-bombed process won't pin every retry
+/// `rand::rng` so a fork-bombed process won't pin every retry
 /// to the same `Instant`.
 fn apply_jitter(backoff: Duration) -> Duration {
     let millis = backoff.as_millis().min(u64::MAX as u128) as u64;
@@ -732,8 +732,8 @@ fn apply_jitter(backoff: Duration) -> Duration {
     if jitter_span == 0 {
         return backoff;
     }
-    let mut rng = rand::thread_rng();
-    let offset_raw = (rng.next_u64() % (jitter_span * 2 + 1)) as i64 - jitter_span as i64;
+    let mut rng = rand::rng();
+    let offset_raw = (rng.random::<u64>() % (jitter_span * 2 + 1)) as i64 - jitter_span as i64;
     let adjusted = (millis as i64).saturating_add(offset_raw).max(0) as u64;
     Duration::from_millis(adjusted)
 }
