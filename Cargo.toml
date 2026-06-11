@@ -1,8 +1,8 @@
-﻿[package]
+[package]
 name = "floria"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.92"
+rust-version = "1.96"
 license = "Apache-2.0"
 description = "cokret-compatible push gateway service with APNS, FCM, WebPush, and domestic Android OEM providers."
 
@@ -12,39 +12,39 @@ async-trait = "0.1.89"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
-rand = "0.8"
+rand = "0.10"
 # `full-surface` is required to expose `cokret::http_signature`.
 cokret = { path = "../cokret-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
 ed25519-dalek = "2.2.0"
-futures = { version = "0.3.31", default-features = false, features = ["std"] }
+futures = { version = "0.3.32", default-features = false, features = ["std"] }
 globset = "0.4.18"
 hex = "0.4.3"
-isahc = { version = "1.7.2", default-features = false, features = ["http2"] }
-lru = "0.12.5"
-kdl = "6.5.0"
-jsonwebtoken = "10.3.0"
-md-5 = "0.10.6"
-redis = "0.32.7"
-reqwest = { version = "0.13.2", default-features = false, features = ["form", "http2", "json", "rustls"] }
-salvo = { version = "0.89.3", features = ["affix-state", "logging"] }
+isahc = { version = "2.0.0", default-features = false, features = ["http2"] }
+lru = "0.18.0"
+kdl = "6.7.1"
+jsonwebtoken = "10.4.0"
+md-5 = "0.11.0"
+redis = "1.2.2"
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "http2", "json", "rustls"] }
+salvo = { version = "0.93.0", features = ["affix-state", "logging"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-serde-saphyr = "0.0.22"
+serde_json = "1.0.150"
+serde-saphyr = "0.0.27"
 prometheus = "0.14.0"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 subtle = "2.6.1"
 thiserror = "2.0.18"
-tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json", "registry"] }
-tracing-opentelemetry = { version = "0.32.1", default-features = false, features = ["tracing-log"] }
-opentelemetry = { version = "0.31.0", default-features = false, features = ["trace"] }
-opentelemetry_sdk = { version = "0.31.0", default-features = false, features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["trace", "grpc-tonic"] }
-postgres = "0.19.12"
-sentry = { version = "0.48.1", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
-sentry-tracing = "0.48.1"
-uuid = { version = "1.22.0", features = ["serde", "v4"] }
+tracing-opentelemetry = { version = "0.33.0", default-features = false, features = ["tracing-log"] }
+opentelemetry = { version = "0.32.0", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic"] }
+postgres = "0.19.13"
+sentry = { version = "0.48.2", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry-tracing = "0.48.2"
+uuid = { version = "1.23.3", features = ["serde", "v4"] }
 web-push = { version = "0.11.0", default-features = false, features = ["isahc-client"], optional = true }
 x509-parser = "0.18.1"
 
