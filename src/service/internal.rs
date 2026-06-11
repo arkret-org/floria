@@ -2,7 +2,7 @@
 //!
 //! These routes are intended for the soland-broadcast channel (or an
 //! equivalent in-process message bus). They are exposed under
-//! `/_cokret/edge/internal/...` and intentionally do NOT share the public
+//! `/_floria/internal/...` and intentionally do NOT share the public
 //! `/_cokret/edge/push/notify` request shape. They are protected by the
 //! `http.internal_auth` bearer/shared-secret profile and fail closed
 //! when no internal credential is configured.
@@ -101,7 +101,7 @@ pub(super) async fn require_internal_auth(
     }
 }
 
-/// `GET /_cokret/edge/push/status/{idempotency_key}` — returns a lightweight
+/// `GET /_floria/admin/push/status/{idempotency_key}` — returns a lightweight
 /// snapshot of an outstanding or recently completed notify request.
 /// Backed by the dedup cache; returns 404 when nothing is known.
 #[handler]
@@ -168,7 +168,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
     }
 }
 
-/// `POST /_cokret/edge/push/device/unregister` — internal-only operator
+/// `POST /_floria/admin/push/device/unregister` — internal-only operator
 /// endpoint that drops a device from the in-process delivered-device
 /// cache and (if configured) emits a deactivation. Body shape:
 /// `{ "app_id": "...", "push_key": "..." }`.

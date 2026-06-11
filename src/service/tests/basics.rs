@@ -230,7 +230,7 @@ async fn server_describe_alias_matches_push_describe() {
 async fn integration_describe_lists_operational_surfaces() {
     let service = test_service(vec![]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/integration/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_floria/integration/describe")
         .send(&service)
         .await;
 
@@ -280,7 +280,7 @@ async fn bridge_describe_lists_failure_codes() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
         .send(&service)
         .await;
 
@@ -318,7 +318,7 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept).with_kind("fcm"));
     let service = test_service(vec![("com.example.app", pushkin as Arc<dyn Pushkin>)]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
         .send(&service)
         .await;
 
@@ -358,7 +358,7 @@ async fn bridge_describe_omits_unknown_provider_kinds() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/bridge/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
         .send(&service)
         .await;
 

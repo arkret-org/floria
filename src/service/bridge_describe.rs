@@ -65,7 +65,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // version so it moves in lockstep with the capability snapshot
         // rather than drifting as a hand-edited date.
         version: PROVIDER_CAPABILITIES_VERSION.to_owned(),
-        api_base_path: "/_cokret/edge/push".to_owned(),
+        api_base_path: "/_floria/push".to_owned(),
         // `spec_version` = the cokret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.

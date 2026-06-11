@@ -100,7 +100,7 @@
         }
       }
     },
-    "/_cokret/edge/push/bridge/describe": {
+    "/_floria/push/bridge/describe": {
       "get": {
         "operationId": "bridgeDescribe",
         "summary": "Describe configured provider bridge capabilities",
@@ -118,7 +118,7 @@
         }
       }
     },
-    "/_cokret/edge/integration/describe": {
+    "/_floria/integration/describe": {
       "get": {
         "operationId": "integrationDescribe",
         "summary": "Describe floria integration surfaces",

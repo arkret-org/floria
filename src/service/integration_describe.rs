@@ -45,21 +45,21 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
         version: "2026-05-07",
         service: "floria",
         service_kind: "push_gateway",
-        api_base_path: "/_cokret/edge",
-        describe_path: "/_cokret/edge/integration/describe",
+        api_base_path: "/_floria",
+        describe_path: "/_floria/integration/describe",
         dependencies: vec![
             IntegrationDependencyDescriptor {
                 service: "soland",
                 purpose: "principal_outbound_push_delivery",
                 required_contract: "cokret.rest.outbound_push_bridge.v1",
-                discovery_path: "/_cokret/edge/push/outbound/bridge/describe",
+                discovery_path: "/_soland/edge/push/outbound/bridge/describe",
                 mode: "remote_principal_contract",
             },
             IntegrationDependencyDescriptor {
                 service: "chime",
                 purpose: "client_sdk_consumption",
                 required_contract: "ck.push.bridge.describe",
-                discovery_path: "/_cokret/edge/push/bridge/describe",
+                discovery_path: "/_floria/push/bridge/describe",
                 mode: "sdk_contract_discovery",
             },
         ],
@@ -67,10 +67,10 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationSurfaceDescriptor {
                 name: "push_bridge",
                 method: "GET",
-                path: "/_cokret/edge/push/bridge/describe",
+                path: "/_floria/push/bridge/describe",
                 contract: "ck.push.bridge.describe",
                 stability: "active",
-                todo: "GET /_cokret/edge/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
+                todo: "GET /_floria/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
             },
             IntegrationSurfaceDescriptor {
                 name: "push_notify",
@@ -133,12 +133,12 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             "compose_flow": {
                 "step_1": {
                     "service": "soland",
-                    "path": "/_cokret/edge/push/outbound/bridge/fetch",
+                    "path": "/_soland/edge/push/outbound/bridge/fetch",
                     "method": "POST"
                 },
                 "step_2": {
                     "service": "floria",
-                    "path": "/_cokret/edge/push/bridge/describe",
+                    "path": "/_floria/push/bridge/describe",
                     "method": "GET"
                 },
                 "step_3": {

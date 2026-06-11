@@ -86,7 +86,7 @@ async fn internal_routes_fail_closed_when_auth_unconfigured() {
     let service = test_service_without_internal_auth();
 
     let mut response =
-        TestClient::post("http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout")
+        TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
                 "actor_id": "did:web:alice.example",
@@ -112,7 +112,7 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
     let service = test_service_without_broadcast_bus();
 
     let mut missing =
-        TestClient::post("http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout")
+        TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
                 "actor_id": "did:web:alice.example",
@@ -129,7 +129,7 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
     );
 
     let mut invalid =
-        TestClient::post("http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout")
+        TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout")
             .bearer_auth("wrong-token")
             .json(&json!({
                 "fanout_id": "fanout-1",
@@ -154,7 +154,7 @@ async fn internal_routes_accept_hashed_bearer_token() {
     let service = test_service_with_internal_auth_config(config);
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
@@ -180,14 +180,14 @@ async fn internal_routes_accept_hashed_bearer_token() {
 async fn status_and_device_unregister_require_internal_bearer() {
     let service = test_service_without_broadcast_bus();
 
-    let mut status = TestClient::get("http://127.0.0.1/_cokret/edge/push/status/key-1")
+    let mut status = TestClient::get("http://127.0.0.1/_floria/admin/push/status/key-1")
         .send(&service)
         .await;
     assert_eq!(status.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let status_body: Value = status.take_json().await.unwrap();
     assert_eq!(status_body["error"]["code"], json!("unauthenticated"));
 
-    let mut unregister = TestClient::post("http://127.0.0.1/_cokret/edge/push/device/unregister")
+    let mut unregister = TestClient::post("http://127.0.0.1/_floria/admin/push/device/unregister")
         .json(&json!({
             "app_id": "com.example.app",
             "push_key": "push-key"
@@ -205,7 +205,7 @@ async fn account_deactivate_fanout_completes_for_drained_devices() {
     let service = test_service_with_internal_state(Some(ledger.clone()), None);
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
@@ -239,7 +239,7 @@ async fn account_deactivate_fanout_is_idempotent_across_retries() {
     });
 
     let mut first = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&payload)
     .send(&service)
@@ -247,7 +247,7 @@ async fn account_deactivate_fanout_is_idempotent_across_retries() {
     let first_body: Value = first.take_json().await.unwrap();
 
     let mut second = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&payload)
     .send(&service)
@@ -280,7 +280,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
     });
 
     let mut first = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&payload)
     .send(&service)
@@ -292,7 +292,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
     assert_eq!(drain_calls.load(Ordering::SeqCst), 1);
 
     let mut second = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&payload)
     .send(&service)
@@ -313,7 +313,7 @@ async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
     let service = test_service_with_internal_state(Some(ledger.clone()), None);
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
@@ -341,7 +341,7 @@ async fn account_deactivate_fanout_rejects_missing_actor_id() {
     let service = test_service_with_internal_state(Some(ledger), None);
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
@@ -361,7 +361,7 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
     let service = test_service_without_broadcast_bus();
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/account_deactivate_fanout",
+        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
@@ -389,7 +389,7 @@ async fn consent_revoke_scope_any_invalidates_principal_entries() {
     let service = test_service_with_internal_state(None, Some(cache.clone()));
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/consent_revoke",
+        "http://127.0.0.1/_floria/internal/consent_revoke",
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",
@@ -418,7 +418,7 @@ async fn consent_revoke_rejects_scoped_revocation() {
     let service = test_service_with_internal_state(None, Some(cache));
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/consent_revoke",
+        "http://127.0.0.1/_floria/internal/consent_revoke",
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",
@@ -446,7 +446,7 @@ async fn consent_revoke_accepts_agent_paused_reason() {
     // reason identically (full PSI cache evict), but the field must
     // round-trip cleanly through `serde(deny_unknown_fields)`.
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/consent_revoke",
+        "http://127.0.0.1/_floria/internal/consent_revoke",
     ))
     .json(&json!({
         "broadcast_id": "bcast-agent-paused",
@@ -473,7 +473,7 @@ async fn consent_revoke_accepts_agent_deactivated_reason() {
     // capability cache alongside the soland-side agent_key revoke
     // cascade.
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/consent_revoke",
+        "http://127.0.0.1/_floria/internal/consent_revoke",
     ))
     .json(&json!({
         "broadcast_id": "bcast-agent-deact",
@@ -494,7 +494,7 @@ async fn consent_revoke_returns_503_when_cache_unwired() {
     let service = test_service_without_broadcast_bus();
 
     let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_cokret/edge/internal/consent_revoke",
+        "http://127.0.0.1/_floria/internal/consent_revoke",
     ))
     .json(&json!({
         "broadcast_id": "bcast-1",

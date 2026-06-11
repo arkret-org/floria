@@ -63,34 +63,34 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
         .push(notify_route("_cokret/edge/push/notify"))
         .push(
-            Router::with_path("_cokret/edge/integration/describe")
+            Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),
         )
         .push(
-            Router::with_path("_cokret/edge/push/bridge/describe")
+            Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
         .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
-            Router::with_path("_cokret/edge/internal/account_deactivate_fanout")
+            Router::with_path("_floria/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("_cokret/edge/internal/consent_revoke")
+            Router::with_path("_floria/internal/consent_revoke")
                 .hoop(internal::require_internal_auth)
                 .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("_cokret/edge/push/status/{idempotency_key}")
+            Router::with_path("_floria/admin/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
-            Router::with_path("_cokret/edge/push/device/unregister")
+            Router::with_path("_floria/admin/push/device/unregister")
                 .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )
@@ -105,34 +105,34 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
         .hoop(AccessLogger { use_forwarded_for })
         .push(notify_route("_cokret/edge/push/notify"))
         .push(
-            Router::with_path("_cokret/edge/integration/describe")
+            Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),
         )
         .push(
-            Router::with_path("_cokret/edge/push/bridge/describe")
+            Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
         .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
-            Router::with_path("_cokret/edge/internal/account_deactivate_fanout")
+            Router::with_path("_floria/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
         .push(
-            Router::with_path("_cokret/edge/internal/consent_revoke")
+            Router::with_path("_floria/internal/consent_revoke")
                 .hoop(internal::require_internal_auth)
                 .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
-            Router::with_path("_cokret/edge/push/status/{idempotency_key}")
+            Router::with_path("_floria/admin/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
         .push(
-            Router::with_path("_cokret/edge/push/device/unregister")
+            Router::with_path("_floria/admin/push/device/unregister")
                 .hoop(internal::require_internal_auth)
                 .post(internal::device_unregister),
         )

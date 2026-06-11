@@ -84,7 +84,7 @@ The review focuses on the following adversaries and capabilities:
 3. **Compromised Redis instance** — can read/modify the dedup, nonce,
    rate-limit, and retry-queue keyspaces; goal is to forge idempotency
    responses, replay nonces, or surface dead-letter content.
-4. **In-cluster eavesdropper** — can observe `/_cokret/edge/internal/*`
+4. **In-cluster eavesdropper** — can observe `/_floria/internal/*`
    traffic; goal is to read PII from broadcast events or learn
    account-deactivation timing.
 

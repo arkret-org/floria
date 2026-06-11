@@ -1,6 +1,6 @@
 # Internal Endpoints
 
-floria exposes a small set of routes under `/_cokret/edge/internal/*` that
+floria exposes a small set of routes under `/_floria/internal/*` that
 are intended for in-cluster service-to-service traffic only. They are
 NOT the public `/_cokret/edge/push/notify` surface and they have a
 different auth and rate-limit posture.
@@ -9,8 +9,8 @@ different auth and rate-limit posture.
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/_cokret/edge/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
-| `/_cokret/edge/internal/consent_revoke` | POST | Drops every cached PSI verdict for the affected principal so the next push goes through a fresh consent check |
+| `/_floria/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
+| `/_floria/internal/consent_revoke` | POST | Drops every cached PSI verdict for the affected principal so the next push goes through a fresh consent check |
 
 Both handlers live in `src/service/internal.rs` and are wired into
 the router in `src/service/mod.rs`. They share the same `AppState`
@@ -19,8 +19,8 @@ as `/notify` but never touch the public dedup cache or rate limiter.
 ## Auth posture
 
 floria enforces `http.internal_auth` bearer/shared-secret
-authentication on `/_cokret/edge/internal/*` and the operator-only
-`/_cokret/edge/push/status/*` / `/_cokret/edge/push/device/unregister` routes. If
+authentication on `/_floria/internal/*` and the operator-only
+`/_floria/admin/push/status/*` / `/_floria/admin/push/device/unregister` routes. If
 no internal bearer token or token hash is configured, these routes fail
 closed with `503 service_unavailable`; missing or invalid credentials
 return `401 unauthenticated`.
@@ -65,5 +65,5 @@ and `confirm`; production alerts should stay disabled until the
 TODO(P5-impl) handler exists.
 
 Trace spans are emitted with `service.name=floria`,
-`http.target=/_cokret/edge/internal/<route>`, and the broadcast event id
+`http.target=/_floria/internal/<route>`, and the broadcast event id
 attached as a span attribute when present.

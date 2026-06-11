@@ -9,8 +9,8 @@ Use these unauthenticated discovery endpoints during rollout:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /_cokret/edge/integration/describe` | Lists supported integration surfaces and readiness checks |
-| `GET /_cokret/edge/push/bridge/describe` | Lists provider capability metadata for configured bridge clients |
+| `GET /_floria/integration/describe` | Lists supported integration surfaces and readiness checks |
+| `GET /_floria/push/bridge/describe` | Lists provider capability metadata for configured bridge clients |
 | `GET /_cokret/edge/push/describe` | Gateway profile and operational feature snapshot |
 | `GET /ready` | Lightweight process readiness |
 | `GET /readyz` | Strict readiness, including provider registry and reachable Redis-backed dependencies |
@@ -105,7 +105,7 @@ tokens. Error responses use the standard `ok=false` envelope with
 
 ## Broadcast Endpoints
 
-The internal endpoints `POST /_cokret/edge/internal/account_deactivate_fanout` and
-`POST /_cokret/edge/internal/consent_revoke` are for soland's private broadcast path.
+The internal endpoints `POST /_floria/internal/account_deactivate_fanout` and
+`POST /_floria/internal/consent_revoke` are for soland's private broadcast path.
 Keep them on a private listener, service mesh, or reverse-proxy route. They are
 not mobile or third-party server APIs.

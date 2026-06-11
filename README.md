@@ -57,8 +57,8 @@ Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`appeal_id`, `attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
 `policy_frontier_digest`, `trust_domain`, `reset_event_id`) and added two
-new internal broadcast endpoints — `POST /_cokret/edge/internal/
-account_deactivate_fanout` (T07) and `POST /_cokret/edge/internal/
+new internal broadcast endpoints — `POST /_floria/internal/
+account_deactivate_fanout` (T07) and `POST /_floria/internal/
 consent_revoke` (T17) — consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the

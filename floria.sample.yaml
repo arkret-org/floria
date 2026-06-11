@@ -62,8 +62,8 @@ http:
     #   # backend: redis
     #   # redis_url: redis://127.0.0.1:6379/2
   internal_auth:
-    # Internal/operator routes (`/_cokret/edge/internal/*`,
-    # `/_cokret/edge/push/status/*`, `/_cokret/edge/push/device/unregister`) fail
+    # Internal/operator routes (`/_floria/internal/*`,
+    # `/_floria/admin/push/status/*`, `/_floria/admin/push/device/unregister`) fail
     # closed unless one of these credentials is configured.
     # bearer_tokens:
     #   - replace-me-internal
