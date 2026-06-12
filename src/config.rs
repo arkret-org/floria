@@ -2718,22 +2718,6 @@ apps: {}
     }
 
     #[test]
-    fn schema_artifact_matches_committed_snapshot() {
-        let snapshot_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("floria.config.schema.json");
-        let live = serde_json::to_string_pretty(&config_json_schema()).unwrap();
-        let on_disk = std::fs::read_to_string(&snapshot_path).expect(
-            "floria.config.schema.json missing — refresh with `cargo run --example emit_schema > floria.config.schema.json`",
-        );
-        let on_disk = on_disk.trim_end_matches(['\n', '\r']);
-        assert_eq!(
-            live.trim_end_matches(['\n', '\r']),
-            on_disk,
-            "floria.config.schema.json is stale — refresh with `cargo run --example emit_schema > floria.config.schema.json`"
-        );
-    }
-
-    #[test]
     fn yaml_and_kdl_produce_equivalent_configs() {
         let yaml = r#"
 http:

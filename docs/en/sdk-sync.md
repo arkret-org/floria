@@ -70,9 +70,6 @@ R5, CKP-0007 → CKP-0008, etc.):
 - [ ] Add a property test in `tests/property_provider_payload.rs`
       that fuzzes the new field name into request bodies and asserts
       the provider wire does not contain it (case-insensitive).
-- [ ] Re-snapshot the chime drift-gate fixture (per P6 of the
-      coordinated todo) — round upgrades usually move at least one
-      timestamp.
 - [ ] Update `docs/en/server-integration.md` if the new round
       changes the request wire shape that callers see.
 - [ ] Run the local supply-chain script with the new round:

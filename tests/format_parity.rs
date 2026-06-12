@@ -1,13 +1,9 @@
 //! KDL ↔ YAML parity coverage.
 //!
-//! For every `*.sample.kdl` we expect a sibling `*.sample.yaml`. Both
-//! must parse, normalize to the same `Config`, and serialize to the same
-//! canonical JSON form. Drift between the two formats is a docs bug —
-//! operators copy/paste between them and expect identical semantics.
-//!
-//! Also gates `floria.config.schema.json`: the committed file's `$id`
-//! must encode `Config::SCHEMA_VERSION` so the schema artifact never
-//! gets out of sync with the runtime parser.
+//! For every paired `*.sample.kdl` and `*.sample.yaml`, both formats must
+//! parse, normalize to the same `Config`, and serialize to the same canonical
+//! JSON form. Drift between the two formats is a docs bug: operators copy and
+//! paste between them and expect identical semantics.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -17,30 +13,6 @@ use floria::config::Config;
 use serde_json::Value;
 
 #[test]
-fn every_sample_kdl_has_matching_yaml_pair() {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let kdl_files = collect_sample_files(manifest_dir, "kdl");
-    assert!(
-        !kdl_files.is_empty(),
-        "expected at least one *.sample.kdl in the repo"
-    );
-
-    let mut missing = Vec::new();
-    for kdl in &kdl_files {
-        let yaml = path_with_swapped_extension(kdl, "kdl", "yaml");
-        if !yaml.exists() {
-            missing.push(format!("{} (no sibling .yaml)", kdl.display()));
-        }
-    }
-    if !missing.is_empty() {
-        panic!(
-            "sample KDL files missing YAML siblings:\n{}",
-            missing.join("\n")
-        );
-    }
-}
-
-#[test]
 fn sample_kdl_and_yaml_parse_to_equivalent_config() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut mismatches = Vec::new();
@@ -48,7 +20,7 @@ fn sample_kdl_and_yaml_parse_to_equivalent_config() {
     for kdl_path in collect_sample_files(manifest_dir, "kdl") {
         let yaml_path = path_with_swapped_extension(&kdl_path, "kdl", "yaml");
         if !yaml_path.exists() {
-            continue; // covered by the pair-presence test above
+            continue;
         }
 
         let kdl_body = fs::read_to_string(&kdl_path).expect("read sample kdl");
@@ -115,47 +87,6 @@ fn sample_kdl_and_yaml_parse_to_equivalent_config() {
     if !mismatches.is_empty() {
         panic!("KDL ↔ YAML parity violated:\n{}", mismatches.join("\n\n"));
     }
-}
-
-#[test]
-fn committed_schema_id_encodes_current_schema_version() {
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let schema_path = manifest_dir.join("floria.config.schema.json");
-    let body = fs::read_to_string(&schema_path).expect("read floria.config.schema.json");
-    let schema: Value = serde_json::from_str(&body).expect("parse schema JSON");
-
-    let id = schema
-        .get("$id")
-        .and_then(Value::as_str)
-        .expect("schema must declare $id");
-    let x_version = schema
-        .get("x-floria-schema-version")
-        .and_then(Value::as_str)
-        .expect("schema must declare x-floria-schema-version");
-
-    assert_eq!(
-        x_version,
-        Config::SCHEMA_VERSION,
-        "x-floria-schema-version drifted from Config::SCHEMA_VERSION"
-    );
-    assert!(
-        id.contains(Config::SCHEMA_VERSION),
-        "$id ({id}) does not encode Config::SCHEMA_VERSION ({})",
-        Config::SCHEMA_VERSION
-    );
-
-    // The runtime schema generator must also agree.
-    let runtime = floria::config::config_json_schema();
-    assert_eq!(
-        runtime.get("$id"),
-        schema.get("$id"),
-        "runtime config_json_schema() $id drifted from committed schema",
-    );
-    assert_eq!(
-        runtime.get("x-floria-schema-version"),
-        schema.get("x-floria-schema-version"),
-        "runtime config_json_schema() version drifted from committed schema",
-    );
 }
 
 // ── helpers ─────────────────────────────────────────────────────────

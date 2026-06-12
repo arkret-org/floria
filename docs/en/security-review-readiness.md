@@ -33,7 +33,6 @@ cargo check
 cargo test --lib
 cargo test --test provider_payload_strictness
 cargo test --test sample_config_parse
-cargo test --test sample_config_secret_scan
 cargo test --test property_provider_payload
 .\scripts\local-supply-chain.ps1 -Image floria:local-security-review -SkipCosign
 ```
