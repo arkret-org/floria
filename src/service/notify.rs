@@ -25,8 +25,8 @@ use crate::config::NotifyAuthConfig;
 use crate::dedup::request_hash;
 use crate::models::{
     DeliveryReceipt, FloriaPushNotifyEnvelope as PushNotifyRequestBody,
-    FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
-    ProviderRetry, RejectedDevice, redact_push_token,
+    FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext, ProviderRetry,
+    RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -1381,7 +1381,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 provider_retries: Vec::new(),
                 delivery_receipts: Vec::new(),
             };
-            finish_json(res, StatusCode::OK, response, started);
+            finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
         Some(_) => {
@@ -1442,7 +1442,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 provider_retries: Vec::new(),
                 delivery_receipts: Vec::new(),
             };
-            finish_json(res, StatusCode::OK, response, started);
+            finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
         // Any other `event_kind` string falls through — floria does not
@@ -1525,7 +1525,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             provider_retries: Vec::new(),
             delivery_receipts: Vec::new(),
         };
-        finish_json(res, StatusCode::OK, response, started);
+        finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
     let idempotency_key = match resolve_idempotency_key(req, request.idempotency_key.as_deref()) {
@@ -1691,12 +1691,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     .unwrap_or("<canonical-request-hash>"),
                 "serving /notify response from dedup cache"
             );
-            finish_json(
-                res,
-                StatusCode::OK,
-                cached.response.with_request_id(request_id),
-                started,
-            );
+            let response = cached.response.with_request_id(request_id);
+            finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
         app_metrics::notify_dedup_lookup("miss");
@@ -2124,7 +2120,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             &response.delivery_receipts,
             state.metrics_detailed_circle_labels,
         );
-        finish_json(res, StatusCode::OK, response, started);
+        finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
 
@@ -2269,7 +2265,26 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         &response.delivery_receipts,
         state.metrics_detailed_circle_labels,
     );
-    finish_json(res, StatusCode::OK, response, started);
+    finish_standard_notify_json(res, StatusCode::OK, &response, started);
+}
+
+fn finish_standard_notify_json(
+    res: &mut Response,
+    status: StatusCode,
+    response: &PushNotifyOutcome,
+    started: Instant,
+) {
+    finish_json(res, status, standard_notify_outcome(response), started);
+}
+
+fn standard_notify_outcome(response: &PushNotifyOutcome) -> cokret::PushNotifyOutcome {
+    cokret::PushNotifyOutcome {
+        rejected: response
+            .rejected
+            .iter()
+            .filter_map(|device| serde_json::to_value(device).ok())
+            .collect(),
+    }
 }
 
 fn cache_success_response(
