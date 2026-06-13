@@ -44,7 +44,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
 
@@ -86,7 +86,7 @@ async fn describe_separates_claim_levels() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -157,7 +157,7 @@ async fn describe_does_not_advertise_media_token_self_issue() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -193,7 +193,7 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
         auth,
     );
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -206,24 +206,29 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
 }
 
 #[tokio::test]
-async fn server_describe_alias_matches_push_describe() {
+async fn gateway_describe_lives_at_root_meta_position() {
+    // The gateway profile advertisement lives only at the root meta
+    // position GET /_cokret/describe (openapi: "advertisement lives at
+    // the root meta position /_cokret/describe"). There is no
+    // protocol-surface push-specific describe operation.
     let service = test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut push_response = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
-        .send(&service)
-        .await;
     let mut server_response = TestClient::get("http://127.0.0.1/_cokret/describe")
         .send(&service)
         .await;
-
-    assert_eq!(push_response.status_code.unwrap(), StatusCode::OK);
     assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
-    let push_body = push_response.take_json::<Value>().await.unwrap();
     let server_body = server_response.take_json::<Value>().await.unwrap();
-    assert_eq!(server_body, push_body);
+    assert_eq!(server_body["operation_id"], json!(NOTIFY_OPERATION_ID));
+
+    // The self-made /_cokret/edge/push/describe path MUST NOT exist;
+    // ck.edge.push.* registers only register/unregister/notify.
+    let push_describe = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+        .send(&service)
+        .await;
+    assert_eq!(push_describe.status_code.unwrap(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -246,7 +251,6 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"push_bridge"));
     assert!(surface_names.contains(&"push_notify"));
     assert!(surface_names.contains(&"gateway_describe"));
-    assert!(surface_names.contains(&"server_describe_alias"));
     assert!(surface_names.contains(&"health"));
     assert!(surface_names.contains(&"ready"));
     assert!(surface_names.contains(&"readyz"));

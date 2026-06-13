@@ -68,7 +68,7 @@ impl InProcessBroadcastBus {
         })
     }
 
-    pub fn consent_revoke(
+    pub async fn consent_revoke(
         &self,
         broadcast: &ConsentRevokeBroadcast,
     ) -> Result<ConsentRevokeAck, BroadcastError> {
@@ -78,7 +78,9 @@ impl InProcessBroadcastBus {
         Ok(ConsentRevokeAck {
             broadcast_id: broadcast.broadcast_id.clone(),
             scope: ConsentRevokeBroadcast::SUPPORTED_SCOPE,
-            entries_evicted: cache.invalidate_principal(&broadcast.principal_id),
+            entries_evicted: cache
+                .invalidate_principal_async(&broadcast.principal_id)
+                .await,
         })
     }
 }
@@ -108,8 +110,8 @@ mod tests {
         assert_eq!(ack.device_bindings_unbound, 1);
     }
 
-    #[test]
-    fn bus_processes_consent_revoke() {
+    #[tokio::test]
+    async fn bus_processes_consent_revoke() {
         let cache = Arc::new(PushContactCache::in_memory());
         cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
         let bus = InProcessBroadcastBus::new(None, Some(cache));
@@ -120,6 +122,7 @@ mod tests {
                 scope: "any".to_owned(),
                 reason: None,
             })
+            .await
             .unwrap();
         assert_eq!(ack.entries_evicted, 1);
     }

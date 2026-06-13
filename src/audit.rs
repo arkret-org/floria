@@ -113,7 +113,13 @@ pub struct HttpAuditSink {
 impl HttpAuditSink {
     pub fn new(endpoint: impl Into<String>, bearer_token: Option<String>) -> Self {
         Self {
+            // Bound connect + overall time so a stalled audit endpoint
+            // cannot block the dispatch path indefinitely (mirrors the
+            // pushkin reqwest_support CONNECT_TIMEOUT / REQUEST_TIMEOUT).
             client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(30))
+                .dns_resolver(crate::egress::EgressGuardResolver::from_env())
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("build audit HTTP client"),

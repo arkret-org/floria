@@ -200,22 +200,28 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // and bounded counts. Identifying-field examples live under
             // `plaintext_visible_service_request` (visible_notification
             // profile) below. Spec push-notifications.md §5.1.
+            // Blind wakeup MUST NOT carry a plaintext absolute unread count
+            // (push-notifications.md §5.1). Use the closed `counts` keys
+            // (`badge` hysteresis bucket / `unread_increment` / `missed_call`)
+            // defined by push-operations.schema.json#/$defs/counts.
             blind_wakeup_request: serde_json::json!({
                 "notification": {
                     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "push_hint": "new_message",
-                    "counts": {"unread": 3}
+                    "counts": {"badge": "2-5"}
                 }
             }),
+            // visible_notification is additionalProperties:false: no free-text
+            // `preview` field exists; identifying refs travel in the typed
+            // id fields and `counts` follows the same closed schema.
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
                     "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
                     "flow_id": "ck:flow:01964000-0000-7000-8000-000000000000",
                     "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
                     "push_hint": "new_message",
-                    "preview": "Alice: deploy is complete",
-                    "counts": {"unread": 3}
+                    "counts": {"unread_increment": 1}
                 }
             }),
         },

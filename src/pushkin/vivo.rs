@@ -164,6 +164,12 @@ impl VivoPushkin {
             .trim_end_matches('/')
             .to_owned();
 
+        let send_endpoint = format!("{api_base_url}/message/send");
+        crate::egress::validate_http_url_for_egress(&auth_url, "vivo auth endpoint")
+            .map_err(|error| anyhow!(error))?;
+        crate::egress::validate_http_url_for_egress(&send_endpoint, "vivo push endpoint")
+            .map_err(|error| anyhow!(error))?;
+
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
@@ -176,7 +182,7 @@ impl VivoPushkin {
                 app_secret,
             },
             auth_endpoint: auth_url,
-            send_endpoint: format!("{api_base_url}/message/send"),
+            send_endpoint,
             token_cache: Mutex::new(None),
             config: VivoConfig {
                 notify_type: app.get_u64("notify_type")?.unwrap_or(4),

@@ -129,13 +129,19 @@ impl HonorPushkin {
             .trim_end_matches('/')
             .to_owned();
 
+        let endpoint = format!("{api_base_url}/{app_id}/messages:send");
+        crate::egress::validate_http_url_for_egress(&token_url, "HONOR token endpoint")
+            .map_err(|error| anyhow!(error))?;
+        crate::egress::validate_http_url_for_egress(&endpoint, "HONOR push endpoint")
+            .map_err(|error| anyhow!(error))?;
+
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
             client: build_reqwest_client(config, "floria")?,
             token_grant: ClientCredentialsGrant::new(app_id.clone(), app_secret, token_url),
-            endpoint: format!("{api_base_url}/{app_id}/messages:send"),
+            endpoint,
             config: HonorConfig {
                 channel_id: app.get_string("channel_id")?,
                 ttl_seconds: app.get_u64("ttl_seconds")?,

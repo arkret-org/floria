@@ -83,18 +83,10 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationSurfaceDescriptor {
                 name: "gateway_describe",
                 method: "GET",
-                path: "/_cokret/edge/push/describe",
-                contract: "ck.profile.push_gateway.v1",
-                stability: "active",
-                todo: "GET /_cokret/edge/push/describe is a profile-level snapshot kept in sync with bridge/describe.",
-            },
-            IntegrationSurfaceDescriptor {
-                name: "server_describe_alias",
-                method: "GET",
                 path: "/_cokret/describe",
                 contract: "ck.profile.push_gateway.v1",
                 stability: "active",
-                todo: "Alias of GET /_cokret/edge/push/describe for generic service discovery; responses are identical.",
+                todo: "GET /_cokret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
                 name: "health",

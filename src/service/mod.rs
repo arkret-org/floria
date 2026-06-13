@@ -70,7 +70,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
         .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
@@ -112,7 +111,6 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
             Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("_cokret/edge/push/describe").get(server_describe::describe))
         .push(Router::with_path("_cokret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(

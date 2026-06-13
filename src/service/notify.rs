@@ -616,10 +616,10 @@ fn validate_wakeup_kind(value: Option<&Value>) -> Result<(), String> {
         return Err("notification.wakeup_kind must not be empty".to_owned());
     }
     if !cokret::blind_payload_sanitizer::is_valid_wakeup_kind(value) {
-        return Err(
-            "notification.wakeup_kind must be one of message, mention, reaction, call_invite, reminder, scheduled_send, expiry_invalidation"
-                .to_owned(),
-        );
+        return Err(format!(
+            "notification.wakeup_kind must be one of {}",
+            cokret::blind_payload_sanitizer::ALLOWED_WAKEUP_KINDS.join(", ")
+        ));
     }
     Ok(())
 }
@@ -1229,9 +1229,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         req,
         body.as_ref(),
         &state.notify_auth,
-        state.notify_nonce_store.as_deref(),
+        state.notify_nonce_store.as_ref(),
         &request_id,
-    ) {
+    )
+    .await
+    {
         Ok(caller) => {
             span.record(
                 "caller",
@@ -1667,7 +1669,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .map(idempotency_cache_key)
         .unwrap_or_else(|| request_fingerprint.clone());
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
-        if deduplicator.conflicts(&dedup_key, &request_fingerprint) {
+        if deduplicator
+            .conflicts_async(&dedup_key, &request_fingerprint)
+            .await
+        {
             app_metrics::notify_dedup_lookup("conflict");
             finish_error(
                 res,
@@ -1680,7 +1685,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        if let Some(cached) = deduplicator.lookup(&dedup_key, &request_fingerprint) {
+        if let Some(cached) = deduplicator
+            .lookup_async(&dedup_key, &request_fingerprint)
+            .await
+        {
             app_metrics::notify_dedup_lookup("hit");
             app_metrics::notify_request_cache_hit();
             tracing::info!(
@@ -1714,7 +1722,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     if let Some(rate_limiter) = state.notify_rate_limiter.as_ref() {
         let checks = notify_rate_limit_checks(req, &state, &notification);
-        if let Err(rejection) = rate_limiter.check_many(&checks) {
+        if let Err(rejection) = rate_limiter.check_many_async(&checks).await {
             app_metrics::notify_rate_limit_reject(rejection.scope);
             tracing::warn!(
                 request_id = %request_id,

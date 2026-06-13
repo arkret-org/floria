@@ -112,7 +112,7 @@ implemented:
    `mention_redirect_target_actor_ids`, which carries DID targets only.
 2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
    tokens. The local `media.rs` helpers pin wire shapes and fail closed;
-   `/_cokret/edge/push/describe` does not advertise an RTC/media token
+   `/_cokret/describe` does not advertise an RTC/media token
    self-issue feature, and the production router does not expose a
    public `/rtc/token` minting route. The canonical issuer remains
    soland unless a future release wires a real media-service keystore.
@@ -144,13 +144,10 @@ or open follow-up tickets:
    config validation. Production callers must use HTTP Message
    Signatures or mTLS; bearer hashes are retained only as non-production
    fallback material. See `docs/en/configuration.md`.
-5. **Takedown notification path is not implemented** — the
-   `floria_takedown_notification_failures_total` counter is wired but
-   the underlying handler is a TODO(P5-impl) placeholder. The metric
-   stays at zero unless an explicit stub call increments one of the
-   documented `enqueue` / `dispatch` / `confirm` stages during local
-   testing; production alerts should remain disabled until the handler
-   lands.
+5. **Takedown notification path is not implemented** — there is no
+   takedown-notification handler yet (TODO(P5-impl)). No placeholder
+   metric is exported for it; the counter and stub were removed so the
+   `/metrics` surface only reflects implemented paths.
 6. **Internal endpoints share the public listener** — see
    `docs/en/internal-endpoints.md`. They now require
    `http.internal_auth` and fail closed when it is unset; private

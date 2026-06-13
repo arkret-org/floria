@@ -52,8 +52,14 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
+      - name: Run clippy (webpush-provider)
+        run: cargo clippy --all-targets --features webpush-provider --locked -- -D warnings
+
       - name: Run tests
         run: cargo test --all-targets --locked
+
+      - name: Run tests (webpush-provider)
+        run: cargo test --all-targets --features webpush-provider --locked
 
   msrv:
     name: MSRV (Cargo.toml rust-version)
@@ -64,10 +70,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install MSRV Rust toolchain
-        uses: dtolnay/rust-toolchain@1.92
+        # Must match `rust-version` in Cargo.toml so this job actually
+        # verifies the declared floor.
+        uses: dtolnay/rust-toolchain@1.96
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
       - name: Verify workspace builds on MSRV
         run: cargo check --workspace --all-targets --locked
+
+      - name: Verify workspace builds on MSRV (webpush-provider)
+        run: cargo check --workspace --all-targets --features webpush-provider --locked

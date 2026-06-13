@@ -139,6 +139,30 @@ impl NotifyRateLimiter {
             RateLimiterBackend::Redis(backend) => backend.check_many(self.window, checks),
         }
     }
+
+    /// Async-safe [`Self::check_many`]: the in-memory backend runs inline
+    /// (lock-bounded, non-blocking) while the Redis backend — which opens
+    /// a blocking connection and runs a blocking EVAL — is offloaded to
+    /// `spawn_blocking` so it never stalls a tokio worker thread
+    /// (FLO-02-002).
+    pub async fn check_many_async(
+        self: &Arc<Self>,
+        checks: &[NotifyRateLimitCheck],
+    ) -> Result<(), NotifyRateLimitRejection> {
+        if checks.is_empty() {
+            return Ok(());
+        }
+        match &self.backend {
+            RateLimiterBackend::Memory(backend) => backend.check_many(self.window, checks),
+            RateLimiterBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let checks = checks.to_vec();
+                tokio::task::spawn_blocking(move || this.check_many(&checks))
+                    .await
+                    .unwrap_or(Ok(()))
+            }
+        }
+    }
 }
 
 /// Per-provider concurrent-dispatch limiter. Enforces a max number of

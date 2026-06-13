@@ -35,9 +35,11 @@ pub struct CircuitBreakerConfig {
     /// Number of consecutive failures before the breaker opens.
     pub failure_threshold: u32,
     /// How long the breaker stays open before it auto-resets to closed.
-    /// Operators that want a manual reset should set this to something
-    /// long and rely on the `floria_circuit_breaker_state` metric +
-    /// the reset RPC (TODO(circle-rollout-P2C.5)).
+    /// There is no manual reset RPC yet (TODO(circle-rollout-P2C.5)), so
+    /// the only reset path today is `open_for` elapsing. Operators should
+    /// size `open_for` accordingly and watch the
+    /// `floria_circuit_breaker_state` metric; do not configure a very
+    /// long `open_for` expecting to clear it manually.
     pub open_for: Duration,
     /// Maximum number of distinct breaker-state slots to keep before
     /// LRU-evicting the oldest. Bounds memory under high cardinality

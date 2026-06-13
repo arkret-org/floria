@@ -360,21 +360,37 @@ impl PushContactCache {
         verdict
     }
 
-    /// Drop every cached PSI entry for `principal_id`. Returns the
-    /// number of entries that were evicted. If a disk overlay is
-    /// configured, also writes a sentinel tombstone so a future load
-    /// re-derives the verdict.
-    pub fn invalidate_principal(&self, principal_id: &str) -> usize {
+    /// Evict every in-memory PSI entry for `principal_id` under the
+    /// cache lock and snapshot the overlay handles. The lock is released
+    /// before any disk/Postgres I/O is performed (see
+    /// [`Self::flush_invalidation_overlays`]) so we never hold a
+    /// `std::sync::Mutex` across blocking I/O.
+    fn evict_principal_locked(
+        &self,
+        principal_id: &str,
+    ) -> (usize, Option<PathBuf>, Option<PostgresPushContactOverlay>) {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
         let before = inner.entries.len();
         inner.entries.retain(|(did, _), _| did != principal_id);
         let removed = before - inner.entries.len();
         inner.last_invalidated_principal = Some(principal_id.to_owned());
+        (
+            removed,
+            inner.disk_overlay.clone(),
+            inner.postgres_overlay.clone(),
+        )
+    }
 
-        if let Some(overlay) = inner.disk_overlay.as_ref() {
-            // Best-effort tombstone — failure is logged but not fatal:
-            // the in-memory layer is already cleared, and the next
-            // process boot will see a missing sentinel and refresh.
+    /// Blocking overlay flush for an invalidation: writes the disk
+    /// sentinel and runs the Postgres DELETE. Best-effort — failures are
+    /// logged, not fatal. MUST run off the async executor (the caller
+    /// uses `spawn_blocking`); holds no lock.
+    fn flush_invalidation_overlays(
+        principal_id: &str,
+        disk_overlay: Option<&PathBuf>,
+        postgres_overlay: Option<&PostgresPushContactOverlay>,
+    ) -> usize {
+        if let Some(overlay) = disk_overlay {
             if let Some(parent) = overlay.parent()
                 && let Err(err) = std::fs::create_dir_all(parent)
             {
@@ -394,9 +410,7 @@ impl PushContactCache {
             }
         }
 
-        let postgres_removed = inner
-            .postgres_overlay
-            .as_ref()
+        postgres_overlay
             .and_then(|overlay| match overlay.invalidate_principal(principal_id) {
                 Ok(count) => Some(count),
                 Err(err) => {
@@ -408,8 +422,51 @@ impl PushContactCache {
                     None
                 }
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
+    }
 
+    /// Drop every cached PSI entry for `principal_id`. Returns the
+    /// number of entries that were evicted. If a disk overlay is
+    /// configured, also writes a sentinel tombstone so a future load
+    /// re-derives the verdict.
+    ///
+    /// This is the synchronous variant; the in-memory eviction holds the
+    /// lock only briefly and the lock is dropped before any blocking
+    /// disk/Postgres I/O. Async callers on the request path MUST use
+    /// [`Self::invalidate_principal_async`] so the blocking I/O does not
+    /// stall a tokio worker thread.
+    pub fn invalidate_principal(&self, principal_id: &str) -> usize {
+        let (removed, disk_overlay, postgres_overlay) = self.evict_principal_locked(principal_id);
+        let postgres_removed = Self::flush_invalidation_overlays(
+            principal_id,
+            disk_overlay.as_ref(),
+            postgres_overlay.as_ref(),
+        );
+        removed.max(postgres_removed)
+    }
+
+    /// Async variant of [`Self::invalidate_principal`]: evicts in-memory
+    /// entries inline (cheap, lock-bounded) and offloads the blocking
+    /// disk/Postgres overlay flush to `spawn_blocking` so the async
+    /// request handler never blocks a tokio worker thread (FLO-02-002).
+    pub async fn invalidate_principal_async(&self, principal_id: &str) -> usize {
+        let (removed, disk_overlay, postgres_overlay) = self.evict_principal_locked(principal_id);
+        if disk_overlay.is_none() && postgres_overlay.is_none() {
+            return removed;
+        }
+        let principal = principal_id.to_owned();
+        let postgres_removed = tokio::task::spawn_blocking(move || {
+            Self::flush_invalidation_overlays(
+                &principal,
+                disk_overlay.as_ref(),
+                postgres_overlay.as_ref(),
+            )
+        })
+        .await
+        .unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "psi cache invalidation overlay flush task panicked");
+            0
+        });
         removed.max(postgres_removed)
     }
 

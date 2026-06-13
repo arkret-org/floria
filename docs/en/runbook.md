@@ -177,14 +177,5 @@ re-signing, or mutating tokens. See
 the Chinese summary of this decision and the rationale.
 
 The local `media.rs` signing helpers are fail-closed scaffolds. If you
-see floria attempting to mint a token locally, or `/_cokret/edge/push/describe`
+see floria attempting to mint a token locally, or `/_cokret/describe`
 advertising an RTC/media token self-issue feature, that is a bug.
-
-## Takedown notification metric placeholder
-
-`floria_takedown_notification_failures_total{stage}` is reserved for the
-future takedown-notification handler. Its allowed stage labels are
-`enqueue`, `dispatch`, and `confirm`; no production handler increments it
-today. Keep alerts for this metric disabled until TODO(P5-impl) wires the
-real handler, otherwise a flat zero is expected rather than healthy
-takedown coverage.

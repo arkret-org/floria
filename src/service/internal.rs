@@ -451,7 +451,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         return;
     };
 
-    let ack = match bus.consent_revoke(&body) {
+    let ack = match bus.consent_revoke(&body).await {
         Ok(ack) => ack,
         Err(error) => {
             finish_error(

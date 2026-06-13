@@ -122,13 +122,17 @@ impl XiaomiPushkin {
             .trim_end_matches('/')
             .to_owned();
 
+        let endpoint = format!("{api_base_url}/v3/message/regid");
+        crate::egress::validate_http_url_for_egress(&endpoint, "Xiaomi push endpoint")
+            .map_err(|error| anyhow::anyhow!(error))?;
+
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
             connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
             client: build_reqwest_client(config, "floria")?,
             authorization: xiaomi_authorization(&app_secret)?,
-            endpoint: format!("{api_base_url}/v3/message/regid"),
+            endpoint,
             config: XiaomiConfig {
                 restricted_package_name: app
                     .get_string("restricted_package_name")?

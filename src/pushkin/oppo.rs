@@ -158,6 +158,12 @@ impl OppoPushkin {
             .trim_end_matches('/')
             .to_owned();
 
+        let send_endpoint = format!("{api_base_url}/server/v1/message/notification/unicast");
+        crate::egress::validate_http_url_for_egress(&auth_url, "OPPO auth endpoint")
+            .map_err(|error| anyhow::anyhow!(error))?;
+        crate::egress::validate_http_url_for_egress(&send_endpoint, "OPPO push endpoint")
+            .map_err(|error| anyhow::anyhow!(error))?;
+
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             vendor,
@@ -169,7 +175,7 @@ impl OppoPushkin {
                 master_secret,
             },
             auth_endpoint: auth_url,
-            send_endpoint: format!("{api_base_url}/server/v1/message/notification/unicast"),
+            send_endpoint,
             token_cache: Mutex::new(None),
             config: OppoConfig {
                 request: app.get_object("request")?.unwrap_or_default(),

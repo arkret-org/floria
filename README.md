@@ -83,7 +83,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 ## Supported features
 
 - `POST /_cokret/edge/push/notify` as the canonical Cokret notify endpoint
-- `GET /_cokret/edge/push/describe` gateway profile discovery (`/_cokret/describe` is an identical alias)
+- `GET /_cokret/describe` gateway profile discovery at the root meta position
 - `GET /health`
 - `GET /ready`
 - `GET /readyz`
@@ -101,7 +101,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 - OPPO / OPlus / OnePlus server push
 - vivo Push server push
 - Xiaomi Mi Push server push
-- WebPush / VAPID
+- WebPush / VAPID (requires building with `--features webpush-provider`; not in the default build)
 - `FLORIA_CONF` env var
 - `HTTPS_PROXY` env var fallback for outbound proxying
 - KDL config (default) and YAML config, detected by file extension

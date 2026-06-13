@@ -16,9 +16,25 @@ use crate::error::DispatchError;
 /// drift apart.
 pub(super) const TOKEN_REFRESH_SKEW: Duration = Duration::from_secs(30);
 
+/// TCP connect timeout for every outbound provider / token / OEM HTTP
+/// client. Single-sourced here so no provider can ship a client that
+/// blocks forever on a half-open or unresponsive upstream and pins an
+/// in-flight permit (see FLO-02-001). Applied to every reqwest client and
+/// mirrored by the isahc-based WebPush client.
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Overall per-request timeout (connect + send + receive) for outbound
+/// provider HTTP. Bounds the time a single dispatch can hold a gate
+/// permit / inflight slot when an upstream accepts the connection but
+/// stalls mid-response.
+pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<Client> {
     let mut builder = Client::builder()
         .user_agent(user_agent)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .dns_resolver(crate::egress::EgressGuardResolver::from_env())
         .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = config.outbound_proxy() {
         builder =

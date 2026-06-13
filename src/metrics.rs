@@ -253,19 +253,6 @@ static NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE: LazyLock<IntGaugeVec> = LazyLock
     .expect("register floria_notify_retry_queue_depth")
 });
 
-// P5 — placeholder counter for the not-yet-implemented takedown
-// notification path. Cardinality is bounded by a small `stage` enum
-// (`enqueue`, `dispatch`, `confirm`). TODO(P5-impl): wire to the real
-// takedown handler once the path lands.
-static TAKEDOWN_NOTIFY_FAILURES_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_takedown_notification_failures_total",
-        "Takedown notification failures per stage (placeholder — TODO(P5-impl))",
-        &["stage"]
-    )
-    .expect("register floria_takedown_notification_failures_total")
-});
-
 pub fn init() {
     LazyLock::force(&NOTIFS_RECEIVED_COUNTER);
     LazyLock::force(&NOTIFY_REQUEST_CACHE_HITS_COUNTER);
@@ -292,7 +279,6 @@ pub fn init() {
     LazyLock::force(&DEVICE_DEDUP_CACHE_SIZE_GAUGE);
     LazyLock::force(&RETRY_QUEUE_DEPTH_GAUGE);
     LazyLock::force(&NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE);
-    LazyLock::force(&TAKEDOWN_NOTIFY_FAILURES_COUNTER);
 }
 
 pub fn set_device_dedup_cache_size(value: i64) {
@@ -325,14 +311,6 @@ pub fn set_notify_retry_queue_depth_labelled(
     NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE
         .with_label_values(&[provider, scope_kind, scope_id])
         .set(value);
-}
-
-/// TODO(P5-impl): wire from the real takedown handler. Placeholder so
-/// dashboards / alerts can be wired ahead of the implementation.
-pub fn takedown_notification_failure(stage: &str) {
-    TAKEDOWN_NOTIFY_FAILURES_COUNTER
-        .with_label_values(&[stage])
-        .inc();
 }
 
 pub fn notification_received() {
@@ -572,7 +550,6 @@ mod tests {
         notify_dedup_lookup("hit");
         audit_divert("policy_access", "success");
         audit_rejected_devices(Some("mention_redirect_not_targeted"), 1);
-        takedown_notification_failure("enqueue");
         observe_pushkin_dispatch("apns", "accepted", Duration::from_millis(12));
 
         let service = Service::new(build_router());
@@ -595,8 +572,6 @@ mod tests {
         assert!(body.contains("floria_notify_dedup_lookup_total"));
         assert!(body.contains("floria_audit_divert_total"));
         assert!(body.contains("floria_audit_rejected_devices_total"));
-        assert!(body.contains("floria_takedown_notification_failures_total"));
-        assert!(body.contains("Takedown notification failures per stage (placeholder"));
         assert!(body.contains("floria_pushkin_dispatch_seconds"));
     }
 }

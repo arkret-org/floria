@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
@@ -42,11 +43,11 @@ pub struct AuthFailure {
     pub message: String,
 }
 
-pub fn authenticate_notify_request(
+pub async fn authenticate_notify_request(
     req: &Request,
     body: &[u8],
     auth: &NotifyAuthConfig,
-    nonce_store: Option<&NonceStore>,
+    nonce_store: Option<&Arc<NonceStore>>,
     request_id: &str,
 ) -> Result<AuthenticatedNotifyCaller, AuthFailure> {
     reject_query_string_auth(req)?;
@@ -98,7 +99,7 @@ pub fn authenticate_notify_request(
         let mut authenticated = false;
         if has_signature_headers(req) {
             verify_message_signature(req, body, auth, principal, origin_did, request_id)?;
-            verify_nonce_freshness(req, nonce_store, origin_did, request_id)?;
+            verify_nonce_freshness(req, nonce_store, origin_did, request_id).await?;
             authenticated = true;
         } else if auth.require_message_signatures {
             tracing::warn!(
@@ -901,9 +902,9 @@ fn has_signature_headers(req: &Request) -> bool {
 /// the `expires - created` window is rejected even though every
 /// other signature check would still pass. When no nonce store is
 /// configured this is a no-op so signature semantics are unchanged.
-fn verify_nonce_freshness(
+async fn verify_nonce_freshness(
     req: &Request,
-    nonce_store: Option<&NonceStore>,
+    nonce_store: Option<&Arc<NonceStore>>,
     origin_did: &str,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
@@ -931,7 +932,7 @@ fn verify_nonce_freshness(
     hasher.update(signature_input.as_bytes());
     let fingerprint = hex::encode(hasher.finalize());
 
-    match nonce_store.observe(&fingerprint) {
+    match nonce_store.observe_async(&fingerprint).await {
         NonceCheck::Fresh => Ok(()),
         NonceCheck::Replayed => {
             tracing::warn!(

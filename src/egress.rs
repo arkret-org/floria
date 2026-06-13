@@ -1,11 +1,75 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 
 use reqwest::Url;
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 const FLORIA_EGRESS_ALLOW_PRIVATE_NETWORKS: &str = "FLORIA_EGRESS_ALLOW_PRIVATE_NETWORKS";
 
 pub fn private_networks_allowed() -> bool {
     env_bool(FLORIA_EGRESS_ALLOW_PRIVATE_NETWORKS).unwrap_or(false)
+}
+
+/// DNS resolver that re-applies the egress blocklist to *every* address
+/// the system resolver returns, at connect time, and hands the connector
+/// only the surviving (validated) `SocketAddr`s.
+///
+/// This closes the TOCTOU / DNS-rebinding gap (FLO-03-001): the previous
+/// design validated the host once via a standalone `to_socket_addrs`
+/// then let reqwest resolve the *name* again independently at connect
+/// time, so a hostile name could resolve to a public IP during
+/// validation and to `169.254.169.254` / `10.x` / `::1` during connect.
+/// Installing this resolver on the reqwest client means the addresses the
+/// connector dials are exactly the ones we filtered — there is no second,
+/// unchecked resolution.
+#[derive(Debug, Clone)]
+pub struct EgressGuardResolver {
+    allow_private_networks: bool,
+}
+
+impl EgressGuardResolver {
+    pub fn from_env() -> Arc<Self> {
+        Arc::new(Self {
+            allow_private_networks: private_networks_allowed(),
+        })
+    }
+}
+
+impl Resolve for EgressGuardResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().to_owned();
+        let allow_private = self.allow_private_networks;
+        Box::pin(async move {
+            type DnsError = Box<dyn std::error::Error + Send + Sync>;
+            let resolved: Vec<SocketAddr> = tokio::task::spawn_blocking(move || {
+                // Port is irrelevant here — reqwest overrides it with the
+                // URL/scheme port afterwards — so resolve against 0.
+                (host.as_str(), 0u16)
+                    .to_socket_addrs()
+                    .map(|addrs| addrs.collect::<Vec<_>>())
+            })
+            .await
+            .map_err(|error| -> DnsError { Box::new(std::io::Error::other(error)) })?
+            .map_err(|error| -> DnsError { Box::new(error) })?;
+
+            if allow_private {
+                let addrs: Addrs = Box::new(resolved.into_iter());
+                return Ok(addrs);
+            }
+
+            let safe: Vec<SocketAddr> = resolved
+                .into_iter()
+                .filter(|addr| !blocked_ip(addr.ip()))
+                .collect();
+            if safe.is_empty() {
+                return Err(Box::<dyn std::error::Error + Send + Sync>::from(
+                    "egress target resolved only to blocked (private/metadata) addresses",
+                ));
+            }
+            let addrs: Addrs = Box::new(safe.into_iter());
+            Ok(addrs)
+        })
+    }
 }
 
 pub fn validate_http_url_for_egress(raw_url: &str, purpose: &str) -> Result<Url, String> {

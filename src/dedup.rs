@@ -25,13 +25,14 @@
 //! conflicts return `false` (fail-open) so /notify keeps serving — the
 //! invariants degrade to "in-process only" until Redis recovers.
 
-use std::collections::HashMap;
-use std::sync::Mutex;
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use blake2::Blake2s256;
 use blake2::digest::Digest;
+use lru::LruCache;
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
@@ -63,10 +64,28 @@ struct CacheEntry {
     response: CachedPushNotifyOutcome,
 }
 
+/// Upper bound on distinct in-memory dedup slots (request cache +
+/// delivered-device suppression each get their own cache of this size).
+/// Bounds memory under a high-cardinality unique-key flood from an
+/// authenticated caller — the previous `HashMap` grew unbounded within a
+/// TTL window and relied on an O(n) lazy `retain` to reclaim (FLO-02-003).
+/// With an [`LruCache`] the slot count is capped and eviction is O(1).
+const MEMORY_DEDUP_CAPACITY: usize = 100_000;
+
 #[derive(Debug)]
 struct MemoryNotifyDeduplicator {
-    entries: Mutex<HashMap<String, CacheEntry>>,
-    delivered_devices: Mutex<HashMap<String, Instant>>,
+    entries: Mutex<LruCache<String, CacheEntry>>,
+    delivered_devices: Mutex<LruCache<String, Instant>>,
+}
+
+impl MemoryNotifyDeduplicator {
+    fn new() -> Self {
+        let cap = NonZeroUsize::new(MEMORY_DEDUP_CAPACITY).expect("MEMORY_DEDUP_CAPACITY non-zero");
+        Self {
+            entries: Mutex::new(LruCache::new(cap)),
+            delivered_devices: Mutex::new(LruCache::new(cap)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -92,10 +111,7 @@ impl NotifyDeduplicator {
     pub fn new(ttl: Duration) -> Self {
         Self {
             ttl,
-            backend: NotifyDedupBackend::Memory(MemoryNotifyDeduplicator {
-                entries: Mutex::new(HashMap::new()),
-                delivered_devices: Mutex::new(HashMap::new()),
-            }),
+            backend: NotifyDedupBackend::Memory(MemoryNotifyDeduplicator::new()),
         }
     }
 
@@ -143,10 +159,49 @@ impl NotifyDeduplicator {
         }
     }
 
+    /// Async-safe [`Self::lookup`]: see [`Self::conflicts_async`] for the
+    /// memory-inline / redis-`spawn_blocking` rationale (FLO-02-002).
+    pub async fn lookup_async(
+        self: &Arc<Self>,
+        key: &str,
+        request_fingerprint: &str,
+    ) -> Option<CachedPushNotifyOutcome> {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let key = key.to_owned();
+                let fingerprint = request_fingerprint.to_owned();
+                tokio::task::spawn_blocking(move || this.lookup(&key, &fingerprint))
+                    .await
+                    .unwrap_or(None)
+            }
+        }
+    }
+
     pub fn conflicts(&self, key: &str, request_fingerprint: &str) -> bool {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.conflicts(key, request_fingerprint),
             NotifyDedupBackend::Redis(backend) => backend.conflicts(key, request_fingerprint),
+        }
+    }
+
+    /// Async-safe [`Self::conflicts`]: the in-memory backend runs inline
+    /// (lock-bounded, non-blocking) while the Redis backend — which opens
+    /// a blocking connection and issues a blocking command — is offloaded
+    /// to `spawn_blocking` so it never stalls a tokio worker thread
+    /// (FLO-02-002).
+    pub async fn conflicts_async(self: &Arc<Self>, key: &str, request_fingerprint: &str) -> bool {
+        match &self.backend {
+            NotifyDedupBackend::Memory(backend) => backend.conflicts(key, request_fingerprint),
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let key = key.to_owned();
+                let fingerprint = request_fingerprint.to_owned();
+                tokio::task::spawn_blocking(move || this.conflicts(&key, &fingerprint))
+                    .await
+                    .unwrap_or(false)
+            }
         }
     }
 
@@ -258,7 +313,11 @@ impl MemoryNotifyDeduplicator {
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, entry| entry.expires_at > now);
+        let entry = entries.get(key)?;
+        if entry.expires_at <= now {
+            entries.pop(key);
+            return None;
+        }
         let entry = entries.get(key)?;
         (entry.request_fingerprint == request_fingerprint).then(|| entry.response.clone())
     }
@@ -269,10 +328,14 @@ impl MemoryNotifyDeduplicator {
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, entry| entry.expires_at > now);
-        entries
-            .get(key)
-            .is_some_and(|entry| entry.request_fingerprint != request_fingerprint)
+        match entries.get(key) {
+            Some(entry) if entry.expires_at <= now => {
+                entries.pop(key);
+                false
+            }
+            Some(entry) => entry.request_fingerprint != request_fingerprint,
+            None => false,
+        }
     }
 
     fn insert_success(
@@ -287,8 +350,9 @@ impl MemoryNotifyDeduplicator {
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, entry| entry.expires_at > now);
-        entries.insert(
+        // LruCache caps total slots at MEMORY_DEDUP_CAPACITY and evicts
+        // the least-recently-used entry on overflow (O(1)).
+        entries.put(
             key.to_owned(),
             CacheEntry {
                 expires_at: now + ttl,
@@ -310,8 +374,14 @@ impl MemoryNotifyDeduplicator {
             .delivered_devices
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, expires_at| *expires_at > now);
-        entries.contains_key(&key)
+        match entries.get(&key) {
+            Some(expires_at) if *expires_at <= now => {
+                entries.pop(&key);
+                false
+            }
+            Some(_) => true,
+            None => false,
+        }
     }
 
     fn mark_delivered_device(
@@ -327,8 +397,7 @@ impl MemoryNotifyDeduplicator {
             .delivered_devices
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, expires_at| *expires_at > now);
-        entries.insert(key, now + ttl);
+        entries.put(key, now + ttl);
     }
 
     fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {
@@ -337,19 +406,21 @@ impl MemoryNotifyDeduplicator {
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, entry| entry.expires_at > now);
+        let entry = entries.get(key)?;
+        if entry.expires_at <= now {
+            entries.pop(key);
+            return None;
+        }
         entries
             .get(key)
             .map(|entry| entry.response.response.clone())
     }
 
     fn delivered_devices_len(&self) -> usize {
-        let now = Instant::now();
-        let mut entries = self
+        let entries = self
             .delivered_devices
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.retain(|_, expires_at| *expires_at > now);
         entries.len()
     }
 }

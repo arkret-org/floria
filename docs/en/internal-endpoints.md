@@ -56,13 +56,6 @@ dispatch failure.
 | `floria_audit_divert_total{event_type, outcome}` | both |
 | `floria_audit_rejected_devices_total{reason}` | both |
 | `floria_notify_dead_letter_total{pushkin, reason}` | both — when fanout retries exhaust |
-| `floria_takedown_notification_failures_total{stage}` | future (TODO(P5-impl)) |
-
-`floria_takedown_notification_failures_total` is a reserved
-placeholder, not evidence that takedown notifications are currently
-implemented. The only intended stage values are `enqueue`, `dispatch`,
-and `confirm`; production alerts should stay disabled until the
-TODO(P5-impl) handler exists.
 
 Trace spans are emitted with `service.name=floria`,
 `http.target=/_floria/internal/<route>`, and the broadcast event id

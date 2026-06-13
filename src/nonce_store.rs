@@ -19,7 +19,7 @@
 //! operator notices.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -152,6 +152,27 @@ impl NonceStore {
         match &self.backend {
             NonceBackend::Memory(backend) => backend.observe(self.ttl, fingerprint),
             NonceBackend::Redis(backend) => backend.observe(self.ttl, fingerprint),
+        }
+    }
+
+    /// Async-safe [`Self::observe`]: the in-memory backend runs inline
+    /// (lock-bounded, non-blocking) while the Redis backend — which opens
+    /// a blocking connection and runs a blocking `SET NX EX` — is
+    /// offloaded to `spawn_blocking` so the /notify auth path never
+    /// stalls a tokio worker thread (FLO-02-002).
+    pub async fn observe_async(self: &Arc<Self>, fingerprint: &str) -> NonceCheck {
+        if self.ttl.is_zero() {
+            return NonceCheck::Fresh;
+        }
+        match &self.backend {
+            NonceBackend::Memory(backend) => backend.observe(self.ttl, fingerprint),
+            NonceBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let fingerprint = fingerprint.to_owned();
+                tokio::task::spawn_blocking(move || this.observe(&fingerprint))
+                    .await
+                    .unwrap_or(NonceCheck::Fresh)
+            }
         }
     }
 }

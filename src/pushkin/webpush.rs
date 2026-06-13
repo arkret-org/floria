@@ -134,8 +134,14 @@ impl WebpushPushkin {
             })
             .transpose()?;
 
+        // Bound connect + overall request time so a stalled WebPush
+        // endpoint cannot pin a gate permit / connection forever
+        // (FLO-02-001). isahc's read-timeout alone does not cap connect
+        // or total duration.
         let mut client_builder = HttpClient::builder()
             .max_connections(max_connections)
+            .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
+            .timeout(super::reqwest_support::REQUEST_TIMEOUT)
             .default_header("user-agent", "floria");
         if let Some(proxy) = config.outbound_proxy() {
             client_builder =
