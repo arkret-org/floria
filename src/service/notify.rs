@@ -298,7 +298,7 @@ fn validate_destination_service_did(
 
     // Spec push-notifications.md §3.1 (commit 0a5ab85): if the request
     // extension carries `notification.recipient_service_did`, its value MUST
-    // equal the target service's `ck.server.describe.service_did` (i.e. this
+    // equal the target service's `ck.server.query.describe.service_did` (i.e. this
     // gateway's `gateway_service_did`). `push_target_id` is a per-
     // `(recipient_service_did, ...)` pairwise pseudonym, so a mismatched
     // `recipient_service_did` means the pseudonym was minted for a different

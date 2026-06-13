@@ -1,7 +1,7 @@
 # Minimal Floria Example
 
 This directory contains the smallest end-to-end shape demo for starting floria
-with one push provider config and sending one canonical `ck.edge.push.notify`
+with one push provider config and sending one canonical `ck.edge.push.command.notify`
 request.
 
 Files:
@@ -30,5 +30,5 @@ Notes:
 - Replace `project_id` and `service_account_file` in `minimal.kdl` with real
   Firebase HTTP v1 credentials before expecting provider delivery success.
 - Replace `push_key` in `minimal.notify.request.json` with a real device token.
-- The JSON file is meant to demonstrate the active `ck.edge.push.notify` contract
+- The JSON file is meant to demonstrate the active `ck.edge.push.command.notify` contract
   shape even before real credentials are wired up.

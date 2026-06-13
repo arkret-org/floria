@@ -262,7 +262,7 @@ async fn integration_describe_lists_operational_surfaces() {
     );
     assert_eq!(
         push_notify_surface["contract"],
-        json!("ck.edge.push.notify")
+        json!("ck.edge.push.command.notify")
     );
 
     let metrics_surface = surfaces
@@ -413,7 +413,7 @@ async fn notify_rejects_non_canonical_operation_id() {
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "ck.edge.push.register_device",
+            "ck.edge.push.command.register_device",
         ))
         .send(&service)
         .await;
@@ -422,7 +422,7 @@ async fn notify_rejects_non_canonical_operation_id() {
     let body = assert_notify_error(&mut response, "unsupported_feature", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("operation_id must be ck.edge.push.notify")
+        json!("operation_id must be ck.edge.push.command.notify")
     );
 }
 

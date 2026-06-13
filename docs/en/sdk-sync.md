@@ -41,7 +41,7 @@ provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
 ROST-FLO-1..3 mention reference v2 fields are intentionally not part of
 floria's push wire model. `subject_id`, `display_name_at_time`, and
 related Message AST preview fields belong to chime / principal-service
-message rendering, not to `ck.edge.push.notify`. floria keeps the typed
+message rendering, not to `ck.edge.push.command.notify`. floria keeps the typed
 payload closed with `serde(deny_unknown_fields)`; the round4 service
 test `mention_reference_v2_fields_are_not_push_payload_fields` rejects
 those fields with `schema_violation`.

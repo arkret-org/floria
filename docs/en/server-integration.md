@@ -38,11 +38,11 @@ The caller should set:
 
 ## Notify Request
 
-`POST /_cokret/edge/push/notify` accepts `ck.edge.push.notify` envelopes:
+`POST /_cokret/edge/push/notify` accepts `ck.edge.push.command.notify` envelopes:
 
 ```json
 {
-  "operation_id": "ck.edge.push.notify",
+  "operation_id": "ck.edge.push.command.notify",
   "idempotency_key": "notify-01J...",
   "origin_service_did": "did:web:sync.example.com",
   "destination_service_did": "did:web:push.example.com",

@@ -5,7 +5,7 @@
 
 ## 决策摘要
 
-在 Cokret v1 中，`ck.self.call.media.token_exchange` 的**规范签发者**是
+在 Cokret v1 中，`ck.self.call.media.exchange.issue_token` 的**规范签发者**是
 **soland**。当前 floria 二进制不在公开 router 或 describe 响应中暴露
 `/rtc/token` 本地签发面；如果部署层未来在 floria 前后接入代理，也只能作为
 **透明代理**把请求交给 soland，并将 soland 返回的字节原样回传给客户端。

@@ -40,7 +40,7 @@ pub struct FloriaPushNotifyEnvelope {
 }
 
 /// Round 4 — typed `ck.audit.policy_access` envelope routing fragment
-/// carried alongside a `ck.edge.push.notify` request. Receiving the
+/// carried alongside a `ck.edge.push.command.notify` request. Receiving the
 /// `e2ee_late_recovery` access_kind here means soland routed an audit
 /// event through the gateway's HTTP surface; the gateway forwards it
 /// to the configured audit sink and MUST NOT do any push fanout.
@@ -320,7 +320,7 @@ pub struct Device {
     /// are the Sync Service's responsibility). When absent the device
     /// is treated as delivery-eligible. Internal reasons never travel
     /// across this hop — only the wire-safe `reason_code` is honored,
-    /// matching the `ck.edge.push.notify` privacy descriptor.
+    /// matching the `ck.edge.push.command.notify` privacy descriptor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_decision: Option<PushDecisionHint>,
     /// Round 4 (spec a77b995) — actor DID this device's user is
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
         let request: PushNotifyRequestBody = serde_json::from_value(json!({
-            "operation_id": "ck.edge.push.notify",
+            "operation_id": "ck.edge.push.command.notify",
             "idempotency_key": "notify-1",
             "origin_service_did": "did:web:sync.example.com",
             "destination_service_did": "did:web:push.example.com",
@@ -530,7 +530,10 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(request.operation_id.as_deref(), Some("ck.edge.push.notify"));
+        assert_eq!(
+            request.operation_id.as_deref(),
+            Some("ck.edge.push.command.notify")
+        );
         assert_eq!(
             request.origin_service_did.as_deref(),
             Some("did:web:sync.example.com")

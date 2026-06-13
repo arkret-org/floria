@@ -1235,7 +1235,7 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.notify",
+            "operation_id": "ck.edge.push.command.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1289,7 +1289,7 @@ mod tests {
         principal.mtls_cert_fingerprints = vec!["aa:bb:cc".to_owned()];
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.notify",
+            "operation_id": "ck.edge.push.command.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1344,7 +1344,7 @@ mod tests {
         principal.require_mtls = true;
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.notify",
+            "operation_id": "ck.edge.push.command.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1409,7 +1409,7 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.notify",
+            "operation_id": "ck.edge.push.command.notify",
             "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
@@ -1465,7 +1465,7 @@ mod tests {
         principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
-        let body = json!({"operation_id": "ck.edge.push.notify"});
+        let body = json!({"operation_id": "ck.edge.push.command.notify"});
         let body_bytes = serde_json::to_vec(&body).unwrap();
 
         let seed = hex::decode(seed_hex).unwrap();

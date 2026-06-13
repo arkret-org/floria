@@ -18,7 +18,7 @@ mod notify;
 mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
-const NOTIFY_OPERATION_ID: &str = "ck.edge.push.notify";
+const NOTIFY_OPERATION_ID: &str = "ck.edge.push.command.notify";
 const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
 const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
 const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
@@ -40,7 +40,7 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 // travel on dedicated `ephemeral_envelope` / device-message channels
 // in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
 // durable Event-kind path. There is intentionally no code here that
-// branches on those kind strings — `wakeup_kind` on a `ck.edge.push.notify`
+// branches on those kind strings — `wakeup_kind` on a `ck.edge.push.command.notify`
 // is a closed enum (`message` / `mention` / `reaction` / `call_invite` /
 // `reminder` / `scheduled_send` / `expiry_invalidation`),
 // so an
