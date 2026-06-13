@@ -35,7 +35,7 @@ use blake2::digest::Digest;
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
-use crate::models::PushNotifyOutcome;
+use crate::models::FloriaPushNotifyOutcome as PushNotifyOutcome;
 
 /// Lightweight status snapshot for the `GET /_floria/admin/push/status/{key}`
 /// endpoint. Derived from the dedup cache when the request completed,

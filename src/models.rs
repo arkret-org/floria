@@ -9,7 +9,7 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PushNotifyRequestBody {
+pub struct FloriaPushNotifyEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -60,7 +60,7 @@ pub struct AuditEnvelopeMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PushNotifyOutcome {
+pub struct FloriaPushNotifyOutcome {
     pub request_id: String,
     pub accepted: usize,
     pub rejected: Vec<RejectedDevice>,
@@ -70,7 +70,7 @@ pub struct PushNotifyOutcome {
     pub delivery_receipts: Vec<DeliveryReceipt>,
 }
 
-impl PushNotifyOutcome {
+impl FloriaPushNotifyOutcome {
     pub fn with_request_id(&self, request_id: impl Into<String>) -> Self {
         let mut cloned = self.clone();
         cloned.request_id = request_id.into();
@@ -456,7 +456,10 @@ pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{Counts, DeliveryReceipt, Notification, PushNotifyOutcome, PushNotifyRequestBody};
+    use super::{
+        Counts, DeliveryReceipt, FloriaPushNotifyEnvelope as PushNotifyRequestBody,
+        FloriaPushNotifyOutcome as PushNotifyOutcome, Notification,
+    };
 
     #[test]
     fn notification_uses_priority_wire_field() {

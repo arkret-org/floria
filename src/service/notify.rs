@@ -24,8 +24,9 @@ use crate::auth::{
 use crate::config::NotifyAuthConfig;
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, Notification, NotificationContext, ProviderRetry, PushNotifyOutcome,
-    PushNotifyRequestBody, RejectedDevice, redact_push_token,
+    DeliveryReceipt, FloriaPushNotifyEnvelope as PushNotifyRequestBody,
+    FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
+    ProviderRetry, RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -1253,6 +1254,22 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = request_hash(body.as_ref());
 
+    let _standard_request = match serde_json::from_slice::<cokret::PushNotifyRequestBody>(&body) {
+        Ok(request) => request,
+        Err(error) => {
+            tracing::warn!(error = %error, "expected Cokret push notify request body");
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "expected Cokret push notify request body",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    };
     let request = match serde_json::from_slice::<PushNotifyRequestBody>(&body) {
         Ok(request) => request,
         Err(error) => {

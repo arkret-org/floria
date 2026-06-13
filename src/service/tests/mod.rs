@@ -16,7 +16,10 @@ use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext, PushNotifyOutcome, RejectedDevice};
+use crate::models::{
+    Device, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
+    RejectedDevice,
+};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
