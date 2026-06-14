@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use blake2::digest::Digest;
 use globset::{Glob, GlobMatcher};
 use isahc::HttpClient;
-use isahc::config::Configurable;
+use isahc::config::{Configurable, ResolveMap};
 use prometheus::{Histogram, IntGauge, register_histogram, register_int_gauge};
 use reqwest::Url;
 use serde_json::{Map, Value};
@@ -78,13 +78,57 @@ pub struct WebpushPushkin {
     matcher: AppMatcher,
     gate: ConcurrencyGate,
     connection_semaphore: Arc<Semaphore>,
-    client: IsahcWebPushClient,
+    /// Parameters needed to (re)build the isahc WebPush client. isahc has
+    /// no dynamic per-connection resolver hook like reqwest's
+    /// `EgressGuardResolver`, so instead of one shared client we rebuild
+    /// the client per dispatch with a `ResolveMap` that pins the endpoint
+    /// host to the exact IP we just validated against the egress
+    /// blocklist — closing the TOCTOU / DNS-rebinding gap (FLO-03-001).
+    client_params: WebpushClientParams,
     vapid_builder: PartialVapidSignatureBuilder,
     vapid_contact_email: String,
     vapid_key_id: String,
     vapid_key_fingerprint: String,
     allowed_endpoints: Option<Vec<GlobMatcher>>,
     ttl: u32,
+}
+
+/// Everything required to build (or rebuild) the isahc WebPush client,
+/// captured once at construction so each dispatch can mint a client whose
+/// DNS resolution is pinned to a pre-validated IP.
+#[derive(Clone)]
+struct WebpushClientParams {
+    max_connections: usize,
+    proxy: Option<isahc::http::Uri>,
+}
+
+impl WebpushClientParams {
+    /// Build an isahc WebPush client. When `pinned` is supplied, every
+    /// connection for the listed host:port pairs is forced to the given
+    /// IP via curl's resolve override (`CURLOPT_RESOLVE`); the original
+    /// host is still used for the TLS SNI and HTTP Host header.
+    fn build_client(&self, pinned: Option<ResolveMap>) -> Result<IsahcWebPushClient> {
+        // Bound connect + overall request time so a stalled WebPush
+        // endpoint cannot pin a gate permit / connection forever
+        // (FLO-02-001). isahc's read-timeout alone does not cap connect
+        // or total duration.
+        let mut builder = HttpClient::builder()
+            .max_connections(self.max_connections)
+            .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
+            .timeout(super::reqwest_support::REQUEST_TIMEOUT)
+            .default_header("user-agent", "floria");
+        if let Some(proxy) = &self.proxy {
+            builder = builder.proxy(Some(proxy.clone()));
+        }
+        if let Some(resolve) = pinned {
+            builder = builder.dns_resolve(resolve);
+        }
+        Ok(IsahcWebPushClient::from(
+            builder
+                .build()
+                .context("failed to build webpush HTTP client")?,
+        ))
+    }
 }
 
 impl WebpushPushkin {
@@ -134,26 +178,21 @@ impl WebpushPushkin {
             })
             .transpose()?;
 
-        // Bound connect + overall request time so a stalled WebPush
-        // endpoint cannot pin a gate permit / connection forever
-        // (FLO-02-001). isahc's read-timeout alone does not cap connect
-        // or total duration.
-        let mut client_builder = HttpClient::builder()
-            .max_connections(max_connections)
-            .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
-            .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-            .default_header("user-agent", "floria");
-        if let Some(proxy) = config.outbound_proxy() {
-            client_builder =
-                client_builder.proxy(Some(proxy.parse::<isahc::http::Uri>().with_context(
-                    || format!("invalid proxy URL `{}`", redact_url_credentials(proxy)),
-                )?));
-        }
-        let client = IsahcWebPushClient::from(
-            client_builder
-                .build()
-                .context("failed to build webpush HTTP client")?,
-        );
+        let proxy = config
+            .outbound_proxy()
+            .map(|proxy| {
+                proxy.parse::<isahc::http::Uri>().with_context(|| {
+                    format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
+                })
+            })
+            .transpose()?;
+        let client_params = WebpushClientParams {
+            max_connections,
+            proxy,
+        };
+        // Fail fast at startup if the client config is unbuildable, rather
+        // than surfacing it on the first dispatch.
+        client_params.build_client(None)?;
 
         let vapid_builder = VapidSignatureBuilder::from_pem_no_sub(
             File::open(&vapid_private_key)
@@ -191,7 +230,7 @@ impl WebpushPushkin {
             matcher,
             gate,
             connection_semaphore,
-            client,
+            client_params,
             vapid_builder,
             vapid_contact_email,
             vapid_key_id,
@@ -273,6 +312,39 @@ impl WebpushPushkin {
         endpoint_allowed(self.allowed_endpoints.as_deref(), endpoint_domain)
     }
 
+    /// Validate the endpoint against the egress blocklist and build a
+    /// WebPush client whose DNS resolution for this endpoint's host:port
+    /// is pinned to the exact IPs that passed validation.
+    ///
+    /// isahc/web-push offer no per-request resolver hook (unlike reqwest's
+    /// `EgressGuardResolver`), so we resolve + filter here and pin the
+    /// surviving IPs via `ResolveMap`. The connection therefore dials only
+    /// an already-validated address — a DNS rebind between this check and
+    /// the actual connect cannot redirect us to `169.254.169.254`, `::1`,
+    /// `10.x`, etc. (FLO-03-001). SNI/Host stay the original hostname.
+    fn pinned_client_for_endpoint(&self, endpoint: &str) -> Result<IsahcWebPushClient, String> {
+        let url = Url::parse(endpoint)
+            .map_err(|error| format!("webpush endpoint: invalid URL: {error}"))?;
+        crate::egress::validate_url_for_egress(
+            &url,
+            "webpush endpoint",
+            crate::egress::private_networks_allowed(),
+        )?;
+        let host = url
+            .host_str()
+            .ok_or_else(|| "webpush endpoint: URL host is required".to_owned())?;
+        let port = url.port_or_known_default().unwrap_or(443);
+        let ips = crate::egress::resolved_egress_ips(host, port, "webpush endpoint")?;
+
+        let mut resolve = ResolveMap::new();
+        for ip in ips {
+            resolve = resolve.add(host, port, ip);
+        }
+        self.client_params
+            .build_client(Some(resolve))
+            .map_err(|error| format!("webpush endpoint: failed to build pinned client: {error}"))
+    }
+
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
         let endpoint = device
             .data_string("endpoint")
@@ -300,6 +372,7 @@ impl WebpushPushkin {
 
     async fn send_message(
         &self,
+        client: &IsahcWebPushClient,
         subscription: &SubscriptionInfo,
         notification: &Notification,
         device: &Device,
@@ -369,7 +442,7 @@ impl WebpushPushkin {
 
         WEBPUSH_ACTIVE_REQUESTS.inc();
         let request_started = Instant::now();
-        let result = self.client.send(message).await;
+        let result = client.send(message).await;
         WEBPUSH_ACTIVE_REQUESTS.dec();
         WEBPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
 
@@ -444,19 +517,21 @@ impl Pushkin for WebpushPushkin {
             return Ok(vec![]);
         }
 
-        if let Err(error) =
-            crate::egress::validate_http_url_for_egress(&subscription.endpoint, "webpush endpoint")
-        {
-            tracing::error!(
-                push_key_hash = %device.redacted_push_key(),
-                endpoint = %endpoint_domain,
-                error = %error,
-                "webpush endpoint rejected by egress policy"
-            );
-            return Ok(vec![]);
-        }
+        let pinned_client = match self.pinned_client_for_endpoint(&subscription.endpoint) {
+            Ok(client) => client,
+            Err(error) => {
+                tracing::error!(
+                    push_key_hash = %device.redacted_push_key(),
+                    endpoint = %endpoint_domain,
+                    error = %error,
+                    "webpush endpoint rejected by egress policy"
+                );
+                return Ok(vec![]);
+            }
+        };
 
-        self.send_message(&subscription, notification, device).await
+        self.send_message(&pinned_client, &subscription, notification, device)
+            .await
     }
 }
 
@@ -580,7 +655,10 @@ mod tests {
             matcher: AppMatcher::new("com.example.web".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
             connection_semaphore: Arc::new(Semaphore::new(1)),
-            client: IsahcWebPushClient::new().unwrap(),
+            client_params: WebpushClientParams {
+                max_connections: 1,
+                proxy: None,
+            },
             vapid_builder: VapidSignatureBuilder::from_pem_no_sub(
                 File::open(vapid_test_key_path()).unwrap(),
             )
@@ -840,12 +918,46 @@ mod tests {
         let notification = notification("hello");
         let subscription = pushkin.subscription_from_device(&device).unwrap();
 
+        // The 410-handling path is orthogonal to IP pinning; use an
+        // unpinned client so the loopback test server is reachable.
+        let client = pushkin.client_params.build_client(None).unwrap();
         let rejected = pushkin
-            .send_message(&subscription, &notification, &device)
+            .send_message(&client, &subscription, &notification, &device)
             .await
             .unwrap();
 
         assert_eq!(rejected, vec![device.push_key.clone()]);
         server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn webpush_pins_validated_ip_and_rejects_rebind_to_private() {
+        // A hostname that the egress validation would pass (public IP)
+        // but which, at connect time, an attacker rebinds to a private
+        // address. Because we pin the connection to the *validated* IP
+        // (and reject endpoints that resolve only to blocked addresses),
+        // the isahc path must refuse to build a client / dispatch.
+        //
+        // Here the endpoint host is itself a private IP literal, which is
+        // the strongest form of the rebind target: `pinned_client_for_endpoint`
+        // must reject it via the shared egress blocklist rather than
+        // dialing it.
+        let pushkin =
+            pushkin_with_allowed_endpoints(Some(vec![Glob::new("*").unwrap().compile_matcher()]));
+
+        for blocked in [
+            "http://169.254.169.254/push",
+            "http://10.0.0.5/push",
+            "http://[::1]/push",
+        ] {
+            let error = match pushkin.pinned_client_for_endpoint(blocked) {
+                Ok(_) => panic!("expected pinned client build to reject {blocked}"),
+                Err(error) => error,
+            };
+            assert!(
+                error.contains("blocked"),
+                "unexpected error for {blocked}: {error}"
+            );
+        }
     }
 }

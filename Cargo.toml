@@ -70,7 +70,13 @@ ed25519-dalek = "2.2.0"
 futures = {version = "0.3.32",default-features = false}
 globset = "0.4.18"
 hex = "0.4.3"
-isahc = {version = "2.0.0",default-features = false}
+# Pinned to the same major as the isahc that `web-push` (isahc-client)
+# depends on so floria's `isahc::HttpClient` is the exact type
+# `IsahcWebPushClient::from` accepts, and so the WebPush client can be
+# rebuilt per-request with an egress `ResolveMap` to pin connections to
+# pre-validated IPs (FLO-03-001). A 2.x here resolved to a *second*,
+# incompatible isahc and broke `IsahcWebPushClient::from(HttpClient)`.
+isahc = {version = "1.7.2",default-features = false}
 jsonwebtoken = "10.4.0"
 kdl = "6.7.1"
 lru = "0.18.0"
