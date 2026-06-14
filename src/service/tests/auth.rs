@@ -379,37 +379,11 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     );
 }
 
-#[tokio::test]
-async fn notify_rejects_mismatched_origin_service_did() {
-    let service = test_service_with_auth(
-        vec![(
-            "com.example.app",
-            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-        )],
-        notify_auth_config(),
-    );
-    let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["origin_service_did"] = json!("did:web:other.example.com");
-
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
-        .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
-            "did:web:push.example.com",
-            true,
-        )
-        .json(&request_body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("origin service DID does not match the authenticated caller")
-    );
-}
+// SPEC-CR-016: the originating service DID is no longer a body field;
+// it rides the `Source-Service-DID` header and is the authenticated
+// caller identity itself, so a "body origin vs caller" mismatch test is
+// obsolete. Header-based origin handling is covered by the auth-layer
+// tests in `auth.rs`.
 
 #[tokio::test]
 async fn notify_rejects_mismatched_destination_service_did() {
@@ -441,97 +415,17 @@ async fn notify_rejects_mismatched_destination_service_did() {
     );
 }
 
-#[tokio::test]
-async fn notify_rejects_body_destination_service_did_mismatch() {
-    let service = test_service_with_auth(
-        vec![(
-            "com.example.app",
-            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-        )],
-        notify_auth_config(),
-    );
-    let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["destination_service_did"] = json!("did:web:other-gateway.example.com");
+// SPEC-CR-016: the destination service DID is header-only
+// (`Destination-Service-DID`); a "body destination" field no longer
+// exists, so the body-mismatch test is obsolete — header-mismatch
+// coverage lives in `notify_rejects_mismatched_destination_service_did`.
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
-        .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
-            "did:web:push.example.com",
-            true,
-        )
-        .json(&request_body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("destination_service_did does not match the authenticated destination")
-    );
-}
-
-#[tokio::test]
-async fn notify_rejects_mismatched_recipient_service_did() {
-    let service = test_service_with_auth(
-        vec![(
-            "com.example.app",
-            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-        )],
-        notify_auth_config(),
-    );
-    let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["recipient_service_did"] =
-        json!("did:web:other-gateway.example.com");
-
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
-        .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
-            "did:web:push.example.com",
-            true,
-        )
-        .json(&request_body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::FORBIDDEN);
-    let body = assert_notify_error(&mut response, "capability_denied", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("recipient_service_did does not match this gateway")
-    );
-}
-
-#[tokio::test]
-async fn notify_accepts_matching_recipient_service_did() {
-    let service = test_service_with_auth(
-        vec![(
-            "com.example.app",
-            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-        )],
-        notify_auth_config(),
-    );
-    let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["recipient_service_did"] = json!("did:web:push.example.com");
-
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
-        .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
-            "did:web:push.example.com",
-            true,
-        )
-        .json(&request_body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-}
+// SPEC-CR-016: `recipient_service_did` is removed from the body and now
+// reuses the `Destination-Service-DID` header. The gateway enforces that
+// the declared destination equals its own `gateway_service_did`, which is
+// exactly what `notify_rejects_mismatched_destination_service_did` (reject)
+// and the OK-path tests (accept) already cover. The dedicated
+// recipient-service-did body tests are therefore obsolete.
 
 #[tokio::test]
 async fn production_mode_rejects_anonymous_requests() {

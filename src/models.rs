@@ -7,17 +7,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+/// Request body for `POST /_cokret/edge/push/notify`.
+///
+/// SPEC-CR-016: transport-level fields (`operation_id`,
+/// `idempotency_key`, `origin_service_did`, `destination_service_did`)
+/// no longer ride the body. They are carried as HTTP headers
+/// (`Idempotency-Key` / `Source-Service-DID` / `Destination-Service-DID`)
+/// or determined by the URL path (`operationId`), matching the canonical
+/// `push_notify_request_body` schema. The body top level is now
+/// `{notification, event_kind?, reason_code?, audit_envelope?}`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FloriaPushNotifyEnvelope {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin_service_did: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub destination_service_did: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_kind: Option<String>,
     /// Round 4 (spec a77b995) — caller-supplied wire-safe `reason_code`
@@ -150,9 +151,71 @@ pub struct DeliveryReceipt {
     pub request_id: Option<String>,
 }
 
+/// SPEC-CR-016 — gateway-internal routing fragment carried under
+/// `notification.routing_metadata`. Every field here drives gateway-side
+/// routing / dedup / per-(provider,realm,circle) circuit-breaker state and
+/// MUST be stripped before the gateway calls any push provider; it MUST
+/// NOT be forwarded to a provider.
+///
+/// NOTE: `routing_metadata.realm_id` is a distinct gateway-internal
+/// routing path and is NOT the client-visible top-level `realm_id` that a
+/// blind notification forbids; the two coexist and are deliberately
+/// separated in the canonical schema.
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct RoutingMetadata {
+    /// Security-boundary id (`ck:realm:`) used for gateway-internal
+    /// routing / dedup / circuit-breaker keying. Container `space_id` is
+    /// forbidden on the push wire model and does not appear here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub realm_id: Option<String>,
+    /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
+    /// of the encryption sub-boundary this notification belongs to. When
+    /// present, routing / dedup / per-(provider,realm,circle) circuit
+    /// breaker stats key off this id rather than the parent realm so two
+    /// flows with the same name in different Circles do not collide.
+    /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
+    /// on the wire only to drive gateway-internal routing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle_id: Option<String>,
+    /// Flow-declared `scope_circle_id` when the originating Flow is bound
+    /// to a Circle scope. Gateway-internal; stripped before any provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_circle_id: Option<String>,
+    /// CKP-0007 — reducer-stamped envelope scope binding mirrored on the
+    /// push wire model (`event_envelope.effective_scope`). Carries the
+    /// `{realm_id}` (Realm-default scope) or `{realm_id, circle_id}`
+    /// (Circle scope) discriminator the principal server stamped onto
+    /// the originating Event. When present and inconsistent with the
+    /// notification's `realm_id` / `circle_id` the request is rejected
+    /// with `effective_scope_mismatch`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_scope: Option<EffectiveScope>,
+    /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
+    /// fragment that mirrors the SDK's
+    /// [`cokret::MentionRedirectRouting`]. When the list is non-empty
+    /// each device's [`Device::target_actor_id`] MUST appear in this
+    /// allow-list or the device is failed-closed (rejected without
+    /// fanout, no provider call, no body decryption). An empty / missing
+    /// list means "no mention-redirect scope is in effect" — every
+    /// device passes the routing gate. The receiver gets to verify its
+    /// inclusion via this plaintext field WITHOUT needing to decrypt
+    /// the message blob.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mention_redirect_target_actor_ids: Vec<String>,
+    /// Receiver's accepted Realm delivery-binding frontier when the
+    /// notify originated from a federation hop. Receiver returns
+    /// `delivery_binding_stale` if its accepted frontier is ahead.
+    /// Delivery binding is a Realm-level concept. Spec 0a5ab85 §4.1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_binding_frontier: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Notification {
+    // --- visible_notification profile-gated fields (SPEC-CR-016 class C):
+    //     produced only on the visible path, never in a blind wakeup. ---
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_title: Option<String>,
     /// Human-readable label for the Realm security boundary. Container
@@ -173,60 +236,19 @@ pub struct Notification {
     pub message_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_id: Option<String>,
-    /// Security-boundary id (`ck:realm:`). Container `space_id` is
-    /// forbidden on the push wire model and does not appear on this struct.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realm_id: Option<String>,
-    /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
-    /// of the encryption sub-boundary this notification belongs to. When
-    /// present, routing / dedup / per-(provider,realm,circle) circuit
-    /// breaker stats key off this id rather than the parent realm so two
-    /// flows with the same name in different Circles do not collide.
-    /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
-    /// on the wire only to drive gateway-internal routing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub circle_id: Option<String>,
-    /// CKP-0007 — reducer-stamped envelope scope binding mirrored on the
-    /// push wire model (`event_envelope.effective_scope`). Carries the
-    /// `{realm_id}` (Realm-default scope) or `{realm_id, circle_id}`
-    /// (Circle scope) discriminator the principal server stamped onto
-    /// the originating Event. When present and inconsistent with the
-    /// notification's `realm_id` / `circle_id` the request is rejected
-    /// with `effective_scope_mismatch`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effective_scope: Option<EffectiveScope>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_is_target: Option<bool>,
+    // --- base fields shared by blind + visible ---
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_target_id: Option<String>,
-    /// Service DID of the recipient Principal Server this push is scoped
-    /// to. Spec 0a5ab85: `push_target_id` cell_subject is composite over
-    /// `(recipient_service_did, principal_id, device_id, push_route)`;
-    /// dispatch MUST validate the inbound binding matches this scope.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recipient_service_did: Option<String>,
-    /// Receiver's accepted Realm delivery-binding frontier when the
-    /// notify originated from a federation hop. Receiver returns
-    /// `delivery_binding_stale` if its accepted frontier is ahead.
-    /// Delivery binding is a Realm-level concept. Spec 0a5ab85 §4.1.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delivery_binding_frontier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wakeup_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_hint: Option<String>,
-    /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
-    /// fragment that mirrors the SDK's
-    /// [`cokret::MentionRedirectRouting`]. When the list is non-empty
-    /// each device's [`Device::target_actor_id`] MUST appear in this
-    /// allow-list or the device is failed-closed (rejected without
-    /// fanout, no provider call, no body decryption). An empty / missing
-    /// list means "no mention-redirect scope is in effect" — every
-    /// device passes the routing gate. The receiver gets to verify its
-    /// inclusion via this plaintext field WITHOUT needing to decrypt
-    /// the message blob.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mention_redirect_target_actor_ids: Vec<String>,
+    /// SPEC-CR-016 (class B) — gateway-internal routing fragment.
+    /// Stripped before any provider call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_metadata: Option<RoutingMetadata>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub devices: Vec<Device>,
     #[serde(default)]
@@ -251,7 +273,11 @@ impl Notification {
     }
 
     pub fn circle_id(&self) -> Option<&str> {
-        non_empty(self.circle_id.as_deref())
+        non_empty(
+            self.routing_metadata
+                .as_ref()
+                .and_then(|routing| routing.circle_id.as_deref()),
+        )
     }
 
     pub fn flow_id(&self) -> Option<&str> {
@@ -263,7 +289,26 @@ impl Notification {
     }
 
     pub fn realm_id(&self) -> Option<&str> {
-        non_empty(self.realm_id.as_deref())
+        non_empty(
+            self.routing_metadata
+                .as_ref()
+                .and_then(|routing| routing.realm_id.as_deref()),
+        )
+    }
+
+    /// SPEC-CR-016 — reducer-stamped scope binding (routing-only).
+    pub fn effective_scope(&self) -> Option<&EffectiveScope> {
+        self.routing_metadata
+            .as_ref()
+            .and_then(|routing| routing.effective_scope.as_ref())
+    }
+
+    /// SPEC-CR-016 — mention-redirect routing allow-list (routing-only).
+    pub fn mention_redirect_target_actor_ids(&self) -> &[String] {
+        self.routing_metadata
+            .as_ref()
+            .map(|routing| routing.mention_redirect_target_actor_ids.as_slice())
+            .unwrap_or(&[])
     }
 
     pub fn flow_title(&self) -> Option<&str> {
@@ -511,17 +556,21 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
+        // SPEC-CR-016: transport fields (operation_id / idempotency_key /
+        // origin_service_did / destination_service_did) ride HTTP headers,
+        // not the body. The body top level is
+        // {notification, event_kind?, reason_code?, audit_envelope?};
+        // routing fields (realm_id / circle_id / ...) live under
+        // notification.routing_metadata.
         let request: PushNotifyRequestBody = serde_json::from_value(json!({
-            "operation_id": "ck.edge.push.command.notify",
-            "idempotency_key": "notify-1",
-            "origin_service_did": "did:web:sync.example.com",
-            "destination_service_did": "did:web:push.example.com",
             "event_kind": "ck.message",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "devices": [{
                     "app_id": "app.example.android",
                     "push_key": "token-123"
@@ -530,16 +579,34 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(
-            request.operation_id.as_deref(),
-            Some("ck.edge.push.command.notify")
-        );
-        assert_eq!(
-            request.origin_service_did.as_deref(),
-            Some("did:web:sync.example.com")
-        );
         assert_eq!(request.event_kind.as_deref(), Some("ck.message"));
+        assert_eq!(
+            request.notification.realm_id(),
+            Some("ck:realm:01JS0SP000000000000000000")
+        );
         assert_eq!(request.notification.devices.len(), 1);
+    }
+
+    #[test]
+    fn notify_envelope_rejects_transport_fields_in_body() {
+        // The four transport fields are now header-only; their presence in
+        // the body is an unknown field under deny_unknown_fields.
+        for field in [
+            "operation_id",
+            "idempotency_key",
+            "origin_service_did",
+            "destination_service_did",
+        ] {
+            let err = serde_json::from_value::<PushNotifyRequestBody>(json!({
+                field: "x",
+                "notification": { "devices": [] }
+            }))
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("unknown field"),
+                "expected `{field}` to be rejected in body, got: {err}"
+            );
+        }
     }
 
     #[test]

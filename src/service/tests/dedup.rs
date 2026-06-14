@@ -61,7 +61,10 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
 }
 
 #[tokio::test]
-async fn notify_rejects_mismatched_header_and_body_idempotency_keys() {
+async fn notify_rejects_idempotency_key_in_body() {
+    // SPEC-CR-016: the idempotency key rides the `Idempotency-Key` header
+    // only; it is no longer a body field. A body `idempotency_key` is now
+    // rejected as an unknown field (deny_unknown_fields).
     let service = test_service_with_dedup(vec![], Duration::from_secs(60));
     let request_body =
         with_idempotency_key(payload(vec![device("com.example.app", "one")]), "body-key");
@@ -73,11 +76,7 @@ async fn notify_rejects_mismatched_header_and_body_idempotency_keys() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
-    let body = assert_notify_error(&mut response, "schema_violation", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("Idempotency-Key header does not match body idempotency_key")
-    );
+    assert_notify_error(&mut response, "schema_violation", true).await;
 }
 
 #[tokio::test]
@@ -115,7 +114,9 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
@@ -133,7 +134,9 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "event_id": "ck:event:01JS0EV000000000000000000"

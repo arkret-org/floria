@@ -151,7 +151,10 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "event_id":   "ck:event:01JS0EV000000000000000000",
         "message_id": "ck:message:01JS0MSG0000000000000000",
         "flow_id":    "ck:flow:01JS0FLOW000000000000000",
-        "realm_id":   "ck:realm:01JS0SP000000000000000000",
+        // SPEC-CR-016: gateway-internal routing ids live under routing_metadata.
+        "routing_metadata": {
+            "realm_id":   "ck:realm:01JS0SP000000000000000000"
+        },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "push_hint": "new_message",
@@ -279,12 +282,15 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
     let notification: Notification = serde_json::from_value(json!({
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
-        "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
-        "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
-        "effective_scope": {
-            "kind": "circle",
+        // SPEC-CR-016: Circle routing ids live under routing_metadata.
+        "routing_metadata": {
             "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
             "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
+            "effective_scope": {
+                "kind": "circle",
+                "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
+                "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
+            },
         },
         "counts": { "unread": 3 },
     }))
@@ -427,10 +433,9 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
     });
     let obj = notification.as_object_mut().unwrap();
     obj.extend(extra_notification_fields);
+    // SPEC-CR-016: transport fields (operation_id / origin_service_did /
+    // destination_service_did) ride HTTP headers, not the body.
     json!({
-        "operation_id": "ck.edge.push.command.notify",
-        "origin_service_did": "did:web:sync.example.com",
-        "destination_service_did": "did:web:push.example.com",
         "notification": notification,
     })
 }

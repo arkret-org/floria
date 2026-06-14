@@ -85,6 +85,15 @@ pub const FORBIDDEN_INBOUND_KEYS: &[&str] = &[
 ///     cross-signing reset, policy-frontier hash) — meaningful to the audit pipeline, a stable
 ///     correlator on the provider wire.
 pub const STRIP_ONLY_KEYS: &[&str] = &[
+    // --- SPEC-CR-016 gateway-internal routing fragment ---
+    // The whole `routing_metadata` wrapper plus its leaf routing fields are
+    // consumed inbound for gateway-side routing / dedup but MUST be stripped
+    // before any provider sees them. `build_blind_provider_data` is
+    // allow-list based so they never reach a provider by construction; these
+    // entries are the defense-in-depth egress backstop.
+    "routing_metadata",
+    "mention_redirect_target_actor_ids",
+    "delivery_binding_frontier",
     // --- CKP-0007 Circle primitive (routing-only) ---
     "circle_id",
     "effective_scope",

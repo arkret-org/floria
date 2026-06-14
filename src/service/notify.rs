@@ -14,7 +14,7 @@ use super::metrics::{
 };
 use super::{
     ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX,
-    ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID,
+    ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE,
 };
 use crate::audit::AuditEvent;
 use crate::auth::{
@@ -197,51 +197,37 @@ fn parse_optional_idempotency_key(
     Ok(Some(value.to_owned()))
 }
 
-fn resolve_idempotency_key(
-    req: &Request,
-    body_key: Option<&str>,
-) -> Result<Option<String>, String> {
-    let header = parse_optional_idempotency_key(
+fn resolve_idempotency_key(req: &Request) -> Result<Option<String>, String> {
+    // SPEC-CR-016: the idempotency key rides the `Idempotency-Key`
+    // transport header only; it is no longer accepted as a body field.
+    parse_optional_idempotency_key(
         req.header::<String>("idempotency-key").as_deref(),
         "Idempotency-Key header",
-    )?;
-    let body = parse_optional_idempotency_key(body_key, "idempotency_key")?;
-
-    if let (Some(header), Some(body)) = (header.as_deref(), body.as_deref())
-        && header != body
-    {
-        return Err("Idempotency-Key header does not match body idempotency_key".to_owned());
-    }
-
-    Ok(header.or(body))
+    )
 }
 
-fn validate_notify_operation_id(value: Option<&str>) -> Result<(), String> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    if value.trim() == NOTIFY_OPERATION_ID {
-        return Ok(());
-    }
-    Err(format!("operation_id must be {NOTIFY_OPERATION_ID}"))
-}
-
+/// SPEC-CR-016: the originating service DID rides the `Source-Service-DID`
+/// transport header (`ORIGIN_SERVICE_DID_HEADER`), which the auth layer
+/// already resolved into `caller.origin_service_did`. We keep a
+/// defense-in-depth check that the header is present and consistent with
+/// the authenticated caller rather than reading a (now removed) body field.
 fn validate_origin_service_did(
-    origin_service_did: Option<&str>,
+    req: &Request,
     caller: &AuthenticatedNotifyCaller,
     auth_enabled: bool,
 ) -> Result<(), AuthFailure> {
     if !auth_enabled {
         return Ok(());
     }
-    let Some(origin_service_did) = origin_service_did
-        .map(str::trim)
+    let Some(origin_service_did) = req
+        .header::<String>(crate::auth::ORIGIN_SERVICE_DID_HEADER)
+        .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
     else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: "capability_denied",
-            message: "origin_service_did is required".to_owned(),
+            message: "Source-Service-DID header is required".to_owned(),
         });
     };
     if origin_service_did != caller.origin_service_did {
@@ -254,9 +240,15 @@ fn validate_origin_service_did(
     Ok(())
 }
 
+/// SPEC-CR-016: the destination service DID rides the
+/// `Destination-Service-DID` transport header only (the body field is
+/// removed). The recipient-service-did scope binding reuses the same
+/// header value — `push_target_id` is a per-`(recipient_service_did, ...)`
+/// pairwise pseudonym, so the gateway MUST enforce that the declared
+/// destination equals its own `gateway_service_did` (spec
+/// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
+/// decorative.
 fn validate_destination_service_did(
-    body_destination: Option<&str>,
-    recipient_service_did: Option<&str>,
     req: &Request,
     auth: &NotifyAuthConfig,
     auth_enabled: bool,
@@ -265,56 +257,19 @@ fn validate_destination_service_did(
         return Ok(());
     }
 
-    let body_destination = body_destination
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
     let header_destination = req
         .header::<String>(DESTINATION_SERVICE_DID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
 
-    if let (Some(body_destination), Some(header_destination)) =
-        (body_destination, header_destination.as_deref())
-        && body_destination != header_destination
-    {
-        return Err(AuthFailure {
-            status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
-            message: "destination_service_did does not match the authenticated destination"
-                .to_owned(),
-        });
-    }
-
     if let Some(expected) = auth.gateway_service_did.as_deref()
-        && let Some(destination) = body_destination.or(header_destination.as_deref())
+        && let Some(destination) = header_destination.as_deref()
         && destination != expected
     {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: "capability_denied",
             message: "destination service DID does not match this gateway".to_owned(),
-        });
-    }
-
-    // Spec push-notifications.md §3.1 (commit 0a5ab85): if the request
-    // extension carries `notification.recipient_service_did`, its value MUST
-    // equal the target service's `ck.server.query.describe.service_did` (i.e. this
-    // gateway's `gateway_service_did`). `push_target_id` is a per-
-    // `(recipient_service_did, ...)` pairwise pseudonym, so a mismatched
-    // `recipient_service_did` means the pseudonym was minted for a different
-    // service scope and MUST NOT be honored here. The gateway cannot verify
-    // the pseudonym derivation (no service secret), but it MUST enforce the
-    // declared scope binding rather than treat the field as decorative.
-    if let Some(recipient) = recipient_service_did
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        && let Some(expected) = auth.gateway_service_did.as_deref()
-        && recipient != expected
-    {
-        return Err(AuthFailure {
-            status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
-            message: "recipient_service_did does not match this gateway".to_owned(),
         });
     }
 
@@ -342,11 +297,20 @@ fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
         return Ok(());
     };
 
-    validate_active_notification_refs(notification)?;
+    // SPEC-CR-016: gateway-internal routing ids (realm_id / circle_id /
+    // mention_redirect_target_actor_ids) now live under
+    // `notification.routing_metadata`. The walker reads them from there.
+    let routing_metadata = notification
+        .get("routing_metadata")
+        .and_then(Value::as_object);
+
+    validate_active_notification_refs(notification, routing_metadata)?;
     validate_push_target_id(notification.get("push_target_id"))?;
     validate_wakeup_kind(notification.get("wakeup_kind"))?;
     validate_device_contract_shape(notification.get("devices"))?;
-    validate_mention_redirect_routing(notification)?;
+    if let Some(routing_metadata) = routing_metadata {
+        validate_mention_redirect_routing(routing_metadata)?;
+    }
 
     Ok(())
 }
@@ -356,26 +320,29 @@ fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
 /// array of non-empty DID strings. The actual per-device routing gate
 /// is enforced inside the dispatch loop in `notify()` so we have
 /// access to the parsed `Notification` + `Device` typed views.
-fn validate_mention_redirect_routing(notification: &Map<String, Value>) -> Result<(), String> {
-    let Some(value) = notification.get("mention_redirect_target_actor_ids") else {
+///
+/// SPEC-CR-016: the allow-list lives under
+/// `notification.routing_metadata`, so this receives that sub-object.
+fn validate_mention_redirect_routing(routing_metadata: &Map<String, Value>) -> Result<(), String> {
+    let Some(value) = routing_metadata.get("mention_redirect_target_actor_ids") else {
         return Ok(());
     };
     let Some(items) = value.as_array() else {
         return Err(
-            "notification.mention_redirect_target_actor_ids must be an array of DID strings"
+            "notification.routing_metadata.mention_redirect_target_actor_ids must be an array of DID strings"
                 .to_owned(),
         );
     };
     for (index, item) in items.iter().enumerate() {
         let Value::String(actor_id) = item else {
             return Err(format!(
-                "notification.mention_redirect_target_actor_ids[{index}] must be a string"
+                "notification.routing_metadata.mention_redirect_target_actor_ids[{index}] must be a string"
             ));
         };
         let actor_id = actor_id.trim();
         if actor_id.is_empty() {
             return Err(format!(
-                "notification.mention_redirect_target_actor_ids[{index}] must not be empty"
+                "notification.routing_metadata.mention_redirect_target_actor_ids[{index}] must not be empty"
             ));
         }
         // Round 4 DID regex sweep — entries are actor identifiers, so
@@ -384,7 +351,7 @@ fn validate_mention_redirect_routing(notification: &Map<String, Value>) -> Resul
         // a defense-in-depth check on the floria entry.
         if !is_did_shape(actor_id) {
             return Err(format!(
-                "notification.mention_redirect_target_actor_ids[{index}] must be a DID matching \
+                "notification.routing_metadata.mention_redirect_target_actor_ids[{index}] must be a DID matching \
                  round-4 regex `^did:[a-z0-9]+:[^\\s]+$`"
             ));
         }
@@ -495,7 +462,10 @@ fn validate_device_contract_shape(devices: Option<&Value>) -> Result<(), String>
     Ok(())
 }
 
-fn validate_active_notification_refs(notification: &Map<String, Value>) -> Result<(), String> {
+fn validate_active_notification_refs(
+    notification: &Map<String, Value>,
+    routing_metadata: Option<&Map<String, Value>>,
+) -> Result<(), String> {
     validate_active_ref(
         notification.get("event_id"),
         "notification.event_id",
@@ -511,11 +481,13 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
         "notification.flow_id",
         ACTIVE_FLOW_ID_PREFIX,
     )?;
+    // SPEC-CR-016: realm_id / circle_id are gateway-internal routing ids
+    // and live under `notification.routing_metadata`.
     // The notification routing boundary is the Realm (`ck:realm:`);
     // container-level `space_id` is not part of the push wire model.
     validate_active_ref(
-        notification.get("realm_id"),
-        "notification.realm_id",
+        routing_metadata.and_then(|routing| routing.get("realm_id")),
+        "notification.routing_metadata.realm_id",
         ACTIVE_REALM_ID_PREFIX,
     )?;
     // CKP-0007 — `circle_id` is the encryption-sub-boundary id when the
@@ -523,13 +495,15 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
     // here; consistency with `effective_scope` is enforced separately
     // in `validate_effective_scope_consistency`.
     validate_active_ref(
-        notification.get("circle_id"),
-        "notification.circle_id",
+        routing_metadata.and_then(|routing| routing.get("circle_id")),
+        "notification.routing_metadata.circle_id",
         ACTIVE_CIRCLE_ID_PREFIX,
     )?;
     // `space_id` is forbidden at the inbound contract layer because push
     // routing is Realm/Circle-scoped, not container-scoped.
-    if notification.get("space_id").is_some() {
+    if notification.get("space_id").is_some()
+        || routing_metadata.is_some_and(|routing| routing.get("space_id").is_some())
+    {
         return Err("notification.space_id is forbidden on the push wire model".to_owned());
     }
 
@@ -545,7 +519,7 @@ fn validate_active_notification_refs(notification: &Map<String, Value>) -> Resul
 /// switch; both are operator bugs and we fail closed with
 /// `effective_scope_mismatch`.
 fn validate_effective_scope_consistency(notification: &Notification) -> Result<(), String> {
-    let Some(scope) = notification.effective_scope.as_ref() else {
+    let Some(scope) = notification.effective_scope() else {
         return Ok(());
     };
     let scope_realm = scope.realm_id().as_str();
@@ -754,16 +728,18 @@ fn validate_plaintext_identity_metadata(
             validate_device_identity_metadata(value)?;
             continue;
         }
-        // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids`
-        // is a plaintext routing field that legitimately carries DID
-        // entries (receivers verify their inclusion WITHOUT decrypting
-        // the body). The wire-shape validator already enforced that
-        // every entry matches the round-4 DID regex, so the values are
-        // bounded to opaque actor identifiers, not arbitrary plaintext
-        // identity metadata. Skip the visible-identity scan for this
-        // field — the SDK sanitizer's `did:` literal block would
-        // otherwise reject the very routing list we're trying to honor.
-        if key.eq_ignore_ascii_case("mention_redirect_target_actor_ids") {
+        // SPEC-CR-016 — `routing_metadata` is the gateway-internal routing
+        // fragment (realm_id / circle_id / effective_scope /
+        // mention_redirect_target_actor_ids / delivery_binding_frontier).
+        // It legitimately carries typed routing ids and DID entries (the
+        // mention-redirect allow-list, which receivers verify WITHOUT
+        // decrypting the body), and is stripped before any provider call.
+        // The visible-identity scan (and the SDK `did:` literal block)
+        // would otherwise reject the very routing fields we're honoring,
+        // so the whole sub-object is skipped here. Its shape / DID-regex
+        // is already enforced by `validate_active_notification_refs` and
+        // `validate_mention_redirect_routing`.
+        if key.eq_ignore_ascii_case("routing_metadata") {
             continue;
         }
         if is_identity_metadata_key(key) && has_visible_identity_value(value) {
@@ -1053,19 +1029,12 @@ fn optional_owned_string(value: Option<&String>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn request_destination_service_did(
-    req: &Request,
-    body_destination: Option<&str>,
-) -> Option<String> {
-    body_destination
-        .map(str::trim)
+fn request_destination_service_did(req: &Request) -> Option<String> {
+    // SPEC-CR-016: destination service DID rides the
+    // `Destination-Service-DID` transport header only.
+    req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
+        .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-        })
 }
 
 fn audit_event_type(event: &AuditEvent) -> &'static str {
@@ -1304,23 +1273,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     };
-    if let Err(message) = validate_notify_operation_id(request.operation_id.as_deref()) {
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            "unsupported_feature",
-            &message,
-            None,
-            Some(&request_id),
-            started,
-        );
-        return;
-    }
-    if let Err(error) = validate_origin_service_did(
-        request.origin_service_did.as_deref(),
-        &caller,
-        state.notify_auth.enabled(),
-    ) {
+    // SPEC-CR-016: `operation_id` is determined by the URL path
+    // (operationId `ck.edge.push.command.notify`) and is no longer a body
+    // field, so there is nothing to validate here.
+    if let Err(error) = validate_origin_service_did(req, &caller, state.notify_auth.enabled()) {
         finish_error(
             res,
             error.status,
@@ -1332,13 +1288,9 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    if let Err(error) = validate_destination_service_did(
-        request.destination_service_did.as_deref(),
-        request.notification.recipient_service_did.as_deref(),
-        req,
-        &state.notify_auth,
-        state.notify_auth.enabled(),
-    ) {
+    if let Err(error) =
+        validate_destination_service_did(req, &state.notify_auth, state.notify_auth.enabled())
+    {
         finish_error(
             res,
             error.status,
@@ -1488,15 +1440,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         let audit_event = AuditEvent::PolicyAccess {
             request_id: request_id.clone(),
             origin_service_did: caller.origin_service_did.clone(),
-            destination_service_did: request_destination_service_did(
-                req,
-                request.destination_service_did.as_deref(),
-            ),
+            destination_service_did: request_destination_service_did(req),
             access_kind: access_kind.to_owned(),
             late_recovery_original_event_id,
             notification_event_id: optional_owned_string(request.notification.event_id.as_ref()),
             notification_flow_id: optional_owned_string(request.notification.flow_id.as_ref()),
-            notification_realm_id: optional_owned_string(request.notification.realm_id.as_ref()),
+            notification_realm_id: request.notification.realm_id().map(ToOwned::to_owned),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {
             tracing::error!(
@@ -1530,7 +1479,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
-    let idempotency_key = match resolve_idempotency_key(req, request.idempotency_key.as_deref()) {
+    let idempotency_key = match resolve_idempotency_key(req) {
         Ok(idempotency_key) => idempotency_key,
         Err(message) => {
             finish_error(
@@ -1799,7 +1748,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         // operator can tell why the device was skipped. Devices with
         // no `target_actor_id` cannot prove their inclusion in the
         // allow-list — same outcome (fail-closed).
-        if !notification.mention_redirect_target_actor_ids.is_empty() {
+        if !notification.mention_redirect_target_actor_ids().is_empty() {
             let allowed = device
                 .target_actor_id
                 .as_deref()
@@ -1807,7 +1756,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 .filter(|value| !value.is_empty())
                 .is_some_and(|actor_id| {
                     notification
-                        .mention_redirect_target_actor_ids
+                        .mention_redirect_target_actor_ids()
                         .iter()
                         .any(|allowed| allowed.trim() == actor_id)
                 });
@@ -2394,7 +2343,7 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.circle_id() {
         normalized.insert("circle_id".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(scope) = notification.effective_scope.as_ref()
+    if let Some(scope) = notification.effective_scope()
         && let Ok(value) = serde_json::to_value(scope)
     {
         normalized.insert("effective_scope".to_owned(), value);
@@ -2415,8 +2364,8 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     // routing-affecting (two requests with different allow-lists must
     // not collide in the dedup cache). Sort canonically so the
     // fingerprint is order-independent.
-    if !notification.mention_redirect_target_actor_ids.is_empty() {
-        let mut sorted = notification.mention_redirect_target_actor_ids.clone();
+    if !notification.mention_redirect_target_actor_ids().is_empty() {
+        let mut sorted = notification.mention_redirect_target_actor_ids().to_vec();
         sorted.sort();
         sorted.dedup();
         normalized.insert(

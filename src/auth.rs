@@ -1236,13 +1236,13 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.command.notify",
-            "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
@@ -1290,13 +1290,13 @@ mod tests {
         principal.mtls_cert_fingerprints = vec!["aa:bb:cc".to_owned()];
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.command.notify",
-            "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
@@ -1345,13 +1345,13 @@ mod tests {
         principal.require_mtls = true;
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.command.notify",
-            "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
@@ -1410,13 +1410,13 @@ mod tests {
         principal.signature_public_key_hex = Some(public_key_hex);
         let service = test_service_with_principal(principal);
         let body = json!({
-            "operation_id": "ck.edge.push.command.notify",
-            "origin_service_did": "did:web:sync.example.com",
             "notification": {
                 "event_id": "ck:event:01JS0EV000000000000000000",
                 "message_id": "ck:message:01JS0MSG0000000000000000",
                 "flow_id": "ck:flow:01JS0FLOW000000000000000",
-                "realm_id": "ck:realm:01JS0SP000000000000000000",
+                "routing_metadata": {
+                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "push_hint": "new_message",

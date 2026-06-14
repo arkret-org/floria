@@ -411,23 +411,22 @@ async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
 }
 
 #[tokio::test]
-async fn notify_rejects_non_canonical_operation_id() {
+async fn notify_rejects_operation_id_in_body() {
+    // SPEC-CR-016: `operation_id` is determined by the URL path and is no
+    // longer a body field. A caller that still puts it in the body is
+    // rejected as an unknown field (deny_unknown_fields), not validated.
     let service = test_service(vec![]);
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "ck.edge.push.command.register_device",
+            "ck.edge.push.command.notify",
         ))
         .send(&service)
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
-    let body = assert_notify_error(&mut response, "unsupported_feature", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("operation_id must be ck.edge.push.command.notify")
-    );
+    assert_notify_error(&mut response, "schema_violation", true).await;
 }
 
 #[tokio::test]

@@ -673,6 +673,7 @@ mod sanitize_tests {
     use serde_json::json;
 
     use super::*;
+    use crate::models::RoutingMetadata;
 
     #[test]
     fn sanitized_provider_payload_strips_event_id() {
@@ -817,15 +818,15 @@ mod sanitize_tests {
             event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
             flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
-            realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
-            recipient_service_did: None,
-            delivery_binding_frontier: None,
+            routing_metadata: Some(RoutingMetadata {
+                realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
+                ..Default::default()
+            }),
             user_is_target: None,
             push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
-            mention_redirect_target_actor_ids: Vec::new(),
             counts: crate::models::Counts {
                 unread: Some(3),
                 missed_calls: None,

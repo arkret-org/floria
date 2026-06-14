@@ -264,14 +264,18 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
 }
 
 pub(super) fn payload(devices: Vec<Value>) -> Value {
+    // SPEC-CR-016: transport fields (operation_id / origin_service_did /
+    // destination_service_did / idempotency_key) ride HTTP headers, not the
+    // body. Gateway-internal routing ids (realm_id / circle_id / ...) live
+    // under notification.routing_metadata.
     json!({
-        "operation_id": NOTIFY_OPERATION_ID,
-        "origin_service_did": "did:web:sync.example.com",
         "notification": {
             "event_id": "ck:event:01JS0EV000000000000000000",
             "message_id": "ck:message:01JS0MSG0000000000000000",
             "flow_id": "ck:flow:01JS0FLOW000000000000000",
-            "realm_id": "ck:realm:01JS0SP000000000000000000",
+            "routing_metadata": {
+                "realm_id": "ck:realm:01JS0SP000000000000000000"
+            },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "push_hint": "new_message",
