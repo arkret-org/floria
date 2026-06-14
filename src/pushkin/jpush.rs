@@ -612,7 +612,7 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
-            flow_title: Some("Mission Control".to_owned()),
+            strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
             membership: None,
@@ -628,7 +628,7 @@ mod tests {
             ),
             event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
                 realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
                 ..Default::default()

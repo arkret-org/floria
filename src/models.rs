@@ -173,12 +173,12 @@ pub struct RoutingMetadata {
     /// of the encryption sub-boundary this notification belongs to. When
     /// present, routing / dedup / per-(provider,realm,circle) circuit
     /// breaker stats key off this id rather than the parent realm so two
-    /// flows with the same name in different Circles do not collide.
+    /// strands with the same name in different Circles do not collide.
     /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
     /// on the wire only to drive gateway-internal routing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub circle_id: Option<String>,
-    /// Flow-declared `scope_circle_id` when the originating Flow is bound
+    /// Strand-declared `scope_circle_id` when the originating Strand is bound
     /// to a Circle scope. Gateway-internal; stripped before any provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_circle_id: Option<String>,
@@ -217,7 +217,7 @@ pub struct Notification {
     // --- visible_notification profile-gated fields (SPEC-CR-016 class C):
     //     produced only on the visible path, never in a blind wakeup. ---
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub flow_title: Option<String>,
+    pub strand_title: Option<String>,
     /// Human-readable label for the Realm security boundary. Container
     /// Space names do not surface on the push wire model.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -235,7 +235,7 @@ pub struct Notification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub flow_id: Option<String>,
+    pub strand_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_is_target: Option<bool>,
     // --- base fields shared by blind + visible ---
@@ -260,16 +260,16 @@ impl Notification {
     /// per-(provider, scope) state off (rate limits, circuit breaker
     /// windows, retry queues). Precedence:
     ///   1. `circle_id` (encryption sub-boundary)
-    ///   2. `flow_id`   (Realm-default-scoped conversation)
+    ///   2. `strand_id`   (Realm-default-scoped conversation)
     ///   3. `realm_id`  (security boundary)
     pub fn scope_id(&self) -> Option<&str> {
         self.circle_id()
-            .or_else(|| self.flow_id())
+            .or_else(|| self.strand_id())
             .or_else(|| self.realm_id())
     }
 
     pub fn scope_title(&self) -> Option<&str> {
-        self.flow_title().or(self.realm_title())
+        self.strand_title().or(self.realm_title())
     }
 
     pub fn circle_id(&self) -> Option<&str> {
@@ -280,8 +280,8 @@ impl Notification {
         )
     }
 
-    pub fn flow_id(&self) -> Option<&str> {
-        non_empty(self.flow_id.as_deref())
+    pub fn strand_id(&self) -> Option<&str> {
+        non_empty(self.strand_id.as_deref())
     }
 
     pub fn message_id(&self) -> Option<&str> {
@@ -311,8 +311,8 @@ impl Notification {
             .unwrap_or(&[])
     }
 
-    pub fn flow_title(&self) -> Option<&str> {
-        non_empty(self.flow_title.as_deref())
+    pub fn strand_title(&self) -> Option<&str> {
+        non_empty(self.strand_title.as_deref())
     }
 
     pub fn realm_title(&self) -> Option<&str> {

@@ -143,7 +143,7 @@ http {
 | `notify_rate_limits.per_endpoint` | u64 | — | 每个 HTTP endpoint path 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_provider_concurrency` | u64 | `100` | 单个 provider 的并发派发上限。`0` 关闭；默认 100，避免单一 provider 拖垮 fanout 工作池 |
 
-`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_actor_display_name`、`flow_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
+`push_hint` 必须是 body-free 的唤醒提示。floria 只负责派生唤醒，不是事件或未读状态的 canonical truth。未获得 plaintext metadata 权限时，`sender_actor_display_name`、`strand_name`、`space_name`、`sender`、`target_did`，以及 notification/default payload 内容里嵌套的 `did:` 字面量都会被拒绝。notify 请求使用当前 `push_target_id`、`wakeup_kind` 和 `push_key` 字段；未知 notification 字段会被 wire model 拒绝。`memory` 去重后端只适用于单实例，多实例部署请使用 Redis 去重。
 
 生产环境 `/notify` 配置示例：
 
@@ -611,7 +611,7 @@ com.example.web {
 | `auth` | string | 认证密钥（base64） |
 | `default_payload` | object | 合并到所有消息的默认载荷 |
 | `events_only` | bool | 仅在存在 `event_id` 时发送 |
-| `only_last_per_flow` | bool | 按 active flow 去重（Topic 去重） |
+| `only_last_per_strand` | bool | 按 active strand 去重（Topic 去重） |
 
 ## 环境变量
 

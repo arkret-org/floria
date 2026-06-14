@@ -195,7 +195,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             }),
             // Default interop privacy baseline
             // (`ck.profile.push_gateway.blind_wakeup.v1`): identifying
-            // fields (`event_id` / `flow_id` / `realm_id` / sender) MUST
+            // fields (`event_id` / `strand_id` / `realm_id` / sender) MUST
             // NOT appear — only the opaque pseudonym, wakeup discriminator
             // and bounded counts. Identifying-field examples live under
             // `plaintext_visible_service_request` (visible_notification
@@ -218,7 +218,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
                     "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
-                    "flow_id": "ck:flow:01964000-0000-7000-8000-000000000000",
+                    "strand_id": "ck:strand:01964000-0000-7000-8000-000000000000",
                     "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
                     "push_hint": "new_message",
                     "counts": {"unread_increment": 1}

@@ -29,7 +29,7 @@ target a specific security boundary:
 
 The inbound push notify model uses `realm_id` for the security boundary and
 hard-rejects `space_id`. Provider-facing blind wakeups strip Realm, Space,
-Flow, Event, Message and actor identifiers before dispatch.
+Strand, Event, Message and actor identifiers before dispatch.
 
 ## Round R4 (protocol review closures)
 
@@ -139,10 +139,10 @@ Quick notes:
 ## Cokret notify semantics
 
 - `/_cokret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
-- `ck.edge.push.command.notify` accepts active `flow` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
+- `ck.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
-- unauthorized callers cannot attach `sender_actor_display_name`, `flow_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
+- unauthorized callers cannot attach `sender_actor_display_name`, `strand_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
 - notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model
 - rejected push tokens are returned as hashes, not raw platform tokens
 - response delivery receipt refs contain provider/status/token hash metadata only, never plaintext payloads

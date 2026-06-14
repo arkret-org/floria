@@ -3,8 +3,8 @@
 //!
 //! These tests assert that the provider-facing payload that floria
 //! emits NEVER carries the stable correlation identifiers
-//! (`event_id` / `realm_id` / `space_id` / `flow_id` / `message_id` / sender /
-//! space-name / flow-name / `target_did` / call-setup material …) that
+//! (`event_id` / `realm_id` / `space_id` / `strand_id` / `message_id` / sender /
+//! space-name / strand-name / `target_did` / call-setup material …) that
 //! used to leak via the freeform data dictionary. Coverage is split
 //! across three layers:
 //!
@@ -45,11 +45,11 @@ fn sanitizer_strips_apns_correlation_identifiers() {
         "client": "ios",
         "event_id": "ck:event:01JS0EV000000000000000000",
         "space_id": "ck:space:01JS0SP000000000000000000",
-        "flow_id":  "ck:flow:01JS0FLOW000000000000000",
+        "strand_id":  "ck:strand:019640f9-8000-7000-8000-000000000000",
         "message_id": "ck:message:01JS0MSG0000000000000000",
         "sender": "@alice:example.com",
         "sender_actor_display_name": "Alice",
-        "flow_name": "Project Apollo",
+        "strand_name": "Project Apollo",
         "space_name": "Mission Control",
         "wakeup_kind": "message",
     })
@@ -60,11 +60,11 @@ fn sanitizer_strips_apns_correlation_identifiers() {
     for forbidden in [
         "event_id",
         "space_id",
-        "flow_id",
+        "strand_id",
         "message_id",
         "sender",
         "sender_actor_display_name",
-        "flow_name",
+        "strand_name",
         "space_name",
     ] {
         assert!(
@@ -106,7 +106,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
 fn sanitizer_strips_webpush_correlation_identifiers() {
     let payload = json!({
         "client": "web",
-        "flow_id": "ck:flow:01JS0FLOW000000000000000",
+        "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
         "space_id": "ck:space:01JS0SP000000000000000000",
         "event_id": "ck:event:01JS0EV000000000000000000",
         "content": {"body": "secret message"},
@@ -116,7 +116,7 @@ fn sanitizer_strips_webpush_correlation_identifiers() {
     .unwrap()
     .clone();
     let sanitized = sanitized_provider_payload(payload).unwrap();
-    for forbidden in ["flow_id", "space_id", "event_id", "content"] {
+    for forbidden in ["strand_id", "space_id", "event_id", "content"] {
         assert!(
             sanitized.get(forbidden).is_none(),
             "webpush forbidden field `{forbidden}` survived the sanitizer"
@@ -143,14 +143,14 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     // delivery_binding_frontier struct-literal hazard) and assert that
     // only the SDK-allowed blind fields make it out.
     let notification: Notification = serde_json::from_value(json!({
-        "flow_title": "Mission Control",
+        "strand_title": "Mission Control",
         // Security-boundary label.
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
         "event_id":   "ck:event:01JS0EV000000000000000000",
         "message_id": "ck:message:01JS0MSG0000000000000000",
-        "flow_id":    "ck:flow:01JS0FLOW000000000000000",
+        "strand_id":    "ck:strand:019640f9-8000-7000-8000-000000000000",
         // SPEC-CR-016: gateway-internal routing ids live under routing_metadata.
         "routing_metadata": {
             "realm_id":   "ck:realm:01JS0SP000000000000000000"
@@ -176,7 +176,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     for forbidden in [
         "event_id",
         "message_id",
-        "flow_id",
+        "strand_id",
         // Both `space_id` (SDK list since 59ac1d4) and `realm_id`
         // (renamed security boundary) MUST stay off the wire.
         "space_id",
@@ -187,7 +187,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "scope_circle_id",
         "sender",
         "sender_actor_display_name",
-        "flow_title",
+        "strand_title",
         "space_name",
         "realm_title",
         "content",
@@ -516,7 +516,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
     let service = visible_profile_service();
     let body = blind_payload(
         json!({
-            "flow_title": "Mission Control",
+            "strand_title": "Mission Control",
             "sender_actor_display_name": "Major Tom",
         })
         .as_object()

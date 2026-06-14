@@ -211,7 +211,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     let AuditEvent::RejectedDevices {
         origin_service_did,
         notification_event_id,
-        notification_flow_id,
+        notification_strand_id,
         notification_realm_id,
         devices,
         ..
@@ -225,8 +225,8 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
         Some("ck:event:01JS0EV000000000000000000")
     );
     assert_eq!(
-        notification_flow_id.as_deref(),
-        Some("ck:flow:01JS0FLOW000000000000000")
+        notification_strand_id.as_deref(),
+        Some("ck:strand:019640f9-8000-7000-8000-000000000000")
     );
     assert_eq!(
         notification_realm_id.as_deref(),
@@ -384,7 +384,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
         access_kind,
         late_recovery_original_event_id,
         notification_event_id,
-        notification_flow_id,
+        notification_strand_id,
         notification_realm_id,
         ..
     } = &events[0]
@@ -402,8 +402,8 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
         Some("ck:event:01JS0EV000000000000000000")
     );
     assert_eq!(
-        notification_flow_id.as_deref(),
-        Some("ck:flow:01JS0FLOW000000000000000")
+        notification_strand_id.as_deref(),
+        Some("ck:strand:019640f9-8000-7000-8000-000000000000")
     );
     assert_eq!(
         notification_realm_id.as_deref(),

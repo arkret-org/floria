@@ -254,7 +254,7 @@ impl WebpushPushkin {
     /// Build the WebPush JSON payload that goes into the encrypted
     /// `aes128gcm` body. T4.3 — only the SDK-allowed blind-wakeup
     /// fields plus the device's static `default_payload` survive on
-    /// the wire. `flow_id` / `realm_id` / `event_id` / `message_id`
+    /// the wire. `strand_id` / `realm_id` / `event_id` / `message_id`
     /// / sender / names / body / content / membership / user_is_target
     /// are all dropped: the SW pulls them server-side from an e2ee
     /// envelope keyed on `push_target_id`.
@@ -391,14 +391,14 @@ impl WebpushPushkin {
             Urgency::Normal
         });
         // T4.3 — the topic used to be a blake2 hash of the `realm_id` /
-        // `flow_id`. blake2 is non-reversible but the *same* scope still
+        // `strand_id`. blake2 is non-reversible but the *same* scope still
         // produced the *same* topic across pushes, which let an observer
         // correlate every notification in a given conversation. We now
         // either skip the topic entirely (so the push gateway never
         // dedupes by scope) or emit a per-message random base64 token
         // when the device opted into the legacy "collapse to last per
-        // flow" behaviour.
-        if device.data_bool("only_last_per_flow") == Some(true) {
+        // strand" behaviour.
+        if device.data_bool("only_last_per_strand") == Some(true) {
             builder.set_topic(random_collapse_key());
         }
         builder.set_payload(ContentEncoding::Aes128Gcm, &payload);
@@ -673,7 +673,7 @@ mod tests {
 
     fn notification(body: &str) -> Notification {
         Notification {
-            flow_title: Some("Mission Control".to_owned()),
+            strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),
             membership: None,
@@ -691,7 +691,7 @@ mod tests {
             ),
             event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
                 realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
                 ..Default::default()
@@ -740,7 +740,7 @@ mod tests {
 
         // T4.3 — stable correlation identifiers are stripped.
         for forbidden in [
-            "flow_id",
+            "strand_id",
             "realm_id",
             // Both the renamed security id (`realm_id`) AND the
             // renamed container id (`space_id`) are off-wire — SDK
@@ -755,7 +755,7 @@ mod tests {
             "message_id",
             "sender",
             "sender_actor_display_name",
-            "flow_title",
+            "strand_title",
             "realm_title",
             "content",
             "highlight_count",

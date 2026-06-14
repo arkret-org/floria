@@ -228,8 +228,8 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
         "expected plaintext_in_blind_profile reason code, got: {msg}"
     );
     assert!(
-        msg.contains("sender_actor_display_name") || msg.contains("flow/realm name"),
-        "expected sender_actor_display_name / flow/realm mention, got: {msg}"
+        msg.contains("sender_actor_display_name") || msg.contains("strand/realm name"),
+        "expected sender_actor_display_name / strand/realm mention, got: {msg}"
     );
 }
 
@@ -267,7 +267,7 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["strand_title"] = Value::Null;
     request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
     // The bare `sender` field has been removed from the wire model (it was
@@ -302,7 +302,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["strand_title"] = Value::Null;
     request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
     request_body["notification"]["content"] = json!({
@@ -345,7 +345,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
     let mut request_body = payload(vec![device("com.example.app", "accept")]);
-    request_body["notification"]["flow_title"] = Value::Null;
+    request_body["notification"]["strand_title"] = Value::Null;
     request_body["notification"]["realm_title"] = Value::Null;
     request_body["notification"]["sender_actor_display_name"] = Value::Null;
     request_body["notification"]["content"] = json!({

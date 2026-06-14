@@ -272,7 +272,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
         "notification": {
             "event_id": "ck:event:01JS0EV000000000000000000",
             "message_id": "ck:message:01JS0MSG0000000000000000",
-            "flow_id": "ck:flow:01JS0FLOW000000000000000",
+            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
             "routing_metadata": {
                 "realm_id": "ck:realm:01JS0SP000000000000000000"
             },
@@ -286,7 +286,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
 
 pub(super) fn visible_payload(devices: Vec<Value>) -> Value {
     let mut body = payload(devices);
-    body["notification"]["flow_title"] = json!("Engineering");
+    body["notification"]["strand_title"] = json!("Engineering");
     body["notification"]["sender_actor_display_name"] = json!("Alice");
     body
 }

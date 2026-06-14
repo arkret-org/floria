@@ -207,9 +207,9 @@
             "type": "string",
             "pattern": "^ck:message:"
           },
-          "flow_id": {
+          "strand_id": {
             "type": "string",
-            "pattern": "^ck:flow:"
+            "pattern": "^ck:strand:"
           },
           "realm_id": {
             "type": "string",

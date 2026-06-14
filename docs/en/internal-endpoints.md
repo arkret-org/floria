@@ -40,7 +40,7 @@ broadcast channels return `503 service_unavailable`.
 The internal endpoints are NOT subject to `notify_rate_limits`. The
 expectation is that the upstream broadcast bus (soland) backpressures
 on its own queue depth, and floria's role is to drain whatever shows
-up. If you need flow control, set it on the upstream bus rather than
+up. If you need strand control, set it on the upstream bus rather than
 on floria.
 
 Internal endpoints DO honor the `notify_retry_queue` configuration:

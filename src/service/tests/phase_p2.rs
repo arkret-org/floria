@@ -41,7 +41,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
     assert!(resp.delivery_receipts.is_empty());
     assert!(resp.provider_retries.is_empty());
     // Critical: durable agent lifecycle event MUST NOT trigger a
-    // user-device push fanout. Capability cache invalidation flows
+    // user-device push fanout. Capability cache invalidation strands
     // through `/internal/consent_revoke` with `reason=agent_paused`.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }

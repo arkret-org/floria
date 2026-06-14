@@ -21,7 +21,7 @@ and the alert rules in `docs/en/prometheus-alerts.yml`.
    `volatile-lru` so only TTL'd keys are evicted.
 3. Check the failure policy in config: `notify_dedup.redis_failure_policy`
    and `notify_rate_limits.redis_failure_policy`. `permissive` favors
-   availability (request flows through with reduced guarantees);
+   availability (request strands through with reduced guarantees);
    `strict` favors correctness (429 until Redis recovers).
 
 **Recovery**:

@@ -507,7 +507,7 @@ impl ApnsPushkin {
         }
 
         // T4.3 — the legacy gateway used to copy event_id / message_id
-        // / flow_id / realm_id / highlight_count onto the APNS payload
+        // / strand_id / realm_id / highlight_count onto the APNS payload
         // alongside the `aps` notification block. Those are stable
         // correlation identifiers and must NOT survive on the wire any
         // more: the client decrypts an e2ee envelope keyed on
@@ -860,7 +860,7 @@ mod tests {
     fn builds_message_payload() {
         let pushkin = pushkin();
         let notification = Notification {
-            flow_title: Some("Mission Control".to_owned()),
+            strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
             membership: None,
@@ -876,7 +876,7 @@ mod tests {
             ),
             event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
                 realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
                 ..Default::default()
@@ -945,7 +945,7 @@ mod tests {
             .clone(),
         );
         let notification = Notification {
-            flow_title: None,
+            strand_title: None,
             realm_title: None,
             priority: None,
             membership: None,
@@ -953,7 +953,7 @@ mod tests {
             content: None,
             event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
             message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
-            flow_id: Some("ck:flow:01JS0FLOW000000000000000".to_owned()),
+            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
                 realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
                 ..Default::default()
@@ -993,7 +993,7 @@ mod tests {
         );
         assert!(payload.get("event_id").is_none());
         assert!(payload.get("message_id").is_none());
-        assert!(payload.get("flow_id").is_none());
+        assert!(payload.get("strand_id").is_none());
         assert!(payload.get("space_id").is_none());
         assert!(payload.get("realm_id").is_none());
     }

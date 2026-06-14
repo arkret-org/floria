@@ -122,7 +122,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             },
         ],
         examples: serde_json::json!({
-            "compose_flow": {
+            "compose_strand": {
                 "step_1": {
                     "service": "soland",
                     "path": "/_soland/edge/push/outbound/bridge/fetch",

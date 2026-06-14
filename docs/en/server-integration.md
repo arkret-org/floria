@@ -49,7 +49,7 @@ The caller should set:
   "notification": {
     "event_id": "ck:event:01JS0EV000000000000000000",
     "message_id": "ck:message:01JS0MSG0000000000000000",
-    "flow_id": "ck:flow:01JS0FLOW000000000000000",
+    "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
     "realm_id": "ck:realm:01JS0SP000000000000000000",
     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",

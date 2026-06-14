@@ -29,7 +29,7 @@ pub enum AuditEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         notification_event_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        notification_flow_id: Option<String>,
+        notification_strand_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         notification_realm_id: Option<String>,
     },
@@ -40,7 +40,7 @@ pub enum AuditEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         notification_event_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        notification_flow_id: Option<String>,
+        notification_strand_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         notification_realm_id: Option<String>,
         devices: Vec<RejectedDevice>,
@@ -178,7 +178,7 @@ mod tests {
             access_kind: "e2ee_late_recovery".to_owned(),
             late_recovery_original_event_id: Some("ck:event:late".to_owned()),
             notification_event_id: Some("ck:event:notify".to_owned()),
-            notification_flow_id: None,
+            notification_strand_id: None,
             notification_realm_id: None,
         };
 

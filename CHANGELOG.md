@@ -43,7 +43,7 @@ cokret-rust-sdk P1.
 - `Notification.circle_id` (typed `ck:circle:…`) and
   `Notification.effective_scope` (reducer-stamped envelope binding
   mirrored from the SDK's `EffectiveScope`). Routing / dedup /
-  metrics key off `circle_id > flow_id > realm_id` precedence.
+  metrics key off `circle_id > strand_id > realm_id` precedence.
 - Per-(provider, scope) delivery counter
   `floria_notify_delivery_total{provider, scope_kind, scope_id}` gated
   by the new `http.metrics_detailed_circle_labels` boolean
@@ -158,7 +158,7 @@ MUST upgrade soland and the principal-server fanout to a matching version.
   dropped at TTL, and MUST NOT enter floria's durable Event path. The
   `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects
   `ck:` / `did:`) and the ID-prefix gate on
-  `event_id` / `message_id` / `flow_id` / `realm_id` together act as
+  `event_id` / `message_id` / `strand_id` / `realm_id` together act as
   defence-in-depth — no `ck:presence:` typed-id exists, so the prefix check
   rejects any future caller that tries to smuggle an ephemeral as a durable
   Event. See the comment in `src/service/mod.rs`.

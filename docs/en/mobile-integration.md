@@ -12,7 +12,7 @@ server-side push gateway; mobile clients should not call floria directly.
 | soland / principal server | Stores device routes, maps account state to `ck.edge.push.command.notify`, and calls floria |
 | floria | Delivers minimized wakeups to configured provider adapters |
 
-## Registration Flow
+## Registration Strand
 
 1. The app asks the platform for notification permission.
 2. The app obtains the provider token or WebPush endpoint.
@@ -42,7 +42,7 @@ Expected blind-wakeup fields:
 
 Forbidden mobile assumptions:
 
-1. Do not require message body, sender DID, room name, flow id, realm id, or
+1. Do not require message body, sender DID, room name, strand id, realm id, or
    event id in provider payloads.
 2. Do not use provider delivery as proof that the event exists or is readable.
 3. Do not store raw provider tokens in logs, analytics, crash reports, or

@@ -24,7 +24,7 @@ const PROPTEST_CASES: u32 = 64;
 const FORBIDDEN_NAMES: &[&str] = &[
     "event_id",
     "message_id",
-    "flow_id",
+    "strand_id",
     "space_id",
     "realm_id",
     "thread_id",
@@ -51,7 +51,7 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "mime_type",
     "media_url",
     "space_name",
-    "flow_name",
+    "strand_name",
     "room_name",
     "provider_payload",
     "provider_data",
@@ -179,7 +179,7 @@ proptest! {
     #[test]
     fn did_or_cx_literal_in_extra_field_is_rejected(
         suffix in "[a-z0-9]{1,12}",
-        prefix in prop_oneof![Just("did:web:"), Just("ck:event:"), Just("ck:flow:")],
+        prefix in prop_oneof![Just("did:web:"), Just("ck:event:"), Just("ck:strand:")],
     ) {
         // Use a key that is NOT in the forbidden list, so the only
         // rejection path is the sensitive-literal check.

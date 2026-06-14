@@ -21,13 +21,13 @@ pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
 const NOTIFY_OPERATION_ID: &str = "ck.edge.push.command.notify";
 const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
 const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
-const ACTIVE_FLOW_ID_PREFIX: &str = "ck:flow:";
+const ACTIVE_STRAND_ID_PREFIX: &str = "ck:strand:";
 // Push routing is Realm-scoped with typed prefix `ck:realm:`. The push
 // wire model carries `realm_id`, never container-level `space_id`.
 const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
 // CKP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
 // inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
-// when present so two Flows that share a name in different Circles do
+// when present so two Strands that share a name in different Circles do
 // not collide. `circle_id` is gateway-routing only; it MUST NOT be
 // echoed back to providers (the shared strip set in
 // `crate::sanitize::STRIP_ONLY_KEYS` / `is_forbidden_egress_key`
@@ -47,7 +47,7 @@ const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
 // ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
 // future caller ever pipes an ephemeral as a durable Event, the
 // `validate_active_notification_refs` ID-prefix gate (`ck:event:` /
-// `ck:message:` / `ck:flow:` / `ck:realm:`) is the second line of
+// `ck:message:` / `ck:strand:` / `ck:realm:`) is the second line of
 // defence — there is no `ck:presence:` or `ck:typing:` typed-id, so
 // the prefix check rejects it.
 

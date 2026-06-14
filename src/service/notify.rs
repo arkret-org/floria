@@ -13,7 +13,7 @@ use super::metrics::{
     record_notify_delivery_outcomes,
 };
 use super::{
-    ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_FLOW_ID_PREFIX,
+    ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_STRAND_ID_PREFIX,
     ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE,
 };
 use crate::audit::AuditEvent;
@@ -140,7 +140,7 @@ fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
 /// of them appear in the push-wire reference fields — but we keep the
 /// list here so the prefix validator is aware of them when a future
 /// notify field starts to carry one. Any caller that smuggles one of
-/// these into an `event_id` / `message_id` / `flow_id` / `realm_id` /
+/// these into an `event_id` / `message_id` / `strand_id` / `realm_id` /
 /// `circle_id` slot still fails closed against the existing
 /// `validate_active_ref` gates because those slots are pinned to
 /// their own typed-id prefix (`ck:event:`, etc.).
@@ -477,9 +477,9 @@ fn validate_active_notification_refs(
         ACTIVE_MESSAGE_ID_PREFIX,
     )?;
     validate_active_ref(
-        notification.get("flow_id"),
-        "notification.flow_id",
-        ACTIVE_FLOW_ID_PREFIX,
+        notification.get("strand_id"),
+        "notification.strand_id",
+        ACTIVE_STRAND_ID_PREFIX,
     )?;
     // SPEC-CR-016: realm_id / circle_id are gateway-internal routing ids
     // and live under `notification.routing_metadata`.
@@ -619,7 +619,7 @@ fn validate_active_ref(
         // closed with a clearer error so the caller can see they're
         // routing the wrong typed id into a push-wire slot. Floria's
         // notify model has dedicated slots only for event / message /
-        // flow / realm / circle ids — the Phase-P2 typed ids never
+        // strand / realm / circle ids — the Phase-P2 typed ids never
         // belong here.
         if is_phase_p2_agent_typed_id(value) {
             return Err(format!(
@@ -657,14 +657,14 @@ fn validate_notification_contract(
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
         && (notification.sender_actor_display_name.is_some()
-            || notification.flow_title.is_some()
+            || notification.strand_title.is_some()
             || notification.realm_title.is_some())
     {
-        // Blind wakeups cannot carry human-readable Realm or Flow names.
+        // Blind wakeups cannot carry human-readable Realm or Strand names.
         // Container Space names are not part of this push wire model.
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-             sender_actor_display_name or flow/realm name metadata under the default \
+             sender_actor_display_name or strand/realm name metadata under the default \
              `ck.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
@@ -1083,7 +1083,7 @@ async fn record_rejected_devices_audit(
         request_id: request_id.to_owned(),
         origin_service_did: caller.origin_service_did.clone(),
         notification_event_id: optional_owned_string(notification.event_id.as_ref()),
-        notification_flow_id: notification.flow_id().map(ToOwned::to_owned),
+        notification_strand_id: notification.strand_id().map(ToOwned::to_owned),
         notification_realm_id: notification.realm_id().map(ToOwned::to_owned),
         devices: rejected.to_vec(),
     };
@@ -1376,7 +1376,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         event_kind = %kind,
                         "answering 200 no-fanout ack: durable agent lifecycle \
                          event silently consumed (capability cache invalidation \
-                         flows through consent_revoke)"
+                         strands through consent_revoke)"
                     );
                 }
                 AgentEventRouting::ActorPrivateDrop => {
@@ -1444,7 +1444,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             access_kind: access_kind.to_owned(),
             late_recovery_original_event_id,
             notification_event_id: optional_owned_string(request.notification.event_id.as_ref()),
-            notification_flow_id: optional_owned_string(request.notification.flow_id.as_ref()),
+            notification_strand_id: optional_owned_string(request.notification.strand_id.as_ref()),
             notification_realm_id: request.notification.realm_id().map(ToOwned::to_owned),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {
@@ -2304,8 +2304,8 @@ fn idempotency_cache_key(idempotency_key: &str) -> String {
 fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     let mut normalized = Map::new();
 
-    if let Some(value) = notification.flow_title() {
-        normalized.insert("flow_title".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.strand_title() {
+        normalized.insert("strand_title".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.realm_title() {
         normalized.insert("realm_title".to_owned(), Value::String(value.to_owned()));
@@ -2331,14 +2331,14 @@ fn normalized_notify_dedup_key(notification: &Notification) -> Option<String> {
     if let Some(value) = notification.message_id() {
         normalized.insert("message_id".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.flow_id() {
-        normalized.insert("flow_id".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.strand_id() {
+        normalized.insert("strand_id".to_owned(), Value::String(value.to_owned()));
     }
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
     // CKP-0007 — `circle_id` and `effective_scope` are routing-affecting
-    // (two pushes for the same Flow in different Circles must not
+    // (two pushes for the same Strand in different Circles must not
     // collide in the dedup cache).
     if let Some(value) = notification.circle_id() {
         normalized.insert("circle_id".to_owned(), Value::String(value.to_owned()));
