@@ -1,8 +1,7 @@
-//! Push notification payload sanitizer — forbidden plaintext fields.
+//! Push notification payload sanitizer — proof signature plaintext fields.
 //!
 //! Spec B4 hardening: `binding_proof.signature`, `subject_proof.signature`,
-//! `expected_previous_generation`, and `attestation_evidence` MUST be
-//! rejected as forbidden plaintext fields regardless of profile.
+//! MUST be rejected as forbidden plaintext fields regardless of profile.
 
 use std::sync::Arc;
 
@@ -44,44 +43,6 @@ async fn sanitizer_rejects_subject_proof_signature() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["notification"]["subject_proof"] = json!({
         "signature": "deadbeef",
-    });
-
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .json(&body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn sanitizer_rejects_expected_previous_generation() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
-    let mut body = payload(vec![device("com.example.app", "x-token")]);
-    body["expected_previous_generation"] = json!(7);
-
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
-        .json(&body)
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn sanitizer_rejects_attestation_evidence() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
-    let mut body = payload(vec![device("com.example.app", "x-token")]);
-    body["notification"]["attestation_evidence"] = json!({
-        "tee_quote": "deadbeef",
     });
 
     let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")

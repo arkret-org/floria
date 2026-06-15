@@ -31,18 +31,6 @@ use crate::models::{
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
 
-// Round 4 (spec a77b995) — the leaf-key forbidden list now lives in the
-// single authoritative `crate::sanitize` module
-// ([`crate::sanitize::FORBIDDEN_INBOUND_KEYS`] /
-// [`crate::sanitize::is_forbidden_inbound_key`]) so the `/notify` ingress
-// reject and the pushkin egress strip can never drift apart. The ingress
-// walker below additionally enforces the path-shaped proof-signature
-// pairs in `FORBIDDEN_PLAINTEXT_PARENT_LEAF`.
-//
-// Note: `encrypted_content` is covered by the SDK
-// `is_forbidden_payload_key`, so it is not duplicated in the local set;
-// the ingress walker ORs the SDK predicate in below.
-
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
 /// round-4 specifically calls out the `binding_proof.signature` and
@@ -277,17 +265,9 @@ fn validate_destination_service_did(
 }
 
 fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
-    // Round 4 (spec a77b995) — defense-in-depth: walk the ENTIRE inbound
-    // request (envelope + notification + device data) and reject any
-    // round-4 forbidden plaintext field (binding_proof.signature /
-    // subject_proof.signature / expected_previous_generation /
-    // attestation_evidence). The SDK blind-payload sanitizer already
-    // rejects most of these by leaf-key name, but the round-4 protocol
-    // review closures add new authenticator-shaped material so we run a
-    // local walker that knows about parent.leaf-shaped forbidden paths
-    // too. This walker fires BEFORE any other contract check so a
-    // smuggled CAS-precondition can never even reach the auth /
-    // sanitization layer.
+    // Walk the inbound request for path-shaped proof-signature pairs
+    // before other contract checks so they fail with a stable schema
+    // violation.
     reject_forbidden_plaintext_fields("", raw)?;
 
     let Some(notification) = raw.get("notification") else {
@@ -397,12 +377,6 @@ fn reject_forbidden_plaintext_fields(path: &str, value: &Value) -> Result<(), St
                 } else {
                     format!("{path}.{key}")
                 };
-                if crate::sanitize::is_forbidden_inbound_key(&leaf) {
-                    return Err(format!(
-                        "field `{next_path}` is forbidden on the push wire model \
-                         (round-4 protocol-review closure)"
-                    ));
-                }
                 if let Some(parent_key) = path.rsplit('.').next() {
                     let parent_lower = parent_key.to_ascii_lowercase();
                     if FORBIDDEN_PLAINTEXT_PARENT_LEAF
@@ -690,15 +664,13 @@ fn validate_notification_contract(
     // we surface a more specific reason code first so operators can
     // tell the two failure classes apart.
     if !caller.allow_plaintext_metadata {
-        // Visible rendering keys (title/body/...) plus the inbound-forbidden
-        // correlation keys (metadata/encrypted_*/fields/track*) are both
-        // sourced from the single authoritative `crate::sanitize` module so
-        // this list can't drift from the ingress walker / egress strip.
+        // Visible rendering keys (title/body/...) are rejected here so
+        // operators get the plaintext-profile reason before the generic
+        // blind-content validation runs.
         let forbidden_content = content.keys().find(|key| {
             crate::sanitize::BLIND_FORBIDDEN_CONTENT_TEXT_KEYS
                 .iter()
                 .any(|name| name.eq_ignore_ascii_case(key))
-                || crate::sanitize::is_forbidden_inbound_key(key)
         });
         if let Some(forbidden) = forbidden_content {
             return Err(format!(

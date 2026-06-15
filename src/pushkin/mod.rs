@@ -573,10 +573,7 @@ fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // SDK's `is_forbidden_payload_key` covers `realm_id` (the renamed
     // security-boundary id) AND the renamed container `space_id`. The
     // shared `crate::sanitize::is_forbidden_egress_key` adds floria's
-    // round-R2/R3 governance identifiers and CKP-0007's `circle_id` /
-    // `effective_scope` / `scope_circle_id` on top — the same authoritative
-    // sets the `/notify` ingress reuses, so the two defence layers can't
-    // drift.
+    // provider-egress routing/audit fields on top.
     map.retain(|key, _| !crate::sanitize::is_forbidden_egress_key(key));
     for value in map.values_mut() {
         strip_value_recursive(value);
