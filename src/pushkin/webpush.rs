@@ -396,8 +396,7 @@ impl WebpushPushkin {
         // correlate every notification in a given conversation. We now
         // either skip the topic entirely (so the push gateway never
         // dedupes by scope) or emit a per-message random base64 token
-        // when the device opted into the legacy "collapse to last per
-        // strand" behaviour.
+        // when the device opts into "collapse to last per strand".
         if device.data_bool("only_last_per_strand") == Some(true) {
             builder.set_topic(random_collapse_key());
         }

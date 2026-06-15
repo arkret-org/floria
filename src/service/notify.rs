@@ -13,8 +13,8 @@ use super::metrics::{
     record_notify_delivery_outcomes,
 };
 use super::{
-    ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_STRAND_ID_PREFIX,
-    ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX, MAX_REQUEST_SIZE,
+    ACTIVE_CIRCLE_ID_PREFIX, ACTIVE_EVENT_ID_PREFIX, ACTIVE_MESSAGE_ID_PREFIX,
+    ACTIVE_REALM_ID_PREFIX, ACTIVE_STRAND_ID_PREFIX, MAX_REQUEST_SIZE,
 };
 use crate::audit::AuditEvent;
 use crate::auth::{
@@ -917,8 +917,8 @@ fn validate_blind_string(path: &str, value: &str) -> Result<(), String> {
     }
 }
 
-// T1.1 — the legacy `is_sensitive_payload_key` floria-local allow-list
-// has moved into `cokret::blind_payload_sanitizer::is_forbidden_payload_key`
+// T1.1 — the floria-local `is_sensitive_payload_key` allow-list moved into
+// `cokret::blind_payload_sanitizer::is_forbidden_payload_key`
 // so the chime/floria rule cannot drift. Callers now go through the SDK
 // helper via `validate_blind_content`.
 

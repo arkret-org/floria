@@ -17,7 +17,7 @@ parent Cokret spec's round-numbering for grouping wire-breaking changes.
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
 
-- Audited for mention-reference wire fields: none present (push gateway routes by DID actor lists; `deny_unknown_fields` rejects stray legacy fields). No wire change required for the §3.8 mention shape v2.
+- Audited for mention-reference wire fields: none present (push gateway routes by DID actor lists; `deny_unknown_fields` rejects stray removed fields). No wire change required for the §3.8 mention shape v2.
 - Synced to cokret-spec @ b56cab1; media token signing remains `TODO(R3.2.1)`.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.

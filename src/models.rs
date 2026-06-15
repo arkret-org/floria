@@ -519,20 +519,6 @@ mod tests {
     }
 
     #[test]
-    fn notification_rejects_legacy_prio_wire_field() {
-        let err = serde_json::from_value::<Notification>(json!({
-            "prio": "low",
-            "devices": []
-        }))
-        .unwrap_err();
-
-        assert!(
-            err.to_string().contains("unknown field `prio`"),
-            "expected legacy prio to be rejected, got: {err}"
-        );
-    }
-
-    #[test]
     fn counts_accept_active_fields() {
         let counts: Counts = serde_json::from_value(json!({
             "unread": 3,

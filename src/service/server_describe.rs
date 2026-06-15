@@ -34,7 +34,7 @@ struct PushGatewayDescribeOutcome {
     verified_profiles: Vec<VerifiedProfile>,
     /// Features exposed but NOT promised stable interop.
     experimental_features: Vec<&'static str>,
-    /// Legacy / external-interop surfaces; not part of v1 conformance.
+    /// External-interop surfaces; not part of v1 conformance.
     compat_surfaces: Vec<CompatSurface>,
     /// Mirror of the service's development-mode flag. floria has no
     /// dedicated dev toggle today; if one is added later the

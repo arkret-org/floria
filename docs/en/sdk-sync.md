@@ -56,8 +56,8 @@ Do not remove the local sweep until all of these are true:
 3. floria tests pass after deleting `ROUND23_LOCAL_FORBIDDEN` and
    changing `sanitized_provider_payload` to rely on the SDK helper
    only.
-4. The adapter tests continue to assert `realm_id` and legacy
-   `space_id` are absent from provider payloads.
+4. The adapter tests continue to assert `realm_id` and `space_id` are
+   absent from provider payloads.
 
 ## Spec round upgrade checklist
 

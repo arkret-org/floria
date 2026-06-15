@@ -139,11 +139,7 @@ async fn describe_separates_claim_levels() {
         let kind = surface["kind"].as_str().expect("compat surface kind");
         assert!(matches!(
             kind,
-            "matrix_passthrough"
-                | "mimi_passthrough"
-                | "legacy_alias"
-                | "external_interop"
-                | "deprecated_alias"
+            "matrix_passthrough" | "mimi_passthrough" | "external_interop" | "deprecated_alias"
         ));
     }
 

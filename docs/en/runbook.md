@@ -8,8 +8,8 @@ the higher-level operational decisions that ops engineers face on-call.
 ## APNS provider cert rotation
 
 The APNS surface supports two auth modes: JWT (`.p8`) and certificate
-(`.p12`). The JWT mode is the recommended posture; the cert mode is
-retained for legacy deployments that haven't migrated.
+(`.p12`). The JWT mode is the recommended posture; the cert mode remains
+available for deployments that require APNS certificate authentication.
 
 ### Pre-rotation checklist
 

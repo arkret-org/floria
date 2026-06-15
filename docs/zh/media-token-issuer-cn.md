@@ -55,5 +55,4 @@ floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不�
 |---|---|---|
 | floria 日志出现“minting token locally” | 走到了不该走的本地签发分支 | 立 bug；按 v1 该路径应不存在 |
 | soland 返回 `token_issuer_unauthorised` 但 floria 看起来正常 | 不是 floria 的问题 —— soland 端的 issuer-key 与 realm 绑定不一致；联系 soland 运维 |
-| floria 报 `legacy_single_endpoint_media_service` | realm 的 `ck.realm.media_service` 仍是 v1.0 的 `sfu_endpoint` 形状 | 运行 soland DEPLOYMENT.md 的 R3 迁移 |
 | floria 把 `participant_binding` 写进了非脱敏日志 | 日志库配置漂移 | 修日志字段过滤，确认不再写明文 |

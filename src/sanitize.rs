@@ -45,9 +45,8 @@ use cokret::blind_payload_sanitizer as sdk;
 /// Grouped by the spec revision that introduced each name:
 ///   * Round-4 authenticator / CAS material that must not ride the push wire
 ///     (`expected_previous_generation`, `attestation_*`).
-///   * Phase P2 (spec 37ce729) legacy field-name aliases that were renamed in the candidate
-///     breaking pass; the old forms fail closed so a caller pinned to an old SDK can't smuggle
-///     mismatched semantics through (`size` / `strand_body` / `message_body` / `body_only`).
+///   * Phase P2 (spec 37ce729) field-name aliases removed in the candidate breaking pass (`size` /
+///     `strand_body` / `message_body` / `body_only`).
 ///   * Spec 9dabf26 message/strand carrier split — protocol content / metadata / track selectors
 ///     (`encrypted_*` / `metadata` / `fields` / `track*`).
 pub const FORBIDDEN_INBOUND_KEYS: &[&str] = &[
@@ -55,7 +54,7 @@ pub const FORBIDDEN_INBOUND_KEYS: &[&str] = &[
     "expected_previous_generation",
     "attestation_evidence",
     "attestation_chain",
-    // --- Phase P2 (spec 37ce729) legacy field-name aliases ---
+    // --- Phase P2 (spec 37ce729) forbidden field-name aliases ---
     "size",
     "strand_body",
     "message_body",

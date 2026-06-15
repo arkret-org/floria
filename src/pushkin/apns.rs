@@ -506,12 +506,10 @@ impl ApnsPushkin {
             aps_object.insert("badge".to_owned(), Value::Number(badge.into()));
         }
 
-        // T4.3 — the legacy gateway used to copy event_id / message_id
-        // / strand_id / realm_id / highlight_count onto the APNS payload
-        // alongside the `aps` notification block. Those are stable
-        // correlation identifiers and must NOT survive on the wire any
-        // more: the client decrypts an e2ee envelope keyed on
-        // `push_target_id` to recover them.
+        // T4.3 — stable correlation identifiers must not be copied onto
+        // the APNS payload alongside the `aps` notification block. The
+        // client decrypts an e2ee envelope keyed on `push_target_id` to
+        // recover them.
         //
         // Allowed blind-wakeup fields are emitted alongside `aps` so
         // service extensions can still detect the wakeup kind and pull
