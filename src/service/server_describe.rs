@@ -2,91 +2,44 @@ use std::sync::Arc;
 
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde::Serialize;
+use serde_json::{Map, Value, json};
 
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
-#[derive(Debug, Serialize)]
-struct PushGatewayDescribeOutcome {
-    service_did: Option<String>,
-    operation_id: &'static str,
-    supported_profiles: Vec<&'static str>,
-    supported_providers: Vec<String>,
-    plaintext_visibility_class: &'static str,
-    limits: GatewayDescribeLimits,
-    auth_modes: Vec<&'static str>,
-    // T6.1 — claim-level partition (service-surface.md §3.0 /
-    // ck.schema.service_describe.v1). `supported_profiles` above is kept
-    // for backward compatibility with existing clients; the fields below
-    // partition feature implementation from profile claims and dev
-    // posture from cotest-verified claims.
-    /// feature_ids the service has implementation code for but does NOT
-    /// necessarily claim conformance for.
-    implemented_features: Vec<&'static str>,
-    /// Self-claimed profiles. `claim_kind` MUST be `self_claimed`.
-    claimed_profiles: Vec<ClaimedProfile>,
-    /// cotest-verified profiles. MUST be empty when
-    /// `development_mode=true` (floria has no dedicated dev toggle, so
-    /// this is always `[]` until a cotest verifier writes a real entry).
-    verified_profiles: Vec<VerifiedProfile>,
-    /// Features exposed but NOT promised stable interop.
-    experimental_features: Vec<&'static str>,
-    /// External-interop surfaces; not part of v1 conformance.
-    compat_surfaces: Vec<CompatSurface>,
-    /// Mirror of the service's development-mode flag. floria has no
-    /// dedicated dev toggle today; if one is added later the
-    /// `verified_profiles=[]` invariant MUST be re-enforced.
-    development_mode: bool,
-}
-
-/// T6.1 — self-claimed profile entry; `claim_kind` is always
-/// `self_claimed`.
-#[derive(Debug, Serialize)]
-struct ClaimedProfile {
-    profile_id: &'static str,
-    claim_kind: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    notes: Option<&'static str>,
-}
-
-/// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_digest`, `artifact_ref`, `cotest_issuer_did`, `signature`,
-/// `timestamp`. Dev-mode posture MUST NOT advertise any such entry.
-#[derive(Debug, Serialize)]
-struct VerifiedProfile {
-    profile_id: String,
-    claim_kind: &'static str,
-    cotest_run_id: String,
-    artifact_digest: String,
-    artifact_ref: String,
-    cotest_issuer_did: String,
-    signature: String,
-    timestamp: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    expires_at: Option<String>,
-}
-
-/// T6.1 — compat / external-interop surface entry. `kind` ∈ schema enum.
-#[derive(Debug, Serialize)]
-struct CompatSurface {
-    name: &'static str,
-    kind: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    notes: Option<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-struct GatewayDescribeLimits {
-    max_request_size_bytes: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dedup_backend: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dedup_ttl_seconds: Option<u64>,
-    rate_limit_window_seconds: Option<u64>,
-    rate_limit_scopes: Vec<&'static str>,
+/// FLORIA-01 — `GET /_cokret/describe` MUST emit the canonical
+/// `ServiceDescribe` (`cokret::ServiceDescribe` = `ServerDescription`)
+/// defined by `service-describe.schema.json`, not a push-gateway-private
+/// shape. The push-private matrix (provider list, auth modes, dedup,
+/// rate-limit scopes, operation id) lives under the canonical
+/// `limits`/`supported_features`/`auth_metadata` fields and `x_floria_*`
+/// extension keys — never as bespoke top-level fields. The product's
+/// private describe surface stays on `/_floria/*`.
+///
+/// DEFERRED (SDK gap): the schema's `service_type=push_gateway` branch
+/// additionally requires a top-level `privacy_derivation.push_target_id`
+/// block. The SDK `ServerDescription` struct has no `privacy_derivation`
+/// field and exposes no top-level `extra` flatten, so this gateway-only
+/// required block cannot be expressed through the strongly-typed SDK
+/// surface today. It is intentionally NOT fabricated here; emitting it
+/// must wait for an SDK field (tracked as a FLORIA-01 deferred sub-item).
+/// Floria's HMAC push-target-id derivation profile metadata is mirrored
+/// into `limits.x_floria_privacy_derivation` so consumers that read the
+/// floria extension still see it.
+fn floria_service_did(auth: &NotifyAuthConfig) -> cokret::Did {
+    // production_mode enforces a configured gateway_service_did; in dev
+    // postures it may be absent, so fall back to a stable, clearly
+    // non-routable placeholder DID rather than failing the describe.
+    let raw = auth
+        .gateway_service_did
+        .clone()
+        .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
+    cokret::Did::new(raw).unwrap_or_else(|_| {
+        cokret::Did::new("did:web:floria.invalid".to_owned())
+            .expect("static placeholder DID is well-formed")
+    })
 }
 
 #[handler]
@@ -105,6 +58,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         return;
     };
 
+    let auth = &state.notify_auth;
+
     let dedup_backend = state
         .notify_deduplicator
         .as_ref()
@@ -122,57 +77,158 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         .as_ref()
         .map(|limiter| describe_rate_limit_scopes(limiter.config()))
         .unwrap_or_default();
-    // T6.1 — claim-level partition fields. Today floria has no cotest
-    // verifier wired in, so `verified_profiles=[]` always; the push
-    // gateway profile is self-claimed only. The `development_mode=true
-    // => verified_profiles=[]` invariant is trivially upheld and
-    // debug_asserted below.
-    let development_mode = false;
-    let verified_profiles: Vec<VerifiedProfile> = Vec::new();
-    debug_assert!(
-        !development_mode || verified_profiles.is_empty(),
-        "development_mode=true requires verified_profiles=[] (service-surface.md §3.0)"
-    );
 
-    let supported_profiles = describe_supported_profiles(&state.notify_auth);
+    // T6.1 — floria has no cotest verifier wired in, so the push gateway
+    // profile is self-claimed only and `verified_profiles` is always
+    // empty. The `development_mode=true => verified_profiles=[]`
+    // invariant (validated by `ServerDescription::validate`) is trivially
+    // upheld.
+    let development_mode = false;
+    let verified_profiles: Vec<cokret::VerifiedProfileEntry> = Vec::new();
+
+    let supported_profiles = describe_supported_profiles(auth);
     let claimed_profiles = supported_profiles
         .iter()
-        .map(|&profile_id| ClaimedProfile {
-            profile_id,
-            claim_kind: "self_claimed",
-            notes: (profile_id == PROFILE_PUSH_GATEWAY).then_some(
-                "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)",
-            ),
+        .map(|&profile_id| {
+            let mut entry = cokret::ClaimedProfileEntry::self_claimed(profile_id);
+            if profile_id == PROFILE_PUSH_GATEWAY {
+                entry.notes = Some(
+                    "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)"
+                        .to_owned(),
+                );
+            }
+            entry
         })
         .collect();
 
-    let body = PushGatewayDescribeOutcome {
-        service_did: state.notify_auth.gateway_service_did.clone(),
-        operation_id: NOTIFY_OPERATION_ID,
-        supported_profiles,
-        supported_providers: state.registry.provider_names(),
-        plaintext_visibility_class: describe_plaintext_visibility(&state.notify_auth),
-        limits: GatewayDescribeLimits {
-            max_request_size_bytes: MAX_REQUEST_SIZE,
-            dedup_backend,
-            dedup_ttl_seconds,
-            rate_limit_window_seconds,
-            rate_limit_scopes,
-        },
-        auth_modes: describe_auth_modes(&state.notify_auth),
+    let auth_modes = describe_auth_modes(auth);
+    let plaintext_class = describe_plaintext_visibility(auth);
+
+    // Push-gateway-private matrix folded into the canonical `limits`
+    // object as floria extension keys (`x_floria_*`). The schema permits
+    // an arbitrary `limits` object; receivers that only understand
+    // canonical fields ignore the extensions, while floria-aware clients
+    // recover the provider matrix, dedup config and rate-limit scopes.
+    let mut limits = Map::new();
+    limits.insert("max_request_size_bytes".to_owned(), json!(MAX_REQUEST_SIZE));
+    limits.insert(
+        "x_floria_operation_id".to_owned(),
+        json!(NOTIFY_OPERATION_ID),
+    );
+    limits.insert(
+        "x_floria_supported_providers".to_owned(),
+        json!(state.registry.provider_names()),
+    );
+    limits.insert(
+        "x_floria_plaintext_visibility_class".to_owned(),
+        json!(plaintext_class),
+    );
+    limits.insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
+    if let Some(backend) = dedup_backend {
+        limits.insert("x_floria_dedup_backend".to_owned(), json!(backend));
+    }
+    if let Some(ttl) = dedup_ttl_seconds {
+        limits.insert("x_floria_dedup_ttl_seconds".to_owned(), json!(ttl));
+    }
+    limits.insert(
+        "x_floria_rate_limit_window_seconds".to_owned(),
+        json!(rate_limit_window_seconds),
+    );
+    limits.insert(
+        "x_floria_rate_limit_scopes".to_owned(),
+        json!(rate_limit_scopes),
+    );
+    // DEFERRED mirror — see module doc: canonical top-level
+    // `privacy_derivation` cannot be expressed via the SDK struct yet, so
+    // the floria derivation profile metadata is surfaced under the floria
+    // extension namespace until the SDK gains the strong field.
+    limits.insert(
+        "x_floria_privacy_derivation".to_owned(),
+        json!({
+            "push_target_id": {
+                "derivation_profile": "ck.push_target_id.hmac_sha256.v1",
+                "secret_scope": "per_service"
+            }
+        }),
+    );
+
+    // Auth metadata: canonical `mode` summarises the gateway posture; the
+    // floria-specific mode list rides in the `x_*`-only `extra` map.
+    let mode = if auth.enabled() {
+        "service"
+    } else {
+        "anonymous"
+    };
+    let mut auth_metadata = cokret::AuthMetadata::minimal(mode);
+    auth_metadata
+        .extra
+        .insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
+
+    let plaintext_visibility = if plaintext_class == "service-gated" {
+        cokret::PlaintextVisibility {
+            max_visibility: Some(cokret::PlaintextMaxVisibility::DerivedPlaintext),
+            notes: Some(
+                "service-gated visible-notification plaintext; per-service allowlisted".to_owned(),
+            ),
+            ..cokret::PlaintextVisibility::default()
+        }
+    } else {
+        cokret::PlaintextVisibility::none()
+    };
+
+    let body = cokret::ServiceDescribe {
+        service_did: floria_service_did(auth),
+        // DEFERRED: floria has no configured deployment trust domain; a
+        // stable placeholder is emitted until a `trust_domain` config
+        // field is wired in (see module doc / FLORIA-01 deferred items).
+        trust_domain: cokret::TypedTrustDomainId::new("ck:trust_domain:floria")
+            .expect("static placeholder trust domain is well-formed"),
+        service_type: "push_gateway".to_owned(),
+        protocol_version: cokret::PROTOCOL_VERSION.to_owned(),
+        supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
+        supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],
+        supported_bindings: vec![cokret::SupportedBinding::new("http")],
+        supported_features: vec![
+            "push.notify".to_owned(),
+            "push.bridge_describe".to_owned(),
+            "push.dedup".to_owned(),
+            "push.rate_limit".to_owned(),
+            "push.provider_matrix".to_owned(),
+        ],
+        auth_metadata,
+        limits: Value::Object(limits),
+        plaintext_visibility,
         implemented_features: vec![
-            "push.notify",
-            "push.bridge_describe",
-            "push.dedup",
-            "push.rate_limit",
-            "push.provider_matrix",
+            "push.notify".to_owned(),
+            "push.bridge_describe".to_owned(),
+            "push.dedup".to_owned(),
+            "push.rate_limit".to_owned(),
+            "push.provider_matrix".to_owned(),
         ],
         claimed_profiles,
         verified_profiles,
-        experimental_features: vec!["push.bridge.failure_codes", "push.notify.retry_queue"],
+        experimental_features: vec![
+            "push.bridge.failure_codes".to_owned(),
+            "push.notify.retry_queue".to_owned(),
+        ],
         compat_surfaces: vec![],
         development_mode,
+        rate_limit_policy: Some(cokret::RateLimitPolicy::unspecified()),
+        rate_limit_policy_id: None,
+        egress_network_policy: Some(cokret::EgressNetworkPolicy::deny_private_defaults()),
+        supported_reducer_profiles: vec![],
+        supported_schema_profiles: vec![],
+        frontier: Vec::new(),
+        snapshot_frontier: Vec::new(),
+        reducer_profile: None,
+        last_materialized_at: None,
     };
+
+    debug_assert!(
+        body.validate().is_ok(),
+        "floria ServiceDescribe must satisfy schema cross-field invariants"
+    );
+
     res.status_code(StatusCode::OK);
     res.render(Json(body));
 }

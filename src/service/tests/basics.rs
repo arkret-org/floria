@@ -50,7 +50,14 @@ async fn describe_endpoint_advertises_gateway_profile() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    assert_eq!(body["operation_id"], json!(NOTIFY_OPERATION_ID));
+    // FLORIA-01 — canonical ServiceDescribe shape. The push-gateway
+    // matrix (operation id, providers, plaintext class, auth modes) is
+    // folded into `limits` under `x_floria_*` extension keys.
+    assert_eq!(body["service_type"], json!("push_gateway"));
+    assert_eq!(
+        body["limits"]["x_floria_operation_id"],
+        json!(NOTIFY_OPERATION_ID)
+    );
     // The mandatory blind-wakeup baseline is always advertised alongside
     // the base profile; the visible-notification profile is only added
     // when a plaintext-eligible surface is configured (not here).
@@ -61,12 +68,15 @@ async fn describe_endpoint_advertises_gateway_profile() {
             "ck.profile.push_gateway.blind_wakeup.v1"
         ])
     );
-    assert_eq!(body["supported_providers"], json!(["com.example.app"]));
     assert_eq!(
-        body["plaintext_visibility_class"],
+        body["limits"]["x_floria_supported_providers"],
+        json!(["com.example.app"])
+    );
+    assert_eq!(
+        body["limits"]["x_floria_plaintext_visibility_class"],
         json!("blind-wakeup-only")
     );
-    assert_eq!(body["auth_modes"], json!(["anonymous"]));
+    assert_eq!(body["limits"]["x_floria_auth_modes"], json!(["anonymous"]));
     assert_eq!(
         body["limits"]["max_request_size_bytes"],
         json!(MAX_REQUEST_SIZE)
@@ -194,7 +204,9 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    let modes = body["auth_modes"].as_array().expect("auth_modes array");
+    let modes = body["limits"]["x_floria_auth_modes"]
+        .as_array()
+        .expect("x_floria_auth_modes array");
 
     assert!(!modes.contains(&json!("bearer")));
     assert!(modes.contains(&json!("http-message-signature")));
@@ -217,7 +229,11 @@ async fn gateway_describe_lives_at_root_meta_position() {
         .await;
     assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
     let server_body = server_response.take_json::<Value>().await.unwrap();
-    assert_eq!(server_body["operation_id"], json!(NOTIFY_OPERATION_ID));
+    assert_eq!(server_body["service_type"], json!("push_gateway"));
+    assert_eq!(
+        server_body["limits"]["x_floria_operation_id"],
+        json!(NOTIFY_OPERATION_ID)
+    );
 
     // The self-made /_cokret/edge/push/describe path MUST NOT exist;
     // ck.edge.push.* registers only register/unregister/notify.
