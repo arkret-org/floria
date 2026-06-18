@@ -88,6 +88,15 @@ static NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER: LazyLock<IntCounterVec> = LazyLoc
     .expect("register floria_notify_delivery_outcome_by_app_total")
 });
 
+static NOTIFY_SUPPRESSED_COUNTER: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
+        "floria_notify_suppressed_total",
+        "Number of devices suppressed before provider dispatch by caller-supplied push_decision reason",
+        &["reason"]
+    )
+    .expect("register floria_notify_suppressed_total")
+});
+
 // CKP-0007 — per-(provider, scope) delivery breakdown. The scope label
 // is `realm_id` by default; when the operator opts in to
 // `http.metrics_detailed_circle_labels = true` and the request carried
@@ -263,6 +272,7 @@ pub fn init() {
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_COUNTER);
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_PROVIDER_COUNTER);
     LazyLock::force(&NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER);
+    LazyLock::force(&NOTIFY_SUPPRESSED_COUNTER);
     LazyLock::force(&NOTIFY_RATE_LIMIT_REJECT_COUNTER);
     LazyLock::force(&NOTIFY_DEDUP_LOOKUP_COUNTER);
     LazyLock::force(&AUDIT_DIVERT_COUNTER);
@@ -384,6 +394,31 @@ pub fn notify_delivery_outcome_by_app(app_id: &str, outcome: &str, count: usize)
     NOTIFY_DELIVERY_OUTCOME_BY_APP_COUNTER
         .with_label_values(&[app_id, outcome])
         .inc_by(count as u64);
+}
+
+pub fn notify_suppressed(reason: Option<&str>, count: usize) {
+    if count == 0 {
+        return;
+    }
+    NOTIFY_SUPPRESSED_COUNTER
+        .with_label_values(&[canonical_suppress_reason(reason)])
+        .inc_by(count as u64);
+}
+
+fn canonical_suppress_reason(reason: Option<&str>) -> &'static str {
+    let Some(reason) = reason.map(str::trim).filter(|value| !value.is_empty()) else {
+        return "unspecified";
+    };
+    match reason {
+        "dnd" | "dnd_active" | "dnd_suppressed" | "do_not_disturb" => "dnd",
+        "snooze" | "snoozed" | "snooze_active" | "snooze_suppressed" => "snooze",
+        "muted" => "muted",
+        "not_mentioned" => "not_mentioned",
+        "not_participating" => "not_participating",
+        "blocked" | "blocklist" | "blocklisted" => "blocked",
+        "dont_notify" | "rule_dont_notify" => "dont_notify",
+        _ => "other",
+    }
 }
 
 /// CKP-0007 — per-(provider, scope) delivery counter. `scope_kind` is
@@ -546,6 +581,7 @@ mod tests {
         notify_delivery_outcomes(1, 2, 3, 4);
         notify_delivery_outcome_by_provider("apns", "accepted", 1);
         notify_delivery_outcome_by_app("com.example.app", "accepted", 1);
+        notify_suppressed(Some("dnd"), 1);
         notify_rate_limit_reject("origin_service");
         notify_dedup_lookup("hit");
         audit_divert("policy_access", "success");
@@ -568,6 +604,7 @@ mod tests {
         assert!(body.contains("floria_notify_delivery_outcome_total"));
         assert!(body.contains("floria_notify_delivery_outcome_by_provider_total"));
         assert!(body.contains("floria_notify_delivery_outcome_by_app_total"));
+        assert!(body.contains("floria_notify_suppressed_total"));
         assert!(body.contains("floria_notify_rate_limit_reject_total"));
         assert!(body.contains("floria_notify_dedup_lookup_total"));
         assert!(body.contains("floria_audit_divert_total"));

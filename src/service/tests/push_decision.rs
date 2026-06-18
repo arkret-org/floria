@@ -9,6 +9,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use prometheus::Encoder;
 use salvo::http::StatusCode;
 use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
@@ -30,6 +31,20 @@ fn device_with_decision(
     }
     entry["push_decision"] = decision;
     entry
+}
+
+fn suppressed_metric_value(reason: &str) -> f64 {
+    let encoder = prometheus::TextEncoder::new();
+    let mut buffer = Vec::new();
+    encoder.encode(&prometheus::gather(), &mut buffer).unwrap();
+    let body = String::from_utf8(buffer).unwrap();
+    let prefix = format!("floria_notify_suppressed_total{{reason=\"{reason}\"}} ");
+    body.lines()
+        .find_map(|line| {
+            line.strip_prefix(&prefix)
+                .and_then(|value| value.trim().parse::<f64>().ok())
+        })
+        .unwrap_or(0.0)
 }
 
 #[tokio::test]
@@ -60,6 +75,35 @@ async fn caller_push_decision_dont_notify_skips_dispatch_and_records_reason() {
     // The pushkin never sees the device — caller's decision short-
     // circuits dispatch entirely.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn caller_push_decision_dnd_and_snooze_record_suppress_metrics() {
+    let dnd_before = suppressed_metric_value("dnd");
+    let snooze_before = suppressed_metric_value("snooze");
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .json(&payload(vec![
+            device_with_decision("com.example.app", "dnd-token", false, Some("dnd_active")),
+            device_with_decision("com.example.app", "snooze-token", false, Some("snoozed")),
+        ]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert_eq!(body.rejected.len(), 2);
+    assert_eq!(body.rejected[0]["reason_code"], json!("dnd_active"));
+    assert_eq!(body.rejected[1]["reason_code"], json!("snoozed"));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(suppressed_metric_value("dnd") >= dnd_before + 1.0);
+    assert!(suppressed_metric_value("snooze") >= snooze_before + 1.0);
 }
 
 #[tokio::test]

@@ -743,6 +743,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 reason_code = hint.reason_code.as_deref().unwrap_or(""),
                 "skipping device per caller-supplied push_decision"
             );
+            app_metrics::notify_suppressed(hint.reason_code.as_deref(), 1);
             rejected.push(
                 rejected_device(device, Some(&device.push_key))
                     .with_reason_code(hint.reason_code.as_deref()),

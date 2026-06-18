@@ -50,6 +50,18 @@ pub const STRIP_ONLY_KEYS: &[&str] = &[
     "fields",
     "track",
     "track_name",
+    // --- Actor-private notification preference state ---
+    "push_rules",
+    "dnd",
+    "dnd_schedule",
+    "dnd_enabled",
+    "dnd_exceptions",
+    "snooze",
+    "snoozed",
+    "snooze_expires_at",
+    "snooze_until",
+    "target_ref",
+    "target_key",
     // --- CKP-0007 Circle primitive (routing-only) ---
     "circle_id",
     "effective_scope",
@@ -138,6 +150,10 @@ mod tests {
         assert!(is_forbidden_egress_key("policy_frontier_digest"));
         // SDK-covered names are egress-stripped.
         assert!(is_forbidden_egress_key("encrypted_content"));
+        // Actor-private notification preference state is egress-stripped.
+        assert!(is_forbidden_egress_key("dnd_schedule"));
+        assert!(is_forbidden_egress_key("snooze_expires_at"));
+        assert!(is_forbidden_egress_key("target_ref"));
         // Allowed blind field stays allowed at both layers.
         assert!(!is_forbidden_egress_key("push_target_id"));
     }

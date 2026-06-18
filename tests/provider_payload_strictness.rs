@@ -199,6 +199,51 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     }
 }
 
+#[test]
+fn sanitizer_strips_private_notification_preferences() {
+    let payload = json!({
+        "client": "android",
+        "wakeup_kind": "message",
+        "dnd": {
+            "enabled": true,
+            "schedule": { "timezone": "Asia/Shanghai" },
+        },
+        "push_rules": [{ "rule_id": "quiet-hours" }],
+        "snooze": {
+            "snooze_expires_at": "2026-06-07T09:00:00Z",
+            "target_ref": "opaque-target-ref",
+            "target_key": "opaque-target-key",
+        },
+        "nested": {
+            "dnd_schedule": { "periods": [{ "start": "22:00", "end": "08:00" }] },
+            "snooze_until": "2026-06-07T09:00:00Z",
+        },
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+
+    let sanitized = sanitized_provider_payload(payload).unwrap();
+    let serialized = serde_json::to_string(&sanitized).unwrap();
+    for forbidden in [
+        "dnd",
+        "dnd_schedule",
+        "push_rules",
+        "snooze",
+        "snooze_expires_at",
+        "snooze_until",
+        "target_ref",
+        "target_key",
+    ] {
+        assert!(
+            !serialized.contains(forbidden),
+            "private notification preference `{forbidden}` leaked through sanitizer: {serialized}"
+        );
+    }
+    assert_eq!(sanitized.get("client"), Some(&json!("android")));
+    assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));
+}
+
 // ---------------------------------------------------------------------------
 // CKP-0007 Circle primitive — privacy invariants.
 //

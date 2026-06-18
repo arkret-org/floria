@@ -69,6 +69,18 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "ice_candidate",
     "facet",
     "view_renderer",
+    // Actor-private notification preference state.
+    "push_rules",
+    "dnd",
+    "dnd_schedule",
+    "dnd_enabled",
+    "dnd_exceptions",
+    "snooze",
+    "snoozed",
+    "snooze_expires_at",
+    "snooze_until",
+    "target_ref",
+    "target_key",
     // Round R2/R3 (2026-05-20) additions — stripped locally by floria
     // ahead of the SDK forbidden-list update (T07/T10/T06).
     "appeal_id",
