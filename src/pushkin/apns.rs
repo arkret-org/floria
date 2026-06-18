@@ -351,59 +351,13 @@ impl ApnsPushkin {
                 let scope_display = notification
                     .scope_title()
                     .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
-                let msgtype = notification
-                    .content
-                    .as_ref()
-                    .and_then(|content| content.get("msgtype"))
-                    .and_then(Value::as_str);
-                let body = notification.content_body();
-                let content_display = body.map(|body| trim_chars(body, APNS_MAX_FIELD_LENGTH));
-                let action_display = if msgtype == Some("m.emote") {
-                    content_display.clone()
-                } else {
-                    None
-                };
-                let is_image = msgtype == Some("m.image");
 
                 if let Some(scope_display) = scope_display {
-                    match (is_image, content_display, action_display) {
-                        (true, content, _) => {
-                            loc_key = Some("IMAGE_FROM_USER_IN_ROOM");
-                            loc_args =
-                                vec![from_display, content.unwrap_or_default(), scope_display];
-                        }
-                        (false, Some(content), _) if msgtype != Some("m.emote") => {
-                            loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
-                            loc_args = vec![from_display, scope_display, content];
-                        }
-                        (false, _, Some(action)) => {
-                            loc_key = Some("ACTION_FROM_USER_IN_ROOM");
-                            loc_args = vec![scope_display, from_display, action];
-                        }
-                        _ => {
-                            loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                            loc_args = vec![from_display, scope_display];
-                        }
-                    }
+                    loc_key = Some("MSG_FROM_USER_IN_ROOM");
+                    loc_args = vec![from_display, scope_display];
                 } else {
-                    match (is_image, content_display, action_display) {
-                        (true, content, _) => {
-                            loc_key = Some("IMAGE_FROM_USER");
-                            loc_args = vec![from_display, content.unwrap_or_default()];
-                        }
-                        (false, Some(content), _) if msgtype != Some("m.emote") => {
-                            loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                            loc_args = vec![from_display, content];
-                        }
-                        (false, _, Some(action)) => {
-                            loc_key = Some("ACTION_FROM_USER");
-                            loc_args = vec![from_display, action];
-                        }
-                        _ => {
-                            loc_key = Some("MSG_FROM_USER");
-                            loc_args = vec![from_display];
-                        }
-                    }
+                    loc_key = Some("MSG_FROM_USER");
+                    loc_args = vec![from_display];
                 }
             }
             Some("incoming_call") => {
@@ -411,20 +365,7 @@ impl ApnsPushkin {
                     loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
                     loc_args = vec![from_display, trim_chars(push_hint, APNS_MAX_FIELD_LENGTH)];
                 } else {
-                    let is_video = notification
-                        .content
-                        .as_ref()
-                        .and_then(|content| content.get("offer"))
-                        .and_then(Value::as_object)
-                        .and_then(|offer| offer.get("sdp"))
-                        .and_then(Value::as_str)
-                        .map(|sdp| sdp.contains("m=video"))
-                        .unwrap_or(false);
-                    loc_key = Some(if is_video {
-                        "VIDEO_CALL_FROM_USER"
-                    } else {
-                        "VOICE_CALL_FROM_USER"
-                    });
+                    loc_key = Some("VOICE_CALL_FROM_USER");
                     loc_args = vec![from_display];
                 }
             }
@@ -442,21 +383,8 @@ impl ApnsPushkin {
             }
             Some(_) => {
                 if let Some(scope_title) = notification.scope_title() {
-                    if let Some(body) = notification.content_body() {
-                        loc_key = Some("MSG_FROM_USER_IN_ROOM_WITH_CONTENT");
-                        loc_args = vec![
-                            from_display,
-                            trim_chars(scope_title, APNS_MAX_FIELD_LENGTH),
-                            trim_chars(body, APNS_MAX_FIELD_LENGTH),
-                        ];
-                    } else {
-                        loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                        loc_args =
-                            vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
-                    }
-                } else if let Some(body) = notification.content_body() {
-                    loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                    loc_args = vec![from_display, trim_chars(body, APNS_MAX_FIELD_LENGTH)];
+                    loc_key = Some("MSG_FROM_USER_IN_ROOM");
+                    loc_args = vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
                 } else {
                     loc_key = Some("MSG_FROM_USER");
                     loc_args = vec![from_display];
@@ -898,9 +826,9 @@ mod tests {
             .unwrap();
 
         // T4.3 — stable correlation identifiers are stripped. The
-        // visible alert still renders in `aps.alert` because the
-        // visible profile is in effect, but the freeform extension
-        // keys only carry the SDK-allowed blind fields.
+        // visible alert still renders from allowed labels in `aps.alert`,
+        // but message content is ignored and the freeform extension keys
+        // only carry the SDK-allowed blind fields.
         assert_eq!(
             payload,
             json!({
@@ -908,11 +836,10 @@ mod tests {
                 "wakeup_kind": "message",
                 "aps": {
                     "alert": {
-                        "loc-key": "MSG_FROM_USER_IN_ROOM_WITH_CONTENT",
+                        "loc-key": "MSG_FROM_USER_IN_ROOM",
                         "loc-args": [
                             "Major Tom",
-                            "Mission Control",
-                            "I'm floating in a most peculiar way."
+                            "Mission Control"
                         ]
                     },
                     // §5.1 — unread=3 bucketed to the `2-5` representative 5.

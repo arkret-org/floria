@@ -121,19 +121,7 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
             if let Some(push_hint) = notification.push_hint_text() {
                 push_hint.to_owned()
             } else {
-                if notification
-                    .content
-                    .as_ref()
-                    .and_then(|content| content.get("offer"))
-                    .and_then(Value::as_object)
-                    .and_then(|offer| offer.get("sdp"))
-                    .and_then(Value::as_str)
-                    .is_some_and(|sdp| sdp.contains("m=video"))
-                {
-                    format!("{sender} is calling you")
-                } else {
-                    format!("{sender} started a voice call")
-                }
+                format!("{sender} started a voice call")
             }
         }
         Some("member")
@@ -164,43 +152,11 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
 }
 
 fn message_summary(notification: &Notification, sender: &str) -> String {
-    let has_scope = notification.scope_title().is_some();
-    let msgtype = notification
-        .content
-        .as_ref()
-        .and_then(|content| content.get("msgtype"))
-        .and_then(Value::as_str);
-    match msgtype {
-        Some("m.text") | Some("m.notice") | Some("m.encrypted") | None => {
-            if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(has_scope, sender, body)
-            } else {
-                format!("{sender} sent a message")
-            }
-        }
-        Some("m.image") => format!("{sender} sent an image"),
-        Some("m.file") => format!("{sender} sent a file"),
-        Some("m.video") => format!("{sender} sent a video"),
-        Some("m.audio") => format!("{sender} sent audio"),
-        Some("m.location") => format!("{sender} shared a location"),
-        Some("m.emote") => content_body(notification)
-            .map(|body| format!("* {sender} {body}"))
-            .unwrap_or_else(|| format!("{sender} sent an emote")),
-        Some(other) => {
-            if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(has_scope, sender, body)
-            } else {
-                format!("{sender} sent {other}")
-            }
-        }
-    }
+    let _ = notification;
+    format!("{sender} sent a message")
 }
 
 fn fallback_summary(notification: &Notification, sender: &str) -> String {
-    if let Some(body) = content_body(notification) {
-        return maybe_prefix_sender(notification.scope_title().is_some(), sender, body);
-    }
-
     // §5.1 minimization — never render the absolute unread integer into
     // the provider-visible alert text. Even on the visible profile the
     // provider can read this string, so the count is bucketed to the
@@ -227,12 +183,8 @@ fn maybe_prefix_sender(has_scope: bool, sender: &str, body: String) -> String {
 }
 
 fn content_body(notification: &Notification) -> Option<String> {
-    let text = notification.content_body()?;
-    if text.is_empty() {
-        return None;
-    }
-    let (text, _) = truncate_str(text, BODY_MAX_BYTES);
-    Some(text)
+    let _ = notification;
+    None
 }
 
 #[cfg(test)]
@@ -300,7 +252,7 @@ mod tests {
         // metadata. They go into the provider's notification block,
         // not the freeform `data` dict — so they're rendered here.
         assert_eq!(payload.title, "Mission Control");
-        assert_eq!(payload.body, "Major Tom: Ground control to Major Tom");
+        assert_eq!(payload.body, "Major Tom sent a message");
         assert_eq!(payload.priority, AndroidPriority::High);
 
         // T4.3 — the freeform `data` dict MUST NOT carry stable

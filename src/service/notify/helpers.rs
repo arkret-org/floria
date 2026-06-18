@@ -354,9 +354,6 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
             Value::String(value.clone()),
         );
     }
-    if let Some(value) = notification.content.as_ref() {
-        normalized.insert("content".to_owned(), Value::Object(value.clone()));
-    }
     if let Some(value) = notification.event_id.as_ref() {
         normalized.insert("event_id".to_owned(), Value::String(value.clone()));
     }

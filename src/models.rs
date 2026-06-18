@@ -228,6 +228,9 @@ pub struct Notification {
     pub membership: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_actor_display_name: Option<String>,
+    /// Legacy product-private preview container. The notify ingress keeps
+    /// this field only to return a stable schema violation for stale callers;
+    /// provider adapters MUST NOT render or forward it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<Map<String, Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -332,13 +335,7 @@ impl Notification {
     }
 
     pub fn content_body(&self) -> Option<&str> {
-        self.content
-            .as_ref()
-            .and_then(|content| content.get("body"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .or_else(|| self.push_hint_text())
+        None
     }
 
     pub fn is_low_priority(&self) -> bool {

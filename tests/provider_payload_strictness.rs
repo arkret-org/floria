@@ -12,7 +12,8 @@
 //!      include forbidden keys and assert that they are stripped (or the request is rejected).
 //!   2. **Profile gating** — drive the `/_cokret/edge/push/notify` HTTP handler with blind-profile
 //!      callers carrying plaintext content and assert that the response is `failed_precondition`
-//!      (412) with the `plaintext_in_blind_profile` reason.
+//!      (412) with the `plaintext_in_blind_profile` reason; visible-profile callers still reject
+//!      `notification.content` because product-private bodies are outside the notify wire surface.
 //!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
 //!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
 //!      typed-id substring.
@@ -587,6 +588,44 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         response.status_code.unwrap(),
         StatusCode::OK,
         "visible-profile caller must be allowed to send plaintext metadata"
+    );
+}
+
+#[tokio::test]
+async fn notify_visible_profile_rejects_product_private_content_body() {
+    let service = visible_profile_service();
+    let body = blind_payload(
+        json!({
+            "strand_title": "Mission Control",
+            "sender_actor_display_name": "Major Tom",
+            "content": {"body": "secret message"},
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            "x-cokret-destination-service-did",
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&body)
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body_text = response.take_string().await.unwrap();
+    assert!(
+        body_text.contains("schema_violation"),
+        "expected schema_violation code, got: {body_text}"
+    );
+    assert!(
+        body_text.contains("content") || body_text.contains("forbidden_field"),
+        "expected content rejection, got: {body_text}"
     );
 }
 
