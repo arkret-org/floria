@@ -551,11 +551,11 @@ mod tests {
         let request: PushNotifyRequestBody = serde_json::from_value(json!({
             "event_kind": "ck.message",
             "notification": {
-                "event_id": "ck:event:01JS0EV000000000000000000",
+                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "routing_metadata": {
-                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
                 },
                 "devices": [{
                     "app_id": "app.example.android",
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(request.event_kind.as_deref(), Some("ck.message"));
         assert_eq!(
             request.notification.realm_id(),
-            Some("ck:realm:01JS0SP000000000000000000")
+            Some("ck:realm:0196419b-0000-7000-8000-000000000003")
         );
         assert_eq!(request.notification.devices.len(), 1);
     }

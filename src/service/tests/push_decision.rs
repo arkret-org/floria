@@ -49,12 +49,14 @@ async fn caller_push_decision_dont_notify_skips_dispatch_and_records_reason() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     // Caller's `dont_notify` decision propagates to RejectedDevice with
     // the wire-safe reason code.
-    assert_eq!(body.accepted, 0);
     assert_eq!(body.rejected.len(), 1);
-    assert_eq!(body.rejected[0].reason_code.as_deref(), Some("muted"));
+    assert_eq!(body.rejected[0]["reason_code"], json!("muted"));
     // The pushkin never sees the device — caller's decision short-
     // circuits dispatch entirely.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -77,11 +79,13 @@ async fn caller_push_decision_deliver_true_falls_through_to_dispatch() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     // `deliver=true` is treated as pass-through — floria does not
     // surface the `watch_allows` reason on accepted devices because
     // delivery receipts already cover the success path.
-    assert_eq!(body.accepted, 1);
     assert_eq!(body.rejected.len(), 0);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -100,8 +104,10 @@ async fn missing_push_decision_defaults_to_pass_through() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(body.accepted, 1);
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert_eq!(body.rejected.len(), 0);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -146,6 +152,10 @@ fn device_with_target(app_id: &str, push_key: &str, target_actor_id: &str) -> Va
     entry
 }
 
+fn set_mention_redirect_targets(body: &mut Value, targets: Value) {
+    body["notification"]["routing_metadata"]["mention_redirect_target_actor_ids"] = targets;
+}
+
 #[tokio::test]
 async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
@@ -157,8 +167,10 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
         "alice-token",
         "did:web:alice.example",
     )]);
-    body["notification"]["mention_redirect_target_actor_ids"] =
-        json!(["did:web:alice.example", "did:web:bob.example",]);
+    set_mention_redirect_targets(
+        &mut body,
+        json!(["did:web:alice.example", "did:web:bob.example",]),
+    );
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -166,8 +178,10 @@ async fn mention_redirect_routing_delivers_when_target_actor_is_listed() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(body.accepted, 1);
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert!(body.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -187,8 +201,10 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
         "carol-token",
         "did:web:carol.example",
     )]);
-    body["notification"]["mention_redirect_target_actor_ids"] =
-        json!(["did:web:alice.example", "did:web:bob.example",]);
+    set_mention_redirect_targets(
+        &mut body,
+        json!(["did:web:alice.example", "did:web:bob.example",]),
+    );
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -196,12 +212,14 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
-        resp.rejected[0].reason_code.as_deref(),
-        Some("mention_redirect_not_targeted")
+        resp.rejected[0]["reason_code"],
+        json!("mention_redirect_not_targeted")
     );
     // Critical: the pushkin MUST NOT see the device — fail-closed means
     // no body decryption can occur at the gateway layer.
@@ -222,7 +240,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     assert_eq!(origin_service_did, "<anonymous>");
     assert_eq!(
         notification_event_id.as_deref(),
-        Some("ck:event:01JS0EV000000000000000000")
+        Some("ck:event:0196419b-0000-7000-8000-000000000001")
     );
     assert_eq!(
         notification_strand_id.as_deref(),
@@ -230,9 +248,14 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_missing() {
     );
     assert_eq!(
         notification_realm_id.as_deref(),
-        Some("ck:realm:01JS0SP000000000000000000")
+        Some("ck:realm:0196419b-0000-7000-8000-000000000003")
     );
-    assert_eq!(devices, &resp.rejected);
+    let audited = devices
+        .iter()
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(audited, resp.rejected);
 }
 
 #[tokio::test]
@@ -244,7 +267,7 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
     // Device has no target_actor_id at all — the allow-list cannot
     // confirm inclusion, so the same fail-closed path fires.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["notification"]["mention_redirect_target_actor_ids"] = json!(["did:web:alice.example"]);
+    set_mention_redirect_targets(&mut body, json!(["did:web:alice.example"]));
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -252,12 +275,14 @@ async fn mention_redirect_routing_fail_closed_when_target_actor_id_missing() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert_eq!(resp.rejected.len(), 1);
     assert_eq!(
-        resp.rejected[0].reason_code.as_deref(),
-        Some("mention_redirect_not_targeted")
+        resp.rejected[0]["reason_code"],
+        json!("mention_redirect_not_targeted")
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
@@ -271,7 +296,7 @@ async fn mention_redirect_empty_list_is_a_no_op() {
     // Empty allow-list / missing key means "no mention-redirect in
     // effect". Every device passes the routing gate.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["notification"]["mention_redirect_target_actor_ids"] = json!([]);
+    set_mention_redirect_targets(&mut body, json!([]));
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .json(&body)
@@ -279,8 +304,10 @@ async fn mention_redirect_empty_list_is_a_no_op() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 1);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert!(resp.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -296,7 +323,7 @@ async fn mention_reference_v2_fields_are_not_push_payload_fields() {
     // AST concern and MUST NOT be accepted by the push notification
     // wire model.
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["notification"]["subject_id"] = json!("ck:message:01JS0MSG0000000000000000");
+    body["notification"]["subject_id"] = json!("ck:message:0196419b-0000-7000-8000-000000000002");
     body["notification"]["display_name_at_time"] = json!("Alice");
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
@@ -324,11 +351,11 @@ async fn historical_only_reason_code_short_circuits_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert!(resp.rejected.is_empty());
-    assert!(resp.delivery_receipts.is_empty());
-    assert!(resp.provider_retries.is_empty());
     // Critical: the soland diagnostic replay MUST NOT trigger a new
     // push fanout.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -362,7 +389,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["audit_envelope"] = json!({
         "access_kind": "e2ee_late_recovery",
-        "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
+        "late_recovery_original_event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
@@ -371,8 +398,10 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert!(resp.rejected.is_empty());
     // Push pipeline MUST be skipped — the request is an audit
     // policy_access notice, routed elsewhere.
@@ -395,11 +424,11 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     assert_eq!(access_kind, "e2ee_late_recovery");
     assert_eq!(
         late_recovery_original_event_id.as_deref(),
-        Some("ck:event:01JS0EV000000000000000000")
+        Some("ck:event:0196419b-0000-7000-8000-000000000001")
     );
     assert_eq!(
         notification_event_id.as_deref(),
-        Some("ck:event:01JS0EV000000000000000000")
+        Some("ck:event:0196419b-0000-7000-8000-000000000001")
     );
     assert_eq!(
         notification_strand_id.as_deref(),
@@ -407,7 +436,7 @@ async fn audit_envelope_e2ee_late_recovery_skips_push_pipeline() {
     );
     assert_eq!(
         notification_realm_id.as_deref(),
-        Some("ck:realm:01JS0SP000000000000000000")
+        Some("ck:realm:0196419b-0000-7000-8000-000000000003")
     );
 }
 
@@ -420,7 +449,7 @@ async fn audit_envelope_without_sink_is_temporarily_unavailable() {
     let mut body = payload(vec![device("com.example.app", "x-token")]);
     body["audit_envelope"] = json!({
         "access_kind": "e2ee_late_recovery",
-        "late_recovery_original_event_id": "ck:event:01JS0EV000000000000000000",
+        "late_recovery_original_event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")

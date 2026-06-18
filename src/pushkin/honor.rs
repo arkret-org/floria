@@ -466,11 +466,11 @@ mod tests {
                 .unwrap()
                 .clone(),
             ),
-            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
+            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
             strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
+                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
                 ..Default::default()
             }),
             user_is_target: Some(true),

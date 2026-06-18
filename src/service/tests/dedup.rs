@@ -111,11 +111,11 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
 
     let first = r#"{
             "notification": {
-                "event_id": "ck:event:01JS0EV000000000000000000",
-                "message_id": "ck:message:01JS0MSG0000000000000000",
+                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
                 "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
                 "routing_metadata": {
-                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
                 },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
@@ -135,11 +135,11 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "wakeup_kind": "message",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "routing_metadata": {
-                    "realm_id": "ck:realm:01JS0SP000000000000000000"
+                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
                 },
                 "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-                "message_id": "ck:message:01JS0MSG0000000000000000",
-                "event_id": "ck:event:01JS0EV000000000000000000"
+                "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
+                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001"
             }
         }"#;
 

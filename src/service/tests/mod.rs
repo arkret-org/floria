@@ -16,10 +16,7 @@ use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{
-    Device, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
-    RejectedDevice,
-};
+use crate::models::{Device, Notification, NotificationContext, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
@@ -270,11 +267,11 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
     // under notification.routing_metadata.
     json!({
         "notification": {
-            "event_id": "ck:event:01JS0EV000000000000000000",
-            "message_id": "ck:message:01JS0MSG0000000000000000",
+            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
             "routing_metadata": {
-                "realm_id": "ck:realm:01JS0SP000000000000000000"
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
@@ -332,13 +329,18 @@ pub(super) async fn assert_notify_error<T: ResponseExt + ?Sized>(
 
 pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     response: &mut T,
-    accepted: usize,
+    _accepted: usize,
     rejected_devices: Vec<RejectedDevice>,
-    provider_retries: usize,
+    _provider_retries: usize,
 ) {
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert!(!body.request_id.is_empty());
-    assert_eq!(body.accepted, accepted);
-    assert_eq!(body.rejected, rejected_devices);
-    assert_eq!(body.provider_retries.len(), provider_retries);
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    let expected = rejected_devices
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(body.rejected, expected);
 }

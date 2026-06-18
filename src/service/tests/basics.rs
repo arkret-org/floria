@@ -391,7 +391,7 @@ async fn bridge_describe_omits_unknown_provider_kinds() {
 }
 
 #[tokio::test]
-async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
+async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
     let service = test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
@@ -403,23 +403,14 @@ async fn notify_response_includes_delivery_receipts_without_plaintext_tokens() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(body.accepted, 1);
-    assert_eq!(body.delivery_receipts.len(), 1);
-    let receipt = &body.delivery_receipts[0];
-    assert_eq!(receipt.provider.as_deref(), Some("com.example.app"));
-    assert_eq!(receipt.status.as_deref(), Some("accepted"));
-    assert!(
-        receipt
-            .push_key_hash
-            .as_deref()
-            .is_some_and(|value| value.starts_with("pkh_"))
-    );
-    assert_ne!(receipt.push_key_hash.as_deref(), Some("accept"));
-    assert_eq!(
-        receipt.request_id.as_deref(),
-        Some(body.request_id.as_str())
-    );
+    let body = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert!(body.rejected.is_empty());
+    let encoded = serde_json::to_string(&body).unwrap();
+    assert!(!encoded.contains("accept"));
+    assert!(!encoded.contains("delivery_receipts"));
 }
 
 #[tokio::test]

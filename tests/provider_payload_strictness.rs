@@ -43,10 +43,10 @@ use serde_json::{Value, json};
 fn sanitizer_strips_apns_correlation_identifiers() {
     let payload = json!({
         "client": "ios",
-        "event_id": "ck:event:01JS0EV000000000000000000",
-        "space_id": "ck:space:01JS0SP000000000000000000",
+        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+        "space_id": "ck:space:0196419b-0000-7000-8000-000000000004",
         "strand_id":  "ck:strand:019640f9-8000-7000-8000-000000000000",
-        "message_id": "ck:message:01JS0MSG0000000000000000",
+        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
         "sender": "@alice:example.com",
         "sender_actor_display_name": "Alice",
         "strand_name": "Project Apollo",
@@ -85,7 +85,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
         "client": "android",
         "content_body": "I'm floating in a most peculiar way.",
         "content_msgtype": "m.text",
-        "event_id": "ck:event:01JS0EV000000000000000000",
+        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
     })
@@ -107,8 +107,8 @@ fn sanitizer_strips_webpush_correlation_identifiers() {
     let payload = json!({
         "client": "web",
         "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-        "space_id": "ck:space:01JS0SP000000000000000000",
-        "event_id": "ck:event:01JS0EV000000000000000000",
+        "space_id": "ck:space:0196419b-0000-7000-8000-000000000004",
+        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
         "content": {"body": "secret message"},
         "wakeup_kind": "message",
     })
@@ -148,12 +148,12 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
         "content": { "body": "Ground control to Major Tom" },
-        "event_id":   "ck:event:01JS0EV000000000000000000",
-        "message_id": "ck:message:01JS0MSG0000000000000000",
+        "event_id":   "ck:event:0196419b-0000-7000-8000-000000000001",
+        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
         "strand_id":    "ck:strand:019640f9-8000-7000-8000-000000000000",
         // SPEC-CR-016: gateway-internal routing ids live under routing_metadata.
         "routing_metadata": {
-            "realm_id":   "ck:realm:01JS0SP000000000000000000"
+            "realm_id":   "ck:realm:0196419b-0000-7000-8000-000000000003"
         },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",

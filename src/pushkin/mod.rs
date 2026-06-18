@@ -676,7 +676,7 @@ mod sanitize_tests {
     fn sanitized_provider_payload_strips_event_id() {
         let payload = json!({
             "client": "android",
-            "event_id": "ck:event:01JS0EV000000000000000000",
+            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "wakeup_kind": "message",
         })
         .as_object()
@@ -812,11 +812,11 @@ mod sanitize_tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             content: None,
-            event_id: Some("ck:event:01JS0EV000000000000000000".to_owned()),
-            message_id: Some("ck:message:01JS0MSG0000000000000000".to_owned()),
+            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
+            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
             strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:01JS0SP000000000000000000".to_owned()),
+                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,

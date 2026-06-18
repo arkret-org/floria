@@ -35,11 +35,11 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
     assert!(resp.rejected.is_empty());
-    assert!(resp.delivery_receipts.is_empty());
-    assert!(resp.provider_retries.is_empty());
     // Critical: durable agent lifecycle event MUST NOT trigger a
     // user-device push fanout. Capability cache invalidation strands
     // through `/internal/consent_revoke` with `reason=agent_paused`.
@@ -61,8 +61,11 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert!(resp.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -81,8 +84,11 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 0);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert!(resp.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -111,8 +117,14 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
             StatusCode::OK,
             "actor_private agent kind {kind} should be dropped (200 OK)"
         );
-        let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-        assert_eq!(resp.accepted, 0, "kind {kind} unexpectedly fanned out");
+        let resp = response
+            .take_json::<cokret::PushNotifyOutcome>()
+            .await
+            .unwrap();
+        assert!(
+            resp.rejected.is_empty(),
+            "kind {kind} unexpectedly returned rejected devices"
+        );
         assert_eq!(
             calls.load(Ordering::SeqCst),
             0,
@@ -139,8 +151,11 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let resp = response.take_json::<PushNotifyOutcome>().await.unwrap();
-    assert_eq!(resp.accepted, 1);
+    let resp = response
+        .take_json::<cokret::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert!(resp.rejected.is_empty());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
