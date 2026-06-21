@@ -1,19 +1,18 @@
 # SDK Sync Gate
 
-floria still carries a local provider-payload sweep for Round R2/R3
-forbidden fields. The SDK exposes
-`cokret::blind_payload_sanitizer::is_forbidden_payload_key`, but the
-exported list is not yet sufficient for the newer realm, appeal,
-attestation, policy-frontier, cross-signing-reset, and Circle
-field names.
+floria still carries a local provider-payload sweep for forbidden egress
+fields that are stricter than the SDK's generic blind-payload helper. The
+SDK exposes `cokret::blind_payload_sanitizer::is_forbidden_payload_key`,
+but the exported list is not yet sufficient for realm, appeal, attestation,
+policy-frontier, cross-signing-reset, and Circle field names.
 
 ## Local Sweep
 
-The local sweep is implemented in `src/pushkin/mod.rs` as
-`ROUND23_LOCAL_FORBIDDEN` and runs recursively through
-`sanitized_provider_payload`. Provider-specific tests in the Android,
-FCM, and WebPush adapters also assert that renamed Realm/Space/Circle
-identifiers stay off the provider wire.
+The local sweep is implemented in `src/sanitize.rs` as
+`is_forbidden_egress_key` and runs recursively through
+`pushkin::sanitized_provider_payload`. Provider-specific tests in the
+Android, FCM, and WebPush adapters also assert that renamed
+Realm/Space/Circle identifiers stay off the provider wire.
 
 ### Full forbidden-key list
 
@@ -53,7 +52,7 @@ Do not remove the local sweep until all of these are true:
 1. The SDK helper rejects every name above case-insensitively.
 2. The SDK helper is documented as the canonical blind-wakeup
    forbidden-key source for Round R2/R3 and CKP-0007 and later.
-3. floria tests pass after deleting `ROUND23_LOCAL_FORBIDDEN` and
+3. floria tests pass after deleting the local `is_forbidden_egress_key` extension list and
    changing `sanitized_provider_payload` to rely on the SDK helper
    only.
 4. The adapter tests continue to assert `realm_id` and `space_id` are
@@ -65,7 +64,7 @@ Use this when bumping floria to a newer cokret-spec round (R4 →
 R5, CKP-0007 → CKP-0008, etc.):
 
 - [ ] Diff the new round's `forbidden_payload_keys` table against
-      `ROUND23_LOCAL_FORBIDDEN`. Add any newly forbidden names to
+      `is_forbidden_egress_key`. Add any newly forbidden names to
       the local list with a rationale row in this doc.
 - [ ] Add a property test in `tests/property_provider_payload.rs`
       that fuzzes the new field name into request bodies and asserts

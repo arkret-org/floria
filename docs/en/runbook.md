@@ -176,6 +176,6 @@ re-signing, or mutating tokens. See
 [`docs/zh/media-token-issuer-cn.md`](../zh/media-token-issuer-cn.md) for
 the Chinese summary of this decision and the rationale.
 
-The local `media.rs` signing helpers are fail-closed scaffolds. If you
-see floria attempting to mint a token locally, or `/_cokret/describe`
-advertising an RTC/media token self-issue feature, that is a bug.
+There is no local media-token signing module in floria. If you see floria
+attempting to mint a token locally, or `/_cokret/describe` advertising an
+RTC/media token self-issue feature, that is a bug.

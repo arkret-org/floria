@@ -14,8 +14,6 @@ struct IntegrationDescribeOutcome {
     dependencies: Vec<IntegrationDependencyDescriptor>,
     surfaces: Vec<IntegrationSurfaceDescriptor>,
     examples: Value,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    todos: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -34,7 +32,7 @@ struct IntegrationSurfaceDescriptor {
     path: &'static str,
     contract: &'static str,
     stability: &'static str,
-    todo: &'static str,
+    description: &'static str,
 }
 
 #[handler]
@@ -70,7 +68,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/_floria/push/bridge/describe",
                 contract: "ck.push.bridge.describe",
                 stability: "active",
-                todo: "GET /_floria/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
+                description: "GET /_floria/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
             },
             IntegrationSurfaceDescriptor {
                 name: "push_notify",
@@ -78,7 +76,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/_cokret/edge/push/notify",
                 contract: "ck.edge.push.command.notify",
                 stability: "active",
-                todo: "POST /_cokret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
+                description: "POST /_cokret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
             },
             IntegrationSurfaceDescriptor {
                 name: "gateway_describe",
@@ -86,7 +84,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/_cokret/describe",
                 contract: "ck.profile.push_gateway.v1",
                 stability: "active",
-                todo: "GET /_cokret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
+                description: "GET /_cokret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
                 name: "health",
@@ -94,7 +92,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/health",
                 contract: "plain_text_health_probe.v1",
                 stability: "active",
-                todo: "GET /health is the liveness probe surface and intentionally returns an empty plain-text body.",
+                description: "GET /health is the liveness probe surface and intentionally returns an empty plain-text body.",
             },
             IntegrationSurfaceDescriptor {
                 name: "ready",
@@ -102,7 +100,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/ready",
                 contract: "plain_text_readiness_probe.v1",
                 stability: "active",
-                todo: "GET /ready verifies auth and dedup dependencies before returning plain-text `ok`.",
+                description: "GET /ready verifies auth and dedup dependencies before returning plain-text `ok`.",
             },
             IntegrationSurfaceDescriptor {
                 name: "readyz",
@@ -110,7 +108,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/readyz",
                 contract: "json_strict_readiness_probe.v1",
                 stability: "active",
-                todo: "GET /readyz verifies the provider registry is populated and enabled Redis-backed dependencies answer PING.",
+                description: "GET /readyz verifies the provider registry is populated and enabled Redis-backed dependencies answer PING.",
             },
             IntegrationSurfaceDescriptor {
                 name: "metrics",
@@ -118,7 +116,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/metrics",
                 contract: "prometheus.text.0.0.4",
                 stability: "active",
-                todo: "Prometheus scrape surface is served on the dedicated metrics listener when metrics are enabled.",
+                description: "Prometheus scrape surface is served on the dedicated metrics listener when metrics are enabled.",
             },
         ],
         examples: serde_json::json!({
@@ -140,6 +138,5 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 }
             }
         }),
-        todos: vec![],
     }));
 }

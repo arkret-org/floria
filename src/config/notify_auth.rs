@@ -121,6 +121,11 @@ impl NotifyAuthConfig {
         for (did, principal) in &self.service_principals {
             principal.validate(did)?;
         }
+        if self.require_message_signatures && self.replay_window_seconds == 0 {
+            bail!(
+                "http.notify_auth.require_message_signatures requires http.notify_auth.replay_window_seconds > 0"
+            );
+        }
         self.nonce_store.validate(self.replay_window_seconds)?;
         if self.production_mode {
             self.validate_production_mode()?;

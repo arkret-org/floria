@@ -284,7 +284,7 @@ impl VivoPushkin {
 
     fn build_auth_request(&self, timestamp: &str) -> Value {
         json!({
-            "appId": self.auth.app_id,
+            "app_id": self.auth.app_id,
             "appKey": self.auth.app_key,
             "timestamp": timestamp,
             "sign": vivo_sign(
@@ -310,7 +310,7 @@ impl VivoPushkin {
         };
 
         let mut body = Map::new();
-        body.insert("appId".to_owned(), self.auth.app_id.clone());
+        body.insert("app_id".to_owned(), self.auth.app_id.clone());
         body.insert(
             "regId".to_owned(),
             Value::String(device.push_key().unwrap_or_default().to_owned()),
@@ -506,8 +506,8 @@ impl Pushkin for VivoPushkin {
         "vivo"
     }
 
-    fn handles_appid(&self, appid: &str) -> bool {
-        self.matcher.handles_appid(appid)
+    fn handles_app_id(&self, app_id: &str) -> bool {
+        self.matcher.handles_app_id(app_id)
     }
 
     async fn dispatch_notification(

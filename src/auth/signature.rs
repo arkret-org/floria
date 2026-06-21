@@ -15,6 +15,9 @@ use super::{
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use crate::nonce_store::{NonceCheck, NonceStore};
 
+pub const SIGNATURE_MAX_LIFETIME_SECONDS: i64 = 300;
+pub const SIGNATURE_CREATED_MAX_SKEW_SECONDS: i64 = 30;
+
 pub(super) fn verify_message_signature(
     req: &Request,
     body: &[u8],
@@ -120,11 +123,27 @@ pub(super) fn verify_message_signature(
     }
 
     let now = unix_now_secs();
-    if signature_input.created > now + auth.signature_max_skew_seconds() as i64 {
+    let created_skew =
+        (auth.signature_max_skew_seconds() as i64).min(SIGNATURE_CREATED_MAX_SKEW_SECONDS);
+    if signature_input.created > now + created_skew {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "auth_expired",
             message: "HTTP Message Signature created timestamp is in the future".to_owned(),
+        });
+    }
+    if now - signature_input.created > SIGNATURE_MAX_LIFETIME_SECONDS {
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "auth_expired",
+            message: "HTTP Message Signature created timestamp is too old".to_owned(),
+        });
+    }
+    if signature_input.expires - signature_input.created > SIGNATURE_MAX_LIFETIME_SECONDS {
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: "auth_expired",
+            message: "HTTP Message Signature lifetime exceeds 300 seconds".to_owned(),
         });
     }
     if signature_input.expires < now - auth.signature_max_skew_seconds() as i64 {
@@ -341,8 +360,8 @@ pub(super) fn has_signature_headers(req: &Request) -> bool {
 /// Bind the verified Signature header bytes (and the request's
 /// content-digest) to a single-use nonce. A replay arriving inside
 /// the `expires - created` window is rejected even though every
-/// other signature check would still pass. When no nonce store is
-/// configured this is a no-op so signature semantics are unchanged.
+/// other signature check would still pass. Signed deployments must
+/// configure a nonce store; otherwise replay protection fails closed.
 pub(super) async fn verify_nonce_freshness(
     req: &Request,
     nonce_store: Option<&Arc<NonceStore>>,
@@ -350,7 +369,16 @@ pub(super) async fn verify_nonce_freshness(
     request_id: &str,
 ) -> Result<(), AuthFailure> {
     let Some(nonce_store) = nonce_store else {
-        return Ok(());
+        tracing::warn!(
+            request_id,
+            origin_service_did = %origin_did,
+            "rejecting /notify request: nonce store is required for signed requests"
+        );
+        return Err(AuthFailure {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "service_unavailable",
+            message: "replay protection is not configured".to_owned(),
+        });
     };
     let signature_header = req
         .header::<String>(SIGNATURE_HEADER)

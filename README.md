@@ -164,7 +164,7 @@ Sample files:
 ## Run
 
 ```powershell
-$env:FLORIA_CONF="E:\Works\cokret\floria\floria.sample.kdl"
+$env:FLORIA_CONF="$PWD\floria.sample.kdl"
 cargo run
 ```
 

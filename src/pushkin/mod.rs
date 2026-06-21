@@ -99,7 +99,7 @@ impl DispatchOutcome {
 pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
     fn kind(&self) -> &'static str;
-    fn handles_appid(&self, appid: &str) -> bool;
+    fn handles_app_id(&self, app_id: &str) -> bool;
     fn dispatch_targets(
         &self,
         _notification: &Notification,
@@ -378,14 +378,14 @@ impl PushkinRegistry {
         out
     }
 
-    pub fn find_pushkins(&self, appid: &str) -> Vec<Arc<dyn Pushkin>> {
-        if let Some(pushkin) = self.pushkins.get(appid) {
+    pub fn find_pushkins(&self, app_id: &str) -> Vec<Arc<dyn Pushkin>> {
+        if let Some(pushkin) = self.pushkins.get(app_id) {
             return vec![pushkin.clone()];
         }
 
         self.pushkins
             .values()
-            .filter(|pushkin| pushkin.handles_appid(appid))
+            .filter(|pushkin| pushkin.handles_app_id(app_id))
             .cloned()
             .collect()
     }
@@ -451,8 +451,8 @@ impl AppMatcher {
         &self.name
     }
 
-    pub fn handles_appid(&self, appid: &str) -> bool {
-        self.name == appid || self.glob.is_match(appid)
+    pub fn handles_app_id(&self, app_id: &str) -> bool {
+        self.name == app_id || self.glob.is_match(app_id)
     }
 }
 

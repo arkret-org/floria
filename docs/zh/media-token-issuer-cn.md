@@ -46,8 +46,8 @@
 `ck.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
 在受控的部署里（如 soland 与 floria 同主同时部署，且签发密钥已落在
 floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不是 v1 行
-为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。`media.rs`
-中的三处签名 helper 是 fail-closed 占位，不是公开 HTTP/API 能力。
+为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。当前 floria
+没有本地 media-token 签发模块，也没有公开 HTTP/API 能力。
 
 ## 排错快查
 

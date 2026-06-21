@@ -18,11 +18,12 @@
 //! check still bounds the attack window. A warning is logged so the
 //! operator notices.
 
-use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use lru::LruCache;
 
 use crate::auth::redact_url_credentials;
 
@@ -62,9 +63,11 @@ impl RedisFailurePolicy {
     }
 }
 
+const DEFAULT_MEMORY_NONCE_MAX_ENTRIES: usize = 65_536;
+
 #[derive(Debug)]
 struct MemoryNonceStore {
-    seen: Mutex<HashMap<String, Instant>>,
+    seen: Mutex<LruCache<String, Instant>>,
 }
 
 #[derive(Debug)]
@@ -92,7 +95,10 @@ impl NonceStore {
         Self {
             ttl,
             backend: NonceBackend::Memory(MemoryNonceStore {
-                seen: Mutex::new(HashMap::new()),
+                seen: Mutex::new(LruCache::new(
+                    NonZeroUsize::new(DEFAULT_MEMORY_NONCE_MAX_ENTRIES)
+                        .expect("DEFAULT_MEMORY_NONCE_MAX_ENTRIES is non-zero"),
+                )),
             }),
         }
     }
@@ -184,11 +190,12 @@ impl MemoryNonceStore {
             .seen
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        seen.retain(|_, expires_at| *expires_at > now);
-        if seen.contains_key(fingerprint) {
+        if let Some(expires_at) = seen.get(fingerprint)
+            && *expires_at > now
+        {
             return NonceCheck::Replayed;
         }
-        seen.insert(fingerprint.to_owned(), now + ttl);
+        seen.put(fingerprint.to_owned(), now + ttl);
         NonceCheck::Fresh
     }
 }

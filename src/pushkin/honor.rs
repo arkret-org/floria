@@ -341,8 +341,8 @@ impl Pushkin for HonorPushkin {
         "honor"
     }
 
-    fn handles_appid(&self, appid: &str) -> bool {
-        self.matcher.handles_appid(appid)
+    fn handles_app_id(&self, app_id: &str) -> bool {
+        self.matcher.handles_app_id(app_id)
     }
 
     async fn dispatch_notification(

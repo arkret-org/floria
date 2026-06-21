@@ -111,7 +111,7 @@ implemented:
    floria accepts is the push-routing allow-list
    `mention_redirect_target_actor_ids`, which carries DID targets only.
 2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
-   tokens. The local `media.rs` helpers pin wire shapes and fail closed;
+   tokens. The media token code path was removed from floria;
    `/_cokret/describe` does not advertise an RTC/media token
    self-issue feature, and the production router does not expose a
    public `/rtc/token` minting route. The canonical issuer remains

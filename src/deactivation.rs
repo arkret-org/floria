@@ -174,16 +174,19 @@ impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
             let mut clauses = Vec::new();
             for device in &broadcast.devices {
                 let index = params.len() + 1;
-                clauses.push(format!("device_id = ${index}"));
                 params.push(&device.device_id);
                 if let Some(push_key_hash) = device
                     .push_key_hash
                     .as_ref()
                     .filter(|value| !value.trim().is_empty())
                 {
-                    let index = params.len() + 1;
-                    clauses.push(format!("push_key_hash = ${index}"));
+                    let push_key_index = params.len() + 1;
                     params.push(push_key_hash);
+                    clauses.push(format!(
+                        "(device_id = ${index} AND push_key_hash = ${push_key_index})"
+                    ));
+                } else {
+                    clauses.push(format!("device_id = ${index}"));
                 }
             }
             format!(

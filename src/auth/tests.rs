@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
@@ -12,6 +13,7 @@ use super::helpers::{signature_public_key_hex, unix_now_secs};
 use super::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER, redact_url_credentials};
 use crate::AppState;
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
+use crate::nonce_store::NonceStore;
 use crate::pushkin::{Pushkin, PushkinRegistry};
 use crate::service::build_router;
 
@@ -27,8 +29,8 @@ impl Pushkin for NoopPushkin {
         "noop"
     }
 
-    fn handles_appid(&self, appid: &str) -> bool {
-        appid == "com.example.app"
+    fn handles_app_id(&self, app_id: &str) -> bool {
+        app_id == "com.example.app"
     }
 
     async fn dispatch_notification(
@@ -50,9 +52,11 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
     let mut notify_auth = NotifyAuthConfig::default();
     notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     notify_auth.require_message_signatures = true;
+    notify_auth.replay_window_seconds = 300;
     notify_auth.service_principals =
         HashMap::from([("did:web:sync.example.com".to_owned(), principal)]);
     state.notify_auth = notify_auth;
+    state.notify_nonce_store = Some(Arc::new(NonceStore::memory(Duration::from_secs(300))));
     salvo::Service::new(build_router(Arc::new(state)))
 }
 
@@ -76,7 +80,7 @@ fn sign_request(
     let now = unix_now_secs();
     let signature_input = format!(
         "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
-        now - 1,
+        now,
         now + 300
     );
     let signing_string = [
@@ -88,7 +92,7 @@ fn sign_request(
         "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
         format!(
             "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
-            now - 1,
+            now,
             now + 300
         ),
     ]
@@ -365,7 +369,7 @@ async fn rejects_signature_missing_required_components() {
     // floria's required-component policy must still trip this.
     let signature_input = format!(
         "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
-        now - 1,
+        now,
         now + 300
     );
     let signing_string = [
@@ -376,7 +380,7 @@ async fn rejects_signature_missing_required_components() {
         "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
         format!(
             "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
-            now - 1,
+            now,
             now + 300
         ),
     ]

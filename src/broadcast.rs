@@ -17,6 +17,7 @@ pub struct InProcessBroadcastBus {
 pub enum BroadcastError {
     DeactivationLedgerUnavailable,
     PushContactCacheUnavailable,
+    WorkerJoinFailed,
 }
 
 impl BroadcastError {
@@ -28,6 +29,7 @@ impl BroadcastError {
             Self::PushContactCacheUnavailable => {
                 "push contact cache is not configured on this push gateway"
             }
+            Self::WorkerJoinFailed => "background broadcast worker failed",
         }
     }
 }
@@ -66,6 +68,17 @@ impl InProcessBroadcastBus {
             sealed_channels: result.sealed_channels,
             messages_drained: result.messages_drained,
         })
+    }
+
+    pub async fn account_deactivate_fanout_async(
+        self: &Arc<Self>,
+        broadcast: &AccountDeactivateFanoutBroadcast,
+    ) -> Result<AccountDeactivateFanoutAck, BroadcastError> {
+        let bus = Arc::clone(self);
+        let broadcast = broadcast.clone();
+        tokio::task::spawn_blocking(move || bus.account_deactivate_fanout(&broadcast))
+            .await
+            .unwrap_or(Err(BroadcastError::WorkerJoinFailed))
     }
 
     pub async fn consent_revoke(

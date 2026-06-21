@@ -254,7 +254,7 @@ fn notify_auth_schema() -> Value {
                 "type": "integer",
                 "minimum": 0,
                 "default": 0,
-                "description": "How long to remember a verified Signature fingerprint for replay rejection. 0 disables replay protection."
+                "description": "How long to remember a verified Signature fingerprint for replay rejection. Must be >0 when require_message_signatures is true or nonce_store.backend=redis."
             }
         }
     })

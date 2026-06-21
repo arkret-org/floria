@@ -130,7 +130,10 @@ impl CircuitBreaker {
     /// the caller should short-circuit rather than dispatch.
     pub fn is_open(&self, key: &BreakerKey) -> bool {
         let open_for = self.open_for(&key.provider);
-        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         // `get_mut` bumps the slot to most-recently-used.
         let Some(state) = guard.get_mut(key) else {
             return false;
@@ -150,7 +153,10 @@ impl CircuitBreaker {
     /// Record a successful dispatch. Resets the failure counter so a
     /// short blip doesn't latch the breaker open on the next failure.
     pub fn record_success(&self, key: &BreakerKey) {
-        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = guard.get_or_insert_mut(key.clone(), BreakerState::default);
         entry.consecutive_failures = 0;
     }
@@ -160,7 +166,10 @@ impl CircuitBreaker {
     /// log line at that moment).
     pub fn record_failure(&self, key: &BreakerKey) -> bool {
         let threshold = self.config.failure_threshold;
-        let mut guard = self.inner.lock().expect("circuit breaker mutex poisoned");
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let entry = guard.get_or_insert_mut(key.clone(), BreakerState::default);
         if entry.opened_at.is_some() {
             return false;

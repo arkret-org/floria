@@ -347,7 +347,7 @@ pub(super) async fn account_deactivate_fanout(
         return;
     };
 
-    let ack = match bus.account_deactivate_fanout(&body) {
+    let ack = match bus.account_deactivate_fanout_async(&body).await {
         Ok(ack) => ack,
         Err(error) => {
             finish_error(

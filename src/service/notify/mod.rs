@@ -342,7 +342,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        let parsed_access_kind = match serde_json::from_value::<cokret::AccessKind>(Value::String(
+        let _parsed_access_kind = match serde_json::from_value::<cokret::AccessKind>(Value::String(
             access_kind.to_owned(),
         )) {
             Ok(kind) => kind,
@@ -359,36 +359,56 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 return;
             }
         };
+        let realm_id = match request.notification.realm_id() {
+            Some(realm_id) => realm_id,
+            None => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "schema_violation",
+                    "audit policy_access requires notification realm_id",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        };
         let late_recovery_original_event_id = optional_owned_string(
             audit_envelope
                 .late_recovery_original_event_id
                 .as_ref()
                 .map(cokret::EventId::as_str),
         );
-        if parsed_access_kind == cokret::AccessKind::E2EELateRecovery
-            && late_recovery_original_event_id.is_none()
-        {
+        let sdk_policy_access = serde_json::json!({
+            "realm_id": realm_id,
+            "actor": caller.origin_service_did.as_str(),
+            "access_kind": access_kind,
+            "late_recovery_original_event_id": late_recovery_original_event_id.as_deref(),
+            "observed_at": "1970-01-01T00:00:00Z",
+        });
+        let sdk_policy_access =
+            match serde_json::from_value::<cokret::AuditPolicyAccessPayload>(sdk_policy_access) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    finish_error(
+                        res,
+                        StatusCode::BAD_REQUEST,
+                        "schema_violation",
+                        &format!("invalid audit policy_access payload: {error}"),
+                        None,
+                        Some(&request_id),
+                        started,
+                    );
+                    return;
+                }
+            };
+        if let Err(error) = sdk_policy_access.validate_minimal() {
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
                 "schema_violation",
-                "audit_envelope.access_kind=e2ee_late_recovery requires \
-                 late_recovery_original_event_id",
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-        if parsed_access_kind != cokret::AccessKind::E2EELateRecovery
-            && late_recovery_original_event_id.is_some()
-        {
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                "schema_violation",
-                "audit_envelope.late_recovery_original_event_id is only valid for \
-                 access_kind=e2ee_late_recovery",
+                &error.to_string(),
                 None,
                 Some(&request_id),
                 started,

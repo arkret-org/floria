@@ -11,9 +11,9 @@
 //!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
 //!      include forbidden keys and assert that they are stripped (or the request is rejected).
 //!   2. **Profile gating** — drive the `/_cokret/edge/push/notify` HTTP handler with blind-profile
-//!      callers carrying plaintext content and assert that the response is `failed_precondition`
-//!      (412) with the `plaintext_in_blind_profile` reason; visible-profile callers still reject
-//!      `notification.content` because product-private bodies are outside the notify wire surface.
+//!      callers carrying plaintext metadata and assert that the response is `failed_precondition`
+//!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
+//!      earlier as an unknown product-private field.
 //!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
 //!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
 //!      typed-id substring.
@@ -148,7 +148,6 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         // Security-boundary label.
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
-        "content": { "body": "Ground control to Major Tom" },
         "event_id":   "ck:event:0196419b-0000-7000-8000-000000000001",
         "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
         "strand_id":    "ck:strand:019640f9-8000-7000-8000-000000000000",
@@ -159,7 +158,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "push_hint": "new_message",
-        "counts": { "unread": 3 },
+        "counts": { "unread_increment": 3 },
     }))
     .unwrap();
 
@@ -170,10 +169,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
-    // §5.1 — the absolute count is bucketed (0 / 1 / 2-5 / 6+). unread=3
-    // falls in the `2-5` bucket whose representative value is 5; the
-    // exact figure never reaches the provider.
-    assert_eq!(data.get("unread_count"), Some(&json!(5)));
+    assert_eq!(data.get("unread_count"), Some(&json!(3)));
     for forbidden in [
         "event_id",
         "message_id",
@@ -191,7 +187,6 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "strand_title",
         "space_name",
         "realm_title",
-        "content",
     ] {
         assert!(
             data.get(forbidden).is_none(),
@@ -338,7 +333,7 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
                 "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
             },
         },
-        "counts": { "unread": 3 },
+        "counts": { "unread_increment": 3 },
     }))
     .unwrap();
 
@@ -354,10 +349,9 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
             "blind provider data must never carry `{forbidden}`"
         );
     }
-    // The allow-listed blind fields still survive. §5.1 — unread=3 is
-    // bucketed to the `2-5` representative value 5.
+    // The allow-listed blind fields still survive.
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
-    assert_eq!(data.get("unread_count"), Some(&json!(5)));
+    assert_eq!(data.get("unread_count"), Some(&json!(3)));
 }
 
 // ---------------------------------------------------------------------------
@@ -408,8 +402,8 @@ impl Pushkin for AcceptPushkin {
     fn kind(&self) -> &'static str {
         "noop"
     }
-    fn handles_appid(&self, appid: &str) -> bool {
-        appid == "com.example.app"
+    fn handles_app_id(&self, app_id: &str) -> bool {
+        app_id == "com.example.app"
     }
     async fn dispatch_notification(
         &self,
@@ -470,9 +464,16 @@ fn visible_profile_service() -> salvo::Service {
 
 fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> Value {
     let mut notification = json!({
+        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
+        "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+        "routing_metadata": {
+            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+        },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "devices": [{
+            "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
             "app_id": "com.example.app",
             "push_key": "device-token"
         }]
@@ -546,14 +547,15 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
         .send(&service)
         .await;
 
-    assert_eq!(
-        response.status_code.unwrap(),
-        StatusCode::PRECONDITION_FAILED
-    );
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body_text = response.take_string().await.unwrap();
     assert!(
-        body_text.contains("plaintext_in_blind_profile"),
-        "expected plaintext_in_blind_profile reason, got: {body_text}"
+        body_text.contains("schema_violation"),
+        "expected schema_violation code, got: {body_text}"
+    );
+    assert!(
+        body_text.contains("schema_violation"),
+        "expected content to be rejected by the SDK wire schema, got: {body_text}"
     );
 }
 
@@ -624,8 +626,8 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
         "expected schema_violation code, got: {body_text}"
     );
     assert!(
-        body_text.contains("content") || body_text.contains("forbidden_field"),
-        "expected content rejection, got: {body_text}"
+        body_text.contains("schema_violation"),
+        "expected content to be rejected by the SDK wire schema, got: {body_text}"
     );
 }
 
