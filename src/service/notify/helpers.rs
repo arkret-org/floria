@@ -13,8 +13,8 @@ use crate::auth::{
 };
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, ProviderRetry,
-    RejectedDevice, redact_push_token,
+    DeliveryReceipt, DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification,
+    NotificationExt, ProviderRetry, RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -80,8 +80,7 @@ pub(super) fn notify_rate_limit_checks(
         let app_ids = notification
             .devices
             .iter()
-            .map(|device| device.app_id.trim())
-            .filter(|app_id| !app_id.is_empty())
+            .filter_map(DeviceExt::app_id)
             .collect::<HashSet<_>>();
         checks.extend(app_ids.into_iter().map(|app_id| NotifyRateLimitCheck {
             scope: "app_id",
@@ -123,10 +122,10 @@ pub(super) fn notify_rate_limit_checks(
             .devices
             .iter()
             .flat_map(|device| {
-                state
-                    .registry
-                    .find_pushkins(&device.app_id)
+                device
+                    .app_id()
                     .into_iter()
+                    .flat_map(|app_id| state.registry.find_pushkins(app_id))
                     .map(|pushkin| pushkin.name().to_owned())
             })
             .collect::<HashSet<_>>();
@@ -141,9 +140,8 @@ pub(super) fn notify_rate_limit_checks(
     checks
 }
 
-pub(super) fn optional_owned_string(value: Option<&String>) -> Option<String> {
+pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
     value
-        .map(String::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
@@ -202,7 +200,9 @@ async fn record_rejected_devices_audit(
     let event = AuditEvent::RejectedDevices {
         request_id: request_id.to_owned(),
         origin_service_did: caller.origin_service_did.clone(),
-        notification_event_id: optional_owned_string(notification.event_id.as_ref()),
+        notification_event_id: optional_owned_string(
+            notification.event_id.as_ref().map(cokret::EventId::as_str),
+        ),
         notification_strand_id: notification.strand_id().map(ToOwned::to_owned),
         notification_realm_id: notification.realm_id().map(ToOwned::to_owned),
         devices: rejected.to_vec(),
@@ -300,7 +300,10 @@ pub(super) fn rejected_device(
     device: &crate::models::Device,
     push_key: Option<&str>,
 ) -> RejectedDevice {
-    RejectedDevice::new(Some(&device.app_id), push_key.unwrap_or(&device.push_key))
+    RejectedDevice::new(
+        device.app_id(),
+        push_key.or_else(|| device.push_key()).unwrap_or_default(),
+    )
 }
 
 pub(super) fn delivery_receipt(
@@ -355,7 +358,10 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
         );
     }
     if let Some(value) = notification.event_id.as_ref() {
-        normalized.insert("event_id".to_owned(), Value::String(value.clone()));
+        normalized.insert(
+            "event_id".to_owned(),
+            Value::String(value.as_str().to_owned()),
+        );
     }
     if let Some(value) = notification.message_id() {
         normalized.insert("message_id".to_owned(), Value::String(value.to_owned()));
@@ -394,7 +400,11 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
     // not collide in the dedup cache). Sort canonically so the
     // fingerprint is order-independent.
     if !notification.mention_redirect_target_actor_ids().is_empty() {
-        let mut sorted = notification.mention_redirect_target_actor_ids().to_vec();
+        let mut sorted = notification
+            .mention_redirect_target_actor_ids()
+            .iter()
+            .map(|actor_id| actor_id.as_str().to_owned())
+            .collect::<Vec<_>>();
         sorted.sort();
         sorted.dedup();
         normalized.insert(
@@ -404,7 +414,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
     }
     normalized.insert(
         "counts".to_owned(),
-        serde_json::to_value(&notification.counts).ok()?,
+        serde_json::to_value(notification.counts.clone().unwrap_or_default()).ok()?,
     );
 
     let mut devices = notification
@@ -412,24 +422,22 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
         .iter()
         .map(|device| {
             let mut normalized = Map::new();
-            normalized.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
+            normalized.insert(
+                "app_id".to_owned(),
+                Value::String(device.app_id().unwrap_or_default().to_owned()),
+            );
             normalized.insert(
                 "push_key".to_owned(),
-                Value::String(device.push_key.clone()),
+                Value::String(device.push_key().unwrap_or_default().to_owned()),
             );
             // Round 4 — `target_actor_id` participates in the routing
             // decision, so it must be part of the canonical fingerprint.
             if let Some(actor_id) = device.target_actor_id.as_ref() {
                 normalized.insert(
                     "target_actor_id".to_owned(),
-                    Value::String(actor_id.clone()),
+                    Value::String(actor_id.as_str().to_owned()),
                 );
             }
-            if let Some(data) = device.data.as_ref() {
-                normalized.insert("data".to_owned(), Value::Object(data.clone()));
-            }
-            let tweaks = serde_json::to_value(&device.tweaks).ok()?;
-            normalized.insert("tweaks".to_owned(), tweaks);
             Some(Value::Object(normalized))
         })
         .collect::<Option<Vec<_>>>()

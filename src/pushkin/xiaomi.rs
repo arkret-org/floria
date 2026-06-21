@@ -18,7 +18,7 @@ use super::reqwest_support::{build_reqwest_client, parse_retry_after};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext};
 
 static XIAOMI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -156,12 +156,9 @@ impl XiaomiPushkin {
         notification: &Notification,
         device: &Device,
     ) -> Result<Vec<(String, String)>, DispatchError> {
-        let default_payload = device
-            .default_payload()
-            .map_err(|_| DispatchError::remote("Xiaomi Push default_payload must be an object"))?;
         let Some(payload) = build_android_notification_payload(
             notification,
-            default_payload,
+            Map::new(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -172,7 +169,10 @@ impl XiaomiPushkin {
         })?;
 
         let mut form = vec![
-            ("registration_id".to_owned(), device.push_key.clone()),
+            (
+                "registration_id".to_owned(),
+                device.push_key().unwrap_or_default().to_owned(),
+            ),
             (
                 "restricted_package_name".to_owned(),
                 self.config.restricted_package_name.clone(),
@@ -300,18 +300,20 @@ impl XiaomiPushkin {
             200..=299 => match serde_json::from_str::<XiaomiSendResponse>(body) {
                 Ok(response) if response.code == 0 => Ok(vec![]),
                 Ok(response) if response.is_invalid_registration() => {
-                    Ok(vec![device.push_key.clone()])
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
                 }
                 Ok(response) => Err(DispatchError::remote(format!(
                     "Xiaomi Push rejected request: {} {}",
                     response.code, response.description
                 ))),
                 Err(_) if looks_like_invalid_registration(body) => {
-                    Ok(vec![device.push_key.clone()])
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
                 }
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_registration(body) => Ok(vec![device.push_key.clone()]),
+            _ if looks_like_invalid_registration(body) => {
+                Ok(vec![device.push_key().unwrap_or_default().to_owned()])
+            }
             _ => Err(DispatchError::remote(xiaomi_error_message(body, status))),
         }
     }
@@ -339,17 +341,9 @@ impl Pushkin for XiaomiPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key.trim().is_empty() {
+        if device.push_key().is_none() {
             tracing::warn!("rejecting Xiaomi Push device due to empty registration_id");
-            return Ok(vec![device.push_key.clone()]);
-        }
-
-        if device.default_payload().is_err() {
-            tracing::warn!(
-                push_key_hash = %device.redacted_push_key(),
-                "rejecting Xiaomi Push push_key due to invalid default_payload"
-            );
-            return Ok(vec![device.push_key.clone()]);
+            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
         }
 
         for attempt in 0..XIAOMI_MAX_TRIES {
@@ -427,24 +421,15 @@ impl XiaomiSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.xiaomi".to_owned(),
-            push_key: "regid".to_owned(),
-            data: Some(
-                serde_json::json!({
-                    "default_payload": {
-                        "client": "android"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.xiaomi".to_owned()),
+            push_key: Some("regid".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -456,20 +441,19 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                serde_json::json!({
-                    "msgtype": "m.text",
-                    "body": "Ground control to Major Tom"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -477,11 +461,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: None,
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -509,7 +493,9 @@ mod tests {
                 })
                 .as_object()
                 .unwrap()
-                .clone(),
+                .clone()
+                .into_iter()
+                .collect(),
                 send_badge_counts: true,
             },
         }

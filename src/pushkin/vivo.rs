@@ -20,7 +20,7 @@ use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_aft
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext};
 
 static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -301,12 +301,9 @@ impl VivoPushkin {
         notification: &Notification,
         device: &Device,
     ) -> Result<Map<String, Value>, DispatchError> {
-        let default_payload = device
-            .default_payload()
-            .map_err(|_| DispatchError::remote("vivo Push default_payload must be an object"))?;
         let Some(payload) = build_android_notification_payload(
             notification,
-            default_payload,
+            Map::new(),
             self.config.send_badge_counts,
         ) else {
             return Ok(Map::new());
@@ -314,7 +311,10 @@ impl VivoPushkin {
 
         let mut body = Map::new();
         body.insert("appId".to_owned(), self.auth.app_id.clone());
-        body.insert("regId".to_owned(), Value::String(device.push_key.clone()));
+        body.insert(
+            "regId".to_owned(),
+            Value::String(device.push_key().unwrap_or_default().to_owned()),
+        );
         body.insert(
             "notifyType".to_owned(),
             Value::Number(self.config.notify_type.into()),
@@ -477,18 +477,20 @@ impl VivoPushkin {
             200..=299 => match serde_json::from_str::<VivoSendResponse>(body) {
                 Ok(response) if response.result == 0 => Ok(vec![]),
                 Ok(response) if response.is_invalid_registration(device) => {
-                    Ok(vec![device.push_key.clone()])
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
                 }
                 Ok(response) => Err(DispatchError::remote(format!(
                     "vivo Push rejected request: {} {}",
                     response.result, response.desc
                 ))),
                 Err(_) if looks_like_invalid_registration(body) => {
-                    Ok(vec![device.push_key.clone()])
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
                 }
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_registration(body) => Ok(vec![device.push_key.clone()]),
+            _ if looks_like_invalid_registration(body) => {
+                Ok(vec![device.push_key().unwrap_or_default().to_owned()])
+            }
             _ => Err(DispatchError::remote(vivo_error_message(body, status))),
         }
     }
@@ -516,17 +518,9 @@ impl Pushkin for VivoPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key.trim().is_empty() {
+        if device.push_key().is_none() {
             tracing::warn!("rejecting vivo Push device due to empty regId");
-            return Ok(vec![device.push_key.clone()]);
-        }
-
-        if device.default_payload().is_err() {
-            tracing::warn!(
-                push_key_hash = %device.redacted_push_key(),
-                "rejecting vivo Push push_key due to invalid default_payload"
-            );
-            return Ok(vec![device.push_key.clone()]);
+            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
         }
 
         for attempt in 0..VIVO_MAX_TRIES {
@@ -669,15 +663,16 @@ struct VivoSendResponse {
 
 impl VivoSendResponse {
     fn is_invalid_registration(&self, device: &Device) -> bool {
+        let push_key = device.push_key().unwrap_or_default();
         self.result == 10302
             || self
                 .invalid_user
                 .as_ref()
-                .is_some_and(|user| user.userid.as_deref() == Some(device.push_key.as_str()))
+                .is_some_and(|user| user.userid.as_deref() == Some(push_key))
             || self
                 .invalid_users
                 .iter()
-                .any(|user| user.userid.as_deref() == Some(device.push_key.as_str()))
+                .any(|user| user.userid.as_deref() == Some(push_key))
             || looks_like_invalid_registration(&self.desc)
     }
 }
@@ -691,24 +686,15 @@ struct VivoInvalidUser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.vivo".to_owned(),
-            push_key: "regid".to_owned(),
-            data: Some(
-                json!({
-                    "default_payload": {
-                        "client": "android"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.vivo".to_owned()),
+            push_key: Some("regid".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -720,20 +706,19 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "Ground control to Major Tom"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -741,11 +726,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: None,
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -786,7 +771,9 @@ mod tests {
                     })
                     .as_object()
                     .unwrap()
-                    .clone(),
+                    .clone()
+                    .into_iter()
+                    .collect(),
                 ),
                 audit_review: None,
                 extra: json!({
@@ -794,13 +781,17 @@ mod tests {
                 })
                 .as_object()
                 .unwrap()
-                .clone(),
+                .clone()
+                .into_iter()
+                .collect(),
                 client_custom_map: json!({
                     "manual": "override"
                 })
                 .as_object()
                 .unwrap()
-                .clone(),
+                .clone()
+                .into_iter()
+                .collect(),
                 send_badge_counts: true,
             },
         }
@@ -837,11 +828,8 @@ mod tests {
             body.pointer("/category"),
             Some(&Value::String("IM".to_owned()))
         );
-        assert_eq!(
-            body.pointer("/clientCustomMap/client"),
-            Some(&Value::String("android".to_owned()))
-        );
-        // T4.3 — `content` (m.text body) is no longer mirrored into the
+        assert!(body.pointer("/clientCustomMap/client").is_none());
+        // T4.3 - `content` (m.text body) is no longer mirrored into the
         // freeform clientCustomMap. The opaque push_target_id is what
         // the client uses to fetch the e2ee envelope server-side.
         assert!(

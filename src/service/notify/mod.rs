@@ -16,8 +16,8 @@ use super::metrics::{
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
 use crate::models::{
-    FloriaPushNotifyEnvelope as PushNotifyRequestBody,
-    FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, ProviderRetry,
+    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
+    ProviderRetry,
 };
 use crate::{AppState, metrics as app_metrics};
 
@@ -46,13 +46,6 @@ use validation::{
 /// time; it answers 200 with an empty rejected list and no provider
 /// retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
-
-/// Round 4 — `ck.audit.policy_access.access_kind` value that diverts
-/// to the audit pipeline. floria MUST NOT push-fan-out when the
-/// inbound request carries this access_kind; it forwards to the audit
-/// sink and only then acks with 200. The wire literal mirrors the SDK
-/// enum serde repr (`snake_case`).
-const E2EE_LATE_RECOVERY_ACCESS_KIND: &str = "e2ee_late_recovery";
 
 /// Round 4 — wire reason floria attaches to a RejectedDevice when the
 /// device's `target_actor_id` is not present in the
@@ -170,7 +163,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = crate::dedup::request_hash(body.as_ref());
 
-    let _standard_request = match serde_json::from_slice::<cokret::PushNotifyRequestBody>(&body) {
+    let request = match serde_json::from_slice::<cokret::PushNotifyRequestBody>(&body) {
         Ok(request) => request,
         Err(error) => {
             tracing::warn!(error = %error, "expected Cokret push notify request body");
@@ -179,22 +172,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 StatusCode::BAD_REQUEST,
                 "schema_violation",
                 "expected Cokret push notify request body",
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-    };
-    let request = match serde_json::from_slice::<PushNotifyRequestBody>(&body) {
-        Ok(request) => request,
-        Err(error) => {
-            tracing::warn!(error = %error, "expected JSON request body");
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                "schema_violation",
-                "expected JSON request body",
                 None,
                 Some(&request_id),
                 started,
@@ -365,9 +342,30 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        let late_recovery_original_event_id =
-            optional_owned_string(audit_envelope.late_recovery_original_event_id.as_ref());
-        if access_kind == E2EE_LATE_RECOVERY_ACCESS_KIND
+        let parsed_access_kind = match serde_json::from_value::<cokret::AccessKind>(Value::String(
+            access_kind.to_owned(),
+        )) {
+            Ok(kind) => kind,
+            Err(_) => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "schema_violation",
+                    "audit_envelope.access_kind is not a registered access kind",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        };
+        let late_recovery_original_event_id = optional_owned_string(
+            audit_envelope
+                .late_recovery_original_event_id
+                .as_ref()
+                .map(cokret::EventId::as_str),
+        );
+        if parsed_access_kind == cokret::AccessKind::E2EELateRecovery
             && late_recovery_original_event_id.is_none()
         {
             finish_error(
@@ -382,14 +380,41 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
+        if parsed_access_kind != cokret::AccessKind::E2EELateRecovery
+            && late_recovery_original_event_id.is_some()
+        {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "audit_envelope.late_recovery_original_event_id is only valid for \
+                 access_kind=e2ee_late_recovery",
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
         let audit_event = AuditEvent::PolicyAccess {
             request_id: request_id.clone(),
             origin_service_did: caller.origin_service_did.clone(),
             destination_service_did: request_destination_service_did(req),
             access_kind: access_kind.to_owned(),
             late_recovery_original_event_id,
-            notification_event_id: optional_owned_string(request.notification.event_id.as_ref()),
-            notification_strand_id: optional_owned_string(request.notification.strand_id.as_ref()),
+            notification_event_id: optional_owned_string(
+                request
+                    .notification
+                    .event_id
+                    .as_ref()
+                    .map(cokret::EventId::as_str),
+            ),
+            notification_strand_id: optional_owned_string(
+                request
+                    .notification
+                    .strand_id
+                    .as_ref()
+                    .map(cokret::StrandId::as_str),
+            ),
             notification_realm_id: request.notification.realm_id().map(ToOwned::to_owned),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {
@@ -445,49 +470,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .and_then(Value::as_object)
         .cloned();
     let notification = request.notification;
-
-    // T1.1 — for blind-only callers, additionally run the SDK
-    // sanitizer over each device's `data.default_payload` subtree so
-    // that any forbidden field or did:/ck: literal that survived the
-    // wire-model allow-list gets stopped before fan-out.
-    if !caller.allow_plaintext_metadata
-        && let Some(devices) = notification_object
-            .as_ref()
-            .and_then(|obj| obj.get("devices"))
-            .and_then(Value::as_array)
-    {
-        for (index, device) in devices.iter().enumerate() {
-            let Some(default_payload) = device
-                .get("data")
-                .and_then(Value::as_object)
-                .and_then(|data| data.get("default_payload"))
-            else {
-                continue;
-            };
-            let envelope = serde_json::json!({
-                "notification": {
-                    "push_target_id": "ck:pseudonym:push:0000000000000000000000",
-                    "wakeup_kind": "message",
-                },
-                "default_payload": default_payload,
-            });
-            if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    "schema_violation",
-                    &format!(
-                        "blind wakeup sanitizer rejected `notification.devices[{index}].data.default_payload.{}`: {}",
-                        err.field_path, err.reason_code,
-                    ),
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
-        }
-    }
 
     match validate_notification_contract(&notification, &caller) {
         Ok(()) => {}
@@ -654,19 +636,19 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
     let mut first_internal_error: Option<String> = None;
     for device in &notification.devices {
-        let app_id = device.app_id.trim();
-        let push_key = device.push_key.trim();
+        let app_id = device.app_id().unwrap_or_default();
+        let push_key = device.push_key().unwrap_or_default();
         if app_id.is_empty() || push_key.is_empty() {
             tracing::warn!(
                 request_id = %context.request_id,
-                app_id = %device.app_id,
+                app_id,
                 push_key_hash = %device.redacted_push_key(),
                 "rejecting device with empty app_id or push_key"
             );
-            rejected.push(rejected_device(device, Some(&device.push_key)));
+            rejected.push(rejected_device(device, device.push_key()));
             delivery_receipts.push(delivery_receipt(
                 None,
-                &device.push_key,
+                push_key,
                 "rejected",
                 None,
                 &context.request_id,
@@ -696,14 +678,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         if !notification.mention_redirect_target_actor_ids().is_empty() {
             let allowed = device
                 .target_actor_id
-                .as_deref()
+                .as_ref()
+                .map(cokret::Did::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .is_some_and(|actor_id| {
                     notification
                         .mention_redirect_target_actor_ids()
                         .iter()
-                        .any(|allowed| allowed.trim() == actor_id)
+                        .any(|allowed| allowed.as_str().trim() == actor_id)
                 });
             if !allowed {
                 tracing::info!(
@@ -713,12 +696,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     "fail-closed: device.target_actor_id not in mention_redirect_target_actor_ids"
                 );
                 rejected.push(
-                    rejected_device(device, Some(&device.push_key))
+                    rejected_device(device, device.push_key())
                         .with_reason_code(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
                 );
                 delivery_receipts.push(delivery_receipt(
                     None,
-                    &device.push_key,
+                    push_key,
                     "rejected",
                     None,
                     &context.request_id,
@@ -727,46 +710,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             }
         }
 
-        // T4.4 — Caller (Sync Service / soland) may have already
-        // evaluated the v1 core push rule and decided `dont_notify`.
-        // Honor that decision verbatim: record the rejection with the
-        // caller-supplied wire-safe reason code and skip dispatch.
-        // floria itself does not re-evaluate watch levels — that's the
-        // Sync Service's job.
-        if let Some(hint) = device.push_decision.as_ref()
-            && !hint.deliver
-        {
-            tracing::debug!(
-                request_id = %context.request_id,
-                app_id,
-                push_key_hash = %device.redacted_push_key(),
-                reason_code = hint.reason_code.as_deref().unwrap_or(""),
-                "skipping device per caller-supplied push_decision"
-            );
-            app_metrics::notify_suppressed(hint.reason_code.as_deref(), 1);
-            rejected.push(
-                rejected_device(device, Some(&device.push_key))
-                    .with_reason_code(hint.reason_code.as_deref()),
-            );
-            delivery_receipts.push(delivery_receipt(
-                None,
-                &device.push_key,
-                "rejected",
-                None,
-                &context.request_id,
-            ));
-            continue;
-        }
-
         app_metrics::device_push_received();
-        let pushkins = state.registry.find_pushkins(&device.app_id);
+        let pushkins = state.registry.find_pushkins(app_id);
         match pushkins.as_slice() {
             [] => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, push_key_hash = %device.redacted_push_key(), "unknown app id");
-                rejected.push(rejected_device(device, Some(&device.push_key)));
+                tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "unknown app id");
+                rejected.push(rejected_device(device, device.push_key()));
                 delivery_receipts.push(delivery_receipt(
                     None,
-                    &device.push_key,
+                    push_key,
                     "rejected",
                     None,
                     &context.request_id,
@@ -863,7 +815,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         tracing::warn!(
                             error = %error,
                             request_id = %context.request_id,
-                            app_id = %device.app_id,
+                            app_id,
                             push_key_hash = %device.redacted_push_key(),
                             "temporary dispatch failure"
                         );
@@ -893,7 +845,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         tracing::warn!(
                             error = %error,
                             request_id = %context.request_id,
-                            app_id = %device.app_id,
+                            app_id,
                             push_key_hash = %device.redacted_push_key(),
                             "remote dispatch failure"
                         );
@@ -912,7 +864,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         tracing::error!(
                             error = %error,
                             request_id = %context.request_id,
-                            app_id = %device.app_id,
+                            app_id,
                             push_key_hash = %device.redacted_push_key(),
                             "internal dispatch failure"
                         );
@@ -930,11 +882,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 }
             }
             _ => {
-                tracing::warn!(request_id = %context.request_id, app_id = %device.app_id, push_key_hash = %device.redacted_push_key(), "ambiguous app id");
-                rejected.push(rejected_device(device, Some(&device.push_key)));
+                tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "ambiguous app id");
+                rejected.push(rejected_device(device, device.push_key()));
                 delivery_receipts.push(delivery_receipt(
                     None,
-                    &device.push_key,
+                    push_key,
                     "rejected",
                     None,
                     &context.request_id,

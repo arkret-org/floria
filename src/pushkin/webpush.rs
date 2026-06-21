@@ -20,12 +20,13 @@ use web_push::{
 
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
-    max_connections, random_collapse_key, sanitized_provider_payload,
+    max_connections, notification_badge_count, notification_unread_increment,
+    sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -252,40 +253,29 @@ impl WebpushPushkin {
     }
 
     /// Build the WebPush JSON payload that goes into the encrypted
-    /// `aes128gcm` body. T4.3 — only the SDK-allowed blind-wakeup
-    /// fields plus the device's static `default_payload` survive on
-    /// the wire. `strand_id` / `realm_id` / `event_id` / `message_id`
-    /// / sender / names / body / content / membership / user_is_target
-    /// are all dropped: the SW pulls them server-side from an e2ee
-    /// envelope keyed on `push_target_id`.
+    /// `aes128gcm` body. Only SDK-allowed blind-wakeup fields survive
+    /// on the provider wire.
     fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
-        let mut payload = device.default_payload_lossy();
+        let _ = device;
+        let mut payload = Map::new();
 
         payload.extend(build_blind_routing_data(notification));
-        // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) before
-        // they reach the WebPush payload so the exact figure can't be
-        // used as a per-`push_target_id` activity correlator.
-        if let Some(unread) = notification.counts.unread {
+        if let Some(unread_increment) = notification_unread_increment(notification) {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(crate::sanitize::bucket_count(unread).into()),
+                Value::Number(unread_increment.into()),
             );
         }
-        if let Some(missed_calls) = notification.counts.missed_calls {
-            payload.insert(
-                "badge".to_owned(),
-                Value::Number(crate::sanitize::bucket_count(missed_calls).into()),
-            );
+        if let Some(badge) = notification_badge_count(notification) {
+            payload.insert("badge".to_owned(), Value::Number(badge.into()));
         }
 
-        // Final defence — strip anything forbidden that might have come
-        // in via `device.default_payload_lossy()` (operator-supplied).
         match sanitized_provider_payload(payload) {
             Ok(sanitized) => sanitized,
             Err(rejection) => {
                 tracing::warn!(
                     rejection = %rejection,
-                    "webpush default_payload contained forbidden field, falling back to minimal payload"
+                    "webpush provider payload contained forbidden field, falling back to minimal payload"
                 );
                 build_blind_routing_data(notification)
             }
@@ -346,16 +336,9 @@ impl WebpushPushkin {
     }
 
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
-        let endpoint = device
-            .data_string("endpoint")
-            .ok_or_else(|| DispatchError::remote("webpush device data is missing endpoint"))?;
-        let auth = device
-            .data_string("auth")
-            .ok_or_else(|| DispatchError::remote("webpush device data is missing auth"))?;
-        Ok(SubscriptionInfo::new(
-            endpoint.to_owned(),
-            device.push_key.clone(),
-            auth.to_owned(),
+        let _ = device;
+        Err(DispatchError::remote(
+            "webpush subscription endpoint/auth must be resolved outside notify device_route",
         ))
     }
 
@@ -390,16 +373,6 @@ impl WebpushPushkin {
         } else {
             Urgency::Normal
         });
-        // T4.3 — the topic used to be a blake2 hash of the `realm_id` /
-        // `strand_id`. blake2 is non-reversible but the *same* scope still
-        // produced the *same* topic across pushes, which let an observer
-        // correlate every notification in a given conversation. We now
-        // either skip the topic entirely (so the push gateway never
-        // dedupes by scope) or emit a per-message random base64 token
-        // when the device opts into "collapse to last per strand".
-        if device.data_bool("only_last_per_strand") == Some(true) {
-            builder.set_topic(random_collapse_key());
-        }
         builder.set_payload(ContentEncoding::Aes128Gcm, &payload);
         builder.set_vapid_signature(signature);
 
@@ -412,7 +385,7 @@ impl WebpushPushkin {
                     push_key_hash = %device.redacted_push_key(),
                     "rejecting invalid webpush crypto material"
                 );
-                return Ok(vec![device.push_key.clone()]);
+                return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
             }
             Err(WebPushError::InvalidTopic | WebPushError::InvalidClaims) => {
                 return Err(DispatchError::internal(
@@ -445,7 +418,7 @@ impl WebpushPushkin {
         WEBPUSH_ACTIVE_REQUESTS.dec();
         WEBPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
 
-        classify_webpush_result(result, &device.push_key)
+        classify_webpush_result(result, device.push_key().unwrap_or_default())
     }
 }
 
@@ -471,18 +444,6 @@ impl Pushkin for WebpushPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.data.is_none() {
-            tracing::warn!(
-                push_key_hash = %device.redacted_push_key(),
-                "rejecting webpush device without data object"
-            );
-            return Ok(vec![device.push_key.clone()]);
-        }
-
-        if device.data_bool("events_only") == Some(true) && notification.event_id.is_none() {
-            return Ok(vec![]);
-        }
-
         let subscription = match self.subscription_from_device(device) {
             Ok(subscription) => subscription,
             Err(error) => {
@@ -491,7 +452,7 @@ impl Pushkin for WebpushPushkin {
                     error = %error,
                     "rejecting invalid webpush subscription"
                 );
-                return Ok(vec![device.push_key.clone()]);
+                return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
             }
         };
 
@@ -503,7 +464,7 @@ impl Pushkin for WebpushPushkin {
                     error = %error,
                     "rejecting invalid webpush endpoint"
                 );
-                return Ok(vec![device.push_key.clone()]);
+                return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
             }
         };
 
@@ -586,49 +547,23 @@ mod tests {
 
     use super::*;
     use crate::config::{AppConfig, Config};
-    use crate::models::{Counts, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.web".to_owned(),
-            push_key: "p256dh-key".to_owned(),
-            data: Some(
-                json!({
-                    "endpoint": "https://push.example.test/send",
-                    "auth": "auth-secret",
-                    "default_payload": {
-                        "client": "web"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.web".to_owned()),
+            push_key: Some("p256dh-key".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
 
     fn network_device(endpoint: &str) -> Device {
-        Device {
-            app_id: "com.example.web".to_owned(),
-            push_key: "BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned(),
-            data: Some(
-                json!({
-                    "endpoint": endpoint,
-                    "auth": "sBXU5_tIYz-5w7G2B25BEw",
-                    "default_payload": {
-                        "client": "web"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
-            target_actor_id: None,
+        Device { device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001").unwrap(), app_id: Some("com.example.web".to_owned()),
+            push_key: Some("BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned()),
+            target_actor_id: None
         }
     }
 
@@ -677,22 +612,19 @@ mod tests {
             priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "body": body,
-                    "formatted_body": "<b>ignored</b>",
-                    "ciphertext": "x".repeat(MAX_CIPHERTEXT_LENGTH + 10),
-                    "msgtype": "m.text"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -700,11 +632,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: Some(1),
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -783,22 +715,11 @@ mod tests {
     }
 
     #[test]
-    fn invalid_default_payload_is_ignored() {
-        let mut device = device();
-        device.data = Some(
-            json!({
-                "endpoint": "https://push.example.test/send",
-                "auth": "auth-secret",
-                "default_payload": "bad"
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        );
-
+    fn build_payload_keeps_only_current_blind_fields() {
+        let device = device();
         let payload = WebpushPushkin::build_payload(&notification("hello"), &device);
         assert!(payload.get("client").is_none());
-        // T4.3 — event_id is no longer copied onto the wire. The
+        // T4.3 - event_id is no longer copied onto the wire. The
         // surviving routing hook is `push_target_id`.
         assert!(payload.get("event_id").is_none());
         assert_eq!(
@@ -872,7 +793,9 @@ mod tests {
             })
             .as_object()
             .unwrap()
-            .clone(),
+            .clone()
+            .into_iter()
+            .collect(),
         };
 
         let error = match WebpushPushkin::new(

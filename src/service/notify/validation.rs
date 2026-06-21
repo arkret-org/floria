@@ -8,7 +8,7 @@ use super::super::{
 };
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER};
 use crate::config::NotifyAuthConfig;
-use crate::models::Notification;
+use crate::models::{Notification, NotificationExt};
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -205,7 +205,6 @@ pub(super) fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> 
     validate_active_notification_refs(notification, routing_metadata)?;
     validate_push_target_id(notification.get("push_target_id"))?;
     validate_wakeup_kind(notification.get("wakeup_kind"))?;
-    validate_device_contract_shape(notification.get("devices"))?;
     if let Some(routing_metadata) = routing_metadata {
         validate_mention_redirect_routing(routing_metadata)?;
     }
@@ -322,36 +321,6 @@ fn reject_forbidden_plaintext_fields(path: &str, value: &Value) -> Result<(), St
         }
         _ => Ok(()),
     }
-}
-
-fn validate_device_contract_shape(devices: Option<&Value>) -> Result<(), String> {
-    let Some(devices) = devices else {
-        return Ok(());
-    };
-    let Some(devices) = devices.as_array() else {
-        return Ok(());
-    };
-
-    for (index, device) in devices.iter().enumerate() {
-        let path = format!("notification.devices[{index}]");
-        let Some(device) = device.as_object() else {
-            continue;
-        };
-
-        if let Some(data) = device.get("data") {
-            let Some(data) = data.as_object() else {
-                continue;
-            };
-            if let Some(default_payload) = data.get("default_payload") {
-                if !default_payload.is_object() {
-                    return Err(format!("{path}.data.default_payload must be an object"));
-                }
-                validate_blind_content(&format!("{path}.data.default_payload"), default_payload)?;
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn validate_active_notification_refs(
@@ -574,35 +543,6 @@ pub(super) fn validate_notification_contract(
         validate_push_hint(push_hint)?;
     }
 
-    let Some(content) = notification.content.as_ref() else {
-        return Ok(());
-    };
-
-    // Blind profile callers must not embed plaintext title/body in
-    // `content` either. The SDK sanitizer would reject these as
-    // forbidden keys via the `validate_blind_content` path below, but
-    // we surface a more specific reason code first so operators can
-    // tell the two failure classes apart.
-    if !caller.allow_plaintext_metadata {
-        // Visible rendering keys (title/body/...) are rejected here so
-        // operators get the plaintext-profile reason before the generic
-        // blind-content validation runs.
-        let forbidden_content = content.keys().find(|key| {
-            crate::sanitize::BLIND_FORBIDDEN_CONTENT_TEXT_KEYS
-                .iter()
-                .any(|name| name.eq_ignore_ascii_case(key))
-        });
-        if let Some(forbidden) = forbidden_content {
-            return Err(format!(
-                "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-                 plaintext `content.{forbidden}` under the default \
-                 `ck.profile.push_gateway.blind_wakeup.v1` profile"
-            ));
-        }
-    }
-
-    validate_blind_content("content", &Value::Object(content.clone()))?;
-
     Ok(())
 }
 
@@ -617,7 +557,6 @@ pub(super) fn validate_plaintext_identity_metadata(
     for (key, value) in notification {
         let path = format!("notification.{key}");
         if key.eq_ignore_ascii_case("devices") {
-            validate_device_identity_metadata(value)?;
             continue;
         }
         // SPEC-CR-016 — `routing_metadata` is the gateway-internal routing
@@ -642,30 +581,6 @@ pub(super) fn validate_plaintext_identity_metadata(
             ));
         }
         validate_plaintext_identity_tree(&path, value)?;
-    }
-
-    Ok(())
-}
-
-fn validate_device_identity_metadata(devices: &Value) -> Result<(), String> {
-    let Some(devices) = devices.as_array() else {
-        return Ok(());
-    };
-
-    for (index, device) in devices.iter().enumerate() {
-        let Some(device) = device.as_object() else {
-            continue;
-        };
-        let Some(data) = device.get("data").and_then(Value::as_object) else {
-            continue;
-        };
-        let Some(default_payload) = data.get("default_payload") else {
-            continue;
-        };
-        validate_plaintext_identity_tree(
-            &format!("notification.devices[{index}].data.default_payload"),
-            default_payload,
-        )?;
     }
 
     Ok(())
@@ -744,72 +659,3 @@ fn validate_push_hint(push_hint: &str) -> Result<(), String> {
     }
     Err("Cokret blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
 }
-
-// T1.1 — thin wrapper over the SDK's `sanitize_blind_payload` recursive
-// scan. We still keep the `validate_blind_string` call setup detection
-// (TURN/ICE/SDP literal pattern) because that's a floria-specific
-// content rule, not part of the cross-impl key allow/block list.
-fn validate_blind_content(path: &str, value: &Value) -> Result<(), String> {
-    // Run the SDK sanitizer over the subtree by wrapping it in a synthetic
-    // notification envelope so the wrapper-scan path (forbidden keys +
-    // sensitive did:/ck: literals) walks the whole tree without needing
-    // top-level `push_target_id` / `wakeup_kind` to be present.
-    let envelope = serde_json::json!({
-        "notification": {
-            "push_target_id": "ck:pseudonym:push:0000000000000000000000",
-            "wakeup_kind": "message",
-        },
-        path: value,
-    });
-    if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload(&envelope) {
-        return Err(format!(
-            "Cokret blind wakeup payloads must not include sensitive field `{}` ({})",
-            err.field_path,
-            err.reason_code.as_str(),
-        ));
-    }
-    // Recurse only to apply the floria-specific call-setup string check.
-    walk_blind_strings(path, value)
-}
-
-fn walk_blind_strings(path: &str, value: &Value) -> Result<(), String> {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                walk_blind_strings(&format!("{path}.{key}"), value)?;
-            }
-            Ok(())
-        }
-        Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                walk_blind_strings(&format!("{path}[{index}]"), value)?;
-            }
-            Ok(())
-        }
-        Value::String(value) => validate_blind_string(path, value),
-        Value::Null | Value::Bool(_) | Value::Number(_) => Ok(()),
-    }
-}
-
-fn validate_blind_string(path: &str, value: &str) -> Result<(), String> {
-    let normalized = value.to_ascii_lowercase();
-    if normalized.contains("candidate:")
-        || normalized.contains("ice-ufrag")
-        || normalized.contains("ice-pwd")
-        || normalized.contains("turn:")
-        || normalized.contains("turns:")
-        || normalized.contains("v=0\r")
-        || normalized.contains("v=0\n")
-    {
-        Err(format!(
-            "Cokret blind wakeup payloads must not include call setup material in `{path}`"
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-// T1.1 — the floria-local `is_sensitive_payload_key` allow-list moved into
-// `cokret::blind_payload_sanitizer::is_forbidden_payload_key`
-// so the chime/floria rule cannot drift. Callers now go through the SDK
-// helper via `validate_blind_content`.

@@ -121,15 +121,15 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "wakeup_kind": "message",
                 "push_hint": "new_message",
                 "devices": [
-                    {"app_id": "com.example.app", "push_key": "cached"},
-                    {"app_id": "com.example.app", "push_key": "cached"}
+                    {"device_id": "ck:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"},
+                    {"device_id": "ck:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"}
                 ]
             }
         }"#;
     let second = r#"{
             "notification": {
                 "devices": [
-                    {"push_key": "cached", "app_id": "com.example.app"}
+                    {"push_key": "cached", "app_id": "com.example.app", "device_id": "ck:device:0196419b-0000-7000-8000-000000000001"}
                 ],
                 "push_hint": "new_message",
                 "wakeup_kind": "message",

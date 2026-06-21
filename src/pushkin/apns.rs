@@ -20,12 +20,12 @@ use uuid::Uuid;
 use super::reqwest_support::header_value;
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
-    sanitized_provider_payload,
+    notification_badge_count, sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -300,16 +300,17 @@ impl ApnsPushkin {
             .and_then(|body| body.reason)
             .unwrap_or_else(|| body.clone());
 
-        classify_apns_response(status, &reason, &device.push_key)
+        classify_apns_response(status, &reason, device.push_key().unwrap_or_default())
     }
 
     fn device_token(&self, device: &Device) -> Result<String, DispatchError> {
+        let push_key = device.push_key().unwrap_or_default();
         if !self.convert_device_token_to_hex {
-            return Ok(device.push_key.clone());
+            return Ok(push_key.to_owned());
         }
 
         let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&device.push_key)
+            .decode(push_key)
             .map_err(|error| {
                 DispatchError::remote(format!("invalid APNS device token: {error}"))
             })?;
@@ -327,15 +328,15 @@ impl ApnsPushkin {
     fn build_payload(
         &self,
         notification: &Notification,
-        default_payload: Map<String, Value>,
+        provider_payload: Map<String, Value>,
     ) -> Result<Option<Value>, DispatchError> {
-        Ok(self.payload_full(notification, default_payload))
+        Ok(self.payload_full(notification, provider_payload))
     }
 
     fn payload_full(
         &self,
         notification: &Notification,
-        mut default_payload: Map<String, Value>,
+        mut provider_payload: Map<String, Value>,
     ) -> Option<Value> {
         let from_display = notification
             .sender_label()
@@ -394,16 +395,7 @@ impl ApnsPushkin {
         }
 
         let badge = if self.send_badge_counts {
-            let raw = notification.counts.unread.unwrap_or(0)
-                + notification.counts.missed_calls.unwrap_or(0);
-            if notification.counts.unread.is_none() && notification.counts.missed_calls.is_none() {
-                None
-            } else {
-                // §5.1 — bucket the badge (0 / 1 / 2-5 / 6+) so the exact
-                // cumulative figure never reaches APNS as a
-                // per-`push_target_id` activity correlator.
-                Some(crate::sanitize::bucket_count(raw))
-            }
+            notification_badge_count(notification)
         } else {
             None
         };
@@ -412,7 +404,7 @@ impl ApnsPushkin {
             return None;
         }
 
-        let aps = default_payload
+        let aps = provider_payload
             .entry("aps")
             .or_insert_with(|| Value::Object(Map::new()));
         let aps_object = aps.as_object_mut()?;
@@ -442,17 +434,16 @@ impl ApnsPushkin {
         // Allowed blind-wakeup fields are emitted alongside `aps` so
         // service extensions can still detect the wakeup kind and pull
         // the matching server-side record.
-        default_payload.extend(build_blind_routing_data(notification));
+        provider_payload.extend(build_blind_routing_data(notification));
 
-        // Final defence — strip anything forbidden that snuck in via
-        // the device default_payload or future builder bugs. Note
-        // `aps` IS on the SDK forbidden list because it's a provider
+        // Final defence - strip anything forbidden that a future builder
+        // bug tries to add. Note `aps` IS on the SDK forbidden list because it's a provider
         // escape hatch — for APNS we explicitly extract it, run the
         // sanitizer on the rest, then put `aps` back. This keeps the
         // allow-list strict for the freeform extension keys while
         // still letting the gateway emit a legitimate `aps` block.
-        let aps_block = default_payload.remove("aps");
-        let mut payload_map = match sanitized_provider_payload(default_payload) {
+        let aps_block = provider_payload.remove("aps");
+        let mut payload_map = match sanitized_provider_payload(provider_payload) {
             Ok(map) => map,
             Err(rejection) => {
                 tracing::warn!(
@@ -494,18 +485,7 @@ impl Pushkin for ApnsPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        let default_payload = match device.default_payload() {
-            Ok(default_payload) => default_payload,
-            Err(_) => {
-                tracing::warn!(
-                    push_key_hash = %device.redacted_push_key(),
-                    "rejecting APNS push_key due to invalid default_payload"
-                );
-                return Ok(vec![device.push_key.clone()]);
-            }
-        };
-
-        let Some(payload) = self.build_payload(notification, default_payload)? else {
+        let Some(payload) = self.build_payload(notification, Map::new())? else {
             return Ok(vec![]);
         };
         let priority = if notification.is_low_priority() {
@@ -756,15 +736,15 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.apns".to_owned(),
-            push_key: "spqr".to_owned(),
-            data: None,
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.apns".to_owned()),
+            push_key: Some("spqr".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -791,20 +771,19 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "I'm floating in a most peculiar way."
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -812,11 +791,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(3),
-                missed_calls: None,
-                highlight_count: Some(1),
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         };
 
@@ -852,35 +831,26 @@ mod tests {
     #[test]
     fn builds_event_id_only_payload() {
         let pushkin = pushkin();
-        let mut device = device();
-        device.data = Some(
-            json!({
-                "default_payload": {
-                    "aps": {
-                        "mutable-content": 1,
-                        "alert": {
-                            "loc-key": "SINGLE_UNREAD",
-                            "loc-args": []
-                        }
-                    }
-                }
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        );
+        let device = device();
         let notification = Notification {
             strand_title: None,
             realm_title: None,
             priority: None,
             membership: None,
             sender_actor_display_name: None,
-            content: None,
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+            ),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -888,39 +858,17 @@ mod tests {
             wakeup_kind: None,
             push_hint: None,
             devices: vec![device.clone()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: None,
-                highlight_count: None,
-            },
+            counts: Some(Counts {
+                badge: None,
+                unread_increment: None,
+                missed_call: None,
+            }),
             ..Default::default()
         };
 
-        let payload = pushkin
-            .build_payload(&notification, device.default_payload().unwrap())
-            .unwrap()
-            .unwrap();
+        let payload = pushkin.build_payload(&notification, Map::new()).unwrap();
 
-        assert_eq!(
-            payload,
-            json!({
-                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
-                "aps": {
-                    "mutable-content": 1,
-                    "alert": {
-                        "loc-key": "SINGLE_UNREAD",
-                        "loc-args": []
-                    },
-                    // §5.1 — unread=2 bucketed to the `2-5` representative 5.
-                    "badge": 5
-                }
-            })
-        );
-        assert!(payload.get("event_id").is_none());
-        assert!(payload.get("message_id").is_none());
-        assert!(payload.get("strand_id").is_none());
-        assert!(payload.get("space_id").is_none());
-        assert!(payload.get("realm_id").is_none());
+        assert!(payload.is_none());
     }
 
     #[test]

@@ -1,7 +1,10 @@
 use serde_json::{Map, Value};
 
-use super::{build_blind_routing_data, sanitized_provider_payload, truncate_str};
-use crate::models::Notification;
+use super::{
+    build_blind_routing_data, notification_badge_count, notification_unread_increment,
+    sanitized_provider_payload, truncate_str,
+};
+use crate::models::{Notification, NotificationExt};
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;
@@ -22,15 +25,15 @@ pub(super) enum AndroidPriority {
 
 pub(super) fn build_android_notification_payload(
     notification: &Notification,
-    mut default_payload: Map<String, Value>,
+    mut provider_payload: Map<String, Value>,
     send_badge_counts: bool,
 ) -> Option<AndroidNotificationPayload> {
-    merge_notification_data(&mut default_payload, notification, send_badge_counts);
+    merge_notification_data(&mut provider_payload, notification, send_badge_counts);
 
-    // T4.3 — last-line-of-defence sanitization. Even if a caller went
+    // T4.3 - last-line-of-defence sanitization. Even if a caller went
     // around the notify ingress (e.g. retry queue re-dispatch with
     // stale payload) we MUST NOT ship a forbidden field on the wire.
-    let default_payload = match sanitized_provider_payload(default_payload) {
+    let provider_payload = match sanitized_provider_payload(provider_payload) {
         Ok(payload) => payload,
         Err(rejection) => {
             tracing::warn!(
@@ -45,7 +48,7 @@ pub(super) fn build_android_notification_payload(
     Some(AndroidNotificationPayload {
         title,
         body,
-        data: default_payload,
+        data: provider_payload,
         priority: if notification.is_low_priority() {
             AndroidPriority::Normal
         } else {
@@ -59,7 +62,7 @@ fn merge_notification_data(
     notification: &Notification,
     send_badge_counts: bool,
 ) {
-    // T4.3 — only emit fields that the SDK blind-wakeup contract allows.
+    // T4.3 - only emit fields that the SDK blind-wakeup contract allows.
     // `event_id` / `message_id` / `strand_id` / `realm_id` / sender / names
     // are stable correlation identifiers; the client now derives them
     // from the e2ee wakeup payload it pulls server-side, never from the
@@ -80,21 +83,14 @@ fn merge_notification_data(
     );
 
     if send_badge_counts {
-        // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) before
-        // they reach the provider. A bare clamp still let `unread = 37`
-        // ride the wire as a per-`push_target_id` activity correlator;
-        // bucketing destroys the exact figure while preserving ordering.
-        if let Some(unread) = notification.counts.unread {
+        if let Some(unread_increment) = notification_unread_increment(notification) {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(crate::sanitize::bucket_count(unread).into()),
+                Value::Number(unread_increment.into()),
             );
         }
-        if let Some(missed_calls) = notification.counts.missed_calls {
-            payload.insert(
-                "badge".to_owned(),
-                Value::Number(crate::sanitize::bucket_count(missed_calls).into()),
-            );
+        if let Some(badge) = notification_badge_count(notification) {
+            payload.insert("badge".to_owned(), Value::Number(badge.into()));
         }
     }
 
@@ -157,18 +153,16 @@ fn message_summary(notification: &Notification, sender: &str) -> String {
 }
 
 fn fallback_summary(notification: &Notification, sender: &str) -> String {
-    // §5.1 minimization — never render the absolute unread integer into
-    // the provider-visible alert text. Even on the visible profile the
-    // provider can read this string, so the count is bucketed to the
-    // same coarse phrasing the wire data uses.
-    match notification.counts.unread {
-        Some(unread) if unread >= crate::sanitize::BUCKET_SIX_PLUS => {
+    match notification_unread_increment(notification) {
+        Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_SIX_PLUS => {
             format!(
                 "You have {}+ unread messages",
                 crate::sanitize::BUCKET_SIX_PLUS
             )
         }
-        Some(unread) if unread > 1 => "You have several unread messages".to_owned(),
+        Some(unread_increment) if unread_increment > 1 => {
+            "You have several unread messages".to_owned()
+        }
         Some(1) => "You have a new message".to_owned(),
         _ => format!("{sender} sent an update"),
     }
@@ -189,18 +183,16 @@ fn content_body(notification: &Notification) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.cn".to_owned(),
-            push_key: "push_key".to_owned(),
-            data: None,
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.cn".to_owned()),
+            push_key: Some("push_key".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -212,21 +204,19 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "Ground control to Major Tom",
-                    "formatted_body": "<b>Ground control</b>"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -234,11 +224,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: Some(1),
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -287,15 +277,13 @@ mod tests {
             payload.data.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // §5.1 — counts are bucketed (0 / 1 / 2-5 / 6+). unread=2 falls
-        // in the `2-5` bucket whose representative value is 5; the exact
-        // figure never reaches the wire.
+        // unread_increment travels as a bounded delta; badge keeps the
+        // bucket representative for the SDK badge field.
         assert_eq!(
             payload.data.get("unread_count"),
-            Some(&Value::Number(5.into()))
+            Some(&Value::Number(2.into()))
         );
-        // missed_calls=1 → `1` bucket → badge 1.
-        assert_eq!(payload.data.get("badge"), Some(&Value::Number(1.into())));
+        assert_eq!(payload.data.get("badge"), Some(&Value::Number(5.into())));
     }
 
     #[test]
@@ -320,16 +308,20 @@ mod tests {
                 priority: None,
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
-                content: None,
-                event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
+                event_id: Some(
+                    cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                ),
                 message_id: None,
-                strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+                strand_id: Some(
+                    cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000")
+                        .unwrap(),
+                ),
                 user_is_target: Some(true),
                 push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
                 wakeup_kind: Some("member".to_owned()),
                 push_hint: None,
                 devices: vec![device()],
-                counts: Counts::default(),
+                counts: Some(Counts::default()),
                 ..Default::default()
             },
             Map::new(),

@@ -121,6 +121,7 @@ async fn http_message_signature_authenticates_notify_request() {
             "wakeup_kind": "message",
             "push_hint": "new_message",
             "devices": [{
+                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -175,6 +176,7 @@ async fn mtls_profile_authenticates_notify_request() {
             "wakeup_kind": "message",
             "push_hint": "new_message",
             "devices": [{
+                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -230,6 +232,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
             "wakeup_kind": "message",
             "push_hint": "new_message",
             "devices": [{
+                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -294,7 +297,11 @@ async fn rejects_tampered_body() {
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "push_hint": "new_message",
-            "devices": [{"app_id": "com.example.app", "push_key": "accept"}]
+            "devices": [{
+                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+                "app_id": "com.example.app",
+                "push_key": "accept"
+            }]
         }
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();

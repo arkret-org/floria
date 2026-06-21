@@ -1,13 +1,12 @@
 use serde_json::json;
 
-use super::E2EE_LATE_RECOVERY_ACCESS_KIND;
 use super::validation::validate_wakeup_kind;
 
 #[test]
 fn e2ee_late_recovery_access_kind_matches_sdk_wire_repr() {
     let sdk_wire = serde_json::to_value(cokret::AccessKind::E2EELateRecovery).unwrap();
 
-    assert_eq!(sdk_wire, json!(E2EE_LATE_RECOVERY_ACCESS_KIND));
+    assert_eq!(sdk_wire, json!("e2ee_late_recovery"));
 }
 
 #[test]

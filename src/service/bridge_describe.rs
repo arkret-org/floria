@@ -168,19 +168,19 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // proxy hop). The strings are pinned to the SDK error-code
             // constants so a spec-side rename forces a recompile here.
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_AGENT_PAUSED,
+                "agent_paused",
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_AGENT_DEACTIVATED,
+                "agent_deactivated",
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                cokret::error::REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "A media-service token-exchange or recording artifact reference would route through a destination outside the Cokret blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",

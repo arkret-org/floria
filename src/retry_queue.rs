@@ -822,9 +822,15 @@ pub async fn run_worker(
             // to replay payload metadata. Provider implementations
             // accept blind-wakeup defaults.
             let device = Device {
-                app_id: envelope.app_id.clone(),
-                push_key: envelope.push_key.clone(),
-                ..Device::default()
+                device_id: cokret::DeviceId::new(format!(
+                    "ck:device:0196419b-0000-7000-8000-{:012}",
+                    1
+                ))
+                .expect("static retry shell device id is valid"),
+                app_id: Some(envelope.app_id.clone()),
+                push_key: Some(envelope.push_key.clone()),
+                platform: None,
+                target_actor_id: None,
             };
             let notification = Notification {
                 devices: vec![device.clone()],

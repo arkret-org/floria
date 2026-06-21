@@ -642,6 +642,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "unicode-normalization",
+ "zeroize",
 ]
 
 [[package]]
@@ -1368,6 +1369,7 @@ dependencies = [
  "futures",
  "globset",
  "hex",
+ "hmac 0.13.0",
  "isahc",
  "jsonwebtoken",
  "kdl",

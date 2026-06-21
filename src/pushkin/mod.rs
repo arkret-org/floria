@@ -22,11 +22,14 @@ use cokret::push_gateway_api::ProviderCapabilityDescriptor;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{
+    Counts, Device, DeviceExt, Notification, NotificationContext, NotificationExt,
+};
 
 static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
@@ -102,9 +105,12 @@ pub trait Pushkin: Send + Sync {
         _notification: &Notification,
         device: &Device,
     ) -> Vec<DispatchTarget> {
+        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
+            return Vec::new();
+        };
         vec![DispatchTarget {
-            app_id: device.app_id.clone(),
-            push_key: device.push_key.clone(),
+            app_id: app_id.to_owned(),
+            push_key: push_key.to_owned(),
         }]
     }
     async fn dispatch_notification(
@@ -158,9 +164,9 @@ pub struct ProviderCapabilities {
     pub supports_collapse: bool,
     /// Whether the provider has first-class badge / unread count support.
     pub supports_badge: bool,
-    /// Default outbound payload shape — informs blind-wakeup vs.
-    /// service-visible plaintext defaults.
-    pub default_payload_shape: &'static str,
+    /// Outbound provider payload shape - informs blind-wakeup vs.
+    /// service-visible plaintext emission.
+    pub provider_payload_shape: &'static str,
     /// Credential material this provider expects.
     pub credential_kinds: &'static [&'static str],
     /// Documented credential rotation cadence for this provider kind.
@@ -184,7 +190,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: Some(28 * 24 * 60 * 60),
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "encrypted_or_blind_wakeup",
+            provider_payload_shape: "encrypted_or_blind_wakeup",
             credential_kinds: &["jwt_p8", "cert_p12"],
             credential_rotation: "rotate_jwt_p8_yearly_cert_p12_per_apple_lifecycle",
             blind_wakeup_required: true,
@@ -195,7 +201,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: Some(28 * 24 * 60 * 60),
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "data_only_blind_wakeup",
+            provider_payload_shape: "data_only_blind_wakeup",
             credential_kinds: &["service_account_v1"],
             credential_rotation: "rotate_service_account_yearly_or_on_compromise",
             blind_wakeup_required: true,
@@ -206,7 +212,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: false,
-            default_payload_shape: "encrypted_aes128gcm",
+            provider_payload_shape: "encrypted_aes128gcm",
             credential_kinds: &["vapid_keypair"],
             credential_rotation: "rotate_vapid_keypair_quarterly",
             blind_wakeup_required: true,
@@ -217,7 +223,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["client_id_secret"],
             credential_rotation: "rotate_client_secret_yearly",
             blind_wakeup_required: false,
@@ -228,7 +234,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: Some(15 * 24 * 60 * 60),
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["client_id_secret"],
             credential_rotation: "rotate_client_secret_yearly",
             blind_wakeup_required: false,
@@ -239,7 +245,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
             credential_rotation: "rotate_master_secret_quarterly",
             blind_wakeup_required: false,
@@ -250,7 +256,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
             credential_rotation: "rotate_master_secret_yearly",
             blind_wakeup_required: false,
@@ -261,7 +267,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["app_key_master_secret"],
             credential_rotation: "rotate_master_secret_yearly",
             blind_wakeup_required: false,
@@ -272,7 +278,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["app_id_app_key"],
             credential_rotation: "rotate_app_key_yearly",
             blind_wakeup_required: false,
@@ -283,7 +289,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: true,
             supports_badge: true,
-            default_payload_shape: "rich_android",
+            provider_payload_shape: "rich_android",
             credential_kinds: &["app_secret"],
             credential_rotation: "rotate_app_secret_yearly",
             blind_wakeup_required: false,
@@ -294,7 +300,7 @@ pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
             ttl_seconds_max: None,
             supports_collapse: false,
             supports_badge: false,
-            default_payload_shape: "operator_defined",
+            provider_payload_shape: "operator_defined",
             credential_kinds: &["bearer_token", "hmac_secret", "client_certificate"],
             credential_rotation: "operator_defined",
             blind_wakeup_required: true,
@@ -356,7 +362,7 @@ impl PushkinRegistry {
                         ttl_seconds_max: capabilities.ttl_seconds_max,
                         supports_collapse: capabilities.supports_collapse,
                         supports_badge: capabilities.supports_badge,
-                        default_payload_shape: capabilities.default_payload_shape.to_owned(),
+                        provider_payload_shape: capabilities.provider_payload_shape.to_owned(),
                         credential_kinds: capabilities
                             .credential_kinds
                             .iter()
@@ -640,17 +646,48 @@ pub fn build_blind_routing_data(notification: &Notification) -> Map<String, serd
 pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
     let mut data = build_blind_routing_data(notification);
 
-    // §5.1 — the absolute unread count is an activity side channel.
-    // Bucket it (0 / 1 / 2-5 / 6+) before it reaches the provider so it
-    // can't be used to rebuild a cumulative per-`push_target_id`
-    // activity profile. `bucket_count` also clamps below MAX_COUNT_VALUE.
-    if let Some(unread) = notification.counts.unread {
+    if let Some(unread_increment) = notification_unread_increment(notification) {
         data.insert(
             "unread_count".to_owned(),
-            serde_json::Value::Number(crate::sanitize::bucket_count(unread).into()),
+            serde_json::Value::Number(unread_increment.into()),
         );
     }
+    if let Some(badge) = notification_badge_count(notification) {
+        data.insert("badge".to_owned(), serde_json::Value::Number(badge.into()));
+    }
     data
+}
+
+pub fn notification_unread_increment(notification: &Notification) -> Option<u64> {
+    notification
+        .counts
+        .as_ref()
+        .and_then(|counts| counts.unread_increment)
+        .map(|value| value.min(cokret::blind_payload_sanitizer::MAX_COUNT_VALUE))
+}
+
+pub fn notification_badge_count(notification: &Notification) -> Option<u64> {
+    notification.counts.as_ref().and_then(counts_badge_count)
+}
+
+fn counts_badge_count(counts: &Counts) -> Option<u64> {
+    counts
+        .badge
+        .as_ref()
+        .and_then(badge_value_to_count)
+        .or(counts.missed_call)
+        .map(|value| value.min(cokret::blind_payload_sanitizer::MAX_COUNT_VALUE))
+}
+
+fn badge_value_to_count(value: &Value) -> Option<u64> {
+    match value {
+        Value::Bool(false) | Value::Null => Some(0),
+        Value::Bool(true) => Some(1),
+        Value::String(bucket) if bucket == "1" => Some(1),
+        Value::String(bucket) if bucket == "2-5" => Some(5),
+        Value::String(bucket) if bucket == "6+" => Some(crate::sanitize::BUCKET_SIX_PLUS),
+        _ => value.as_u64(),
+    }
 }
 
 /// Generate a fresh random base64url collapse_key. Used by WebPush /
@@ -681,7 +718,9 @@ mod sanitize_tests {
         })
         .as_object()
         .unwrap()
-        .clone();
+        .clone()
+        .into_iter()
+        .collect();
         let out = sanitized_provider_payload(payload).unwrap();
         assert!(!out.contains_key("event_id"));
         assert_eq!(out.get("client"), Some(&json!("android")));
@@ -699,7 +738,9 @@ mod sanitize_tests {
         })
         .as_object()
         .unwrap()
-        .clone();
+        .clone()
+        .into_iter()
+        .collect();
         let out = sanitized_provider_payload(payload).unwrap();
         for forbidden in [
             "audience",
@@ -740,7 +781,9 @@ mod sanitize_tests {
         })
         .as_object()
         .unwrap()
-        .clone();
+        .clone()
+        .into_iter()
+        .collect();
         let out = sanitized_provider_payload(payload).unwrap();
         for forbidden in [
             "appeal_id",
@@ -778,7 +821,9 @@ mod sanitize_tests {
         })
         .as_object()
         .unwrap()
-        .clone();
+        .clone()
+        .into_iter()
+        .collect();
         let out = sanitized_provider_payload(payload).unwrap();
         // Serialize back to JSON and assert none of the names survive.
         let encoded = serde_json::to_string(&out).unwrap();
@@ -798,7 +843,9 @@ mod sanitize_tests {
         })
         .as_object()
         .unwrap()
-        .clone();
+        .clone()
+        .into_iter()
+        .collect();
         let err = sanitized_provider_payload(payload).unwrap_err();
         assert_eq!(err.reason_code, "sensitive_literal");
     }
@@ -811,12 +858,19 @@ mod sanitize_tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: None,
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+            ),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -824,11 +878,11 @@ mod sanitize_tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
-            counts: crate::models::Counts {
-                unread: Some(3),
-                missed_calls: None,
-                highlight_count: None,
-            },
+            counts: Some(crate::models::Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         };
         let data = build_blind_provider_data(&notification);

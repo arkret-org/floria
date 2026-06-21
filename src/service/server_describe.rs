@@ -198,6 +198,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         auth_metadata,
         limits: Value::Object(limits),
         plaintext_visibility,
+        privacy_derivation: None,
         implemented_features: vec![
             "push.notify".to_owned(),
             "push.bridge_describe".to_owned(),

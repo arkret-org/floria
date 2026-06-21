@@ -351,7 +351,7 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
     assert_eq!(entry["supports_collapse"], json!(true));
     assert_eq!(entry["supports_badge"], json!(true));
     assert_eq!(
-        entry["default_payload_shape"],
+        entry["provider_payload_shape"],
         json!("data_only_blind_wakeup")
     );
     assert_eq!(entry["credential_kinds"], json!(["service_account_v1"]));

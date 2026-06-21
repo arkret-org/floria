@@ -18,7 +18,7 @@ use super::reqwest_support::{build_reqwest_client, parse_retry_after};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext};
 
 static JPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -207,7 +207,7 @@ impl JpushPushkin {
         );
         body.insert(
             "audience".to_owned(),
-            json!({ "registration_id": [device.push_key.clone()] }),
+            json!({ "registration_id": [device.push_key().unwrap_or_default()] }),
         );
 
         let mut notification_object = Map::new();
@@ -387,7 +387,7 @@ impl JpushPushkin {
                 retry_after,
             )),
             400 if body.contains("registration_id") && body.contains("invalid") => {
-                Ok(vec![device.push_key.clone()])
+                Ok(vec![device.push_key().unwrap_or_default().to_owned()])
             }
             _ => Err(DispatchError::remote(jpush_error_message(body, status))),
         }
@@ -416,24 +416,14 @@ impl Pushkin for JpushPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key.trim().is_empty() {
+        if device.push_key().is_none() {
             tracing::warn!("rejecting JPush device due to empty registration_id");
-            return Ok(vec![device.push_key.clone()]);
+            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
         }
 
-        let default_payload = match device.default_payload() {
-            Ok(default_payload) => default_payload,
-            Err(_) => {
-                tracing::warn!(
-                    push_key_hash = %device.redacted_push_key(),
-                    "rejecting JPush push_key due to invalid default_payload"
-                );
-                return Ok(vec![device.push_key.clone()]);
-            }
-        };
         let Some(payload) = build_android_notification_payload(
             notification,
-            default_payload,
+            Map::new(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -588,24 +578,15 @@ struct JpushErrorBody {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.jpush".to_owned(),
-            push_key: "regid".to_owned(),
-            data: Some(
-                json!({
-                    "default_payload": {
-                        "client": "android"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.jpush".to_owned()),
+            push_key: Some("regid".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -617,20 +598,19 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "Ground control to Major Tom"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -638,11 +618,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: None,
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -677,7 +657,9 @@ mod tests {
                     })
                     .as_object()
                     .unwrap()
-                    .clone(),
+                    .clone()
+                    .into_iter()
+                    .collect(),
                 ),
                 send_badge_counts: true,
             },
@@ -688,12 +670,8 @@ mod tests {
     #[test]
     fn builds_request_body_with_extras_and_third_party_channel() {
         let device = device();
-        let payload = build_android_notification_payload(
-            &notification(),
-            device.default_payload().unwrap(),
-            true,
-        )
-        .unwrap();
+        let payload =
+            build_android_notification_payload(&notification(), Map::new(), true).unwrap();
         let body = pushkin().build_request_body(&notification(), &device, payload);
         let body = Value::Object(body);
 
@@ -705,9 +683,9 @@ mod tests {
             body.pointer("/notification/android/title"),
             Some(&Value::String("Mission Control".to_owned()))
         );
-        assert_eq!(
-            body.pointer("/notification/android/extras/client"),
-            Some(&Value::String("android".to_owned()))
+        assert!(
+            body.pointer("/notification/android/extras/client")
+                .is_none()
         );
         assert_eq!(
             body.pointer("/third_party_channel/vivo/classification"),
@@ -743,7 +721,9 @@ mod tests {
             })
             .as_object()
             .unwrap()
-            .clone(),
+            .clone()
+            .into_iter()
+            .collect(),
         )
         .unwrap();
         let channel = Value::Object(channel);

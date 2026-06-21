@@ -320,17 +320,14 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    // `content` (and the `target_did` it carries) is a forbidden
-    // payload key per the SDK sanitizer (correlation identifier /
-    // provider escape hatch) so it's caught at content validation
-    // before the plaintext-identity-metadata pass — schema_violation
-    // / BAD_REQUEST rather than capability_denied.
+    // `content` is no longer part of the notify schema, so old payloads
+    // are rejected before any legacy content sanitizer can run.
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();
     assert!(
-        msg.contains("forbidden_field") || msg.contains("target_did"),
-        "expected forbidden field rejection, got: {msg}"
+        msg.contains("expected Cokret push notify request body"),
+        "expected notify schema rejection, got: {msg}"
     );
 }
 
@@ -365,16 +362,14 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    // DID-literal strings inside `content` are caught by the SDK
-    // blind-payload sanitizer (sensitive_literal) before the
-    // plaintext-identity-metadata pass, so the response is
-    // BAD_REQUEST / schema_violation rather than capability_denied.
+    // `content` is no longer part of the notify schema, so old payloads
+    // are rejected before any legacy content sanitizer can run.
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();
     assert!(
-        msg.contains("relay_username") || msg.contains("sensitive"),
-        "expected DID-literal rejection mention, got: {msg}"
+        msg.contains("expected Cokret push notify request body"),
+        "expected notify schema rejection, got: {msg}"
     );
 }
 

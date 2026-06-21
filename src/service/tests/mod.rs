@@ -16,7 +16,7 @@ use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext, RejectedDevice};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
@@ -26,7 +26,6 @@ mod dedup;
 mod delivery;
 mod internal;
 mod phase_p2;
-mod push_decision;
 mod rate_limit;
 mod sanitizer;
 
@@ -104,7 +103,7 @@ impl Pushkin for TestPushkin {
 
         match self.behavior {
             TestBehavior::Accept => Ok(vec![]),
-            TestBehavior::Reject => Ok(vec![device.push_key.clone()]),
+            TestBehavior::Reject => Ok(vec![device.push_key().unwrap_or_default().to_owned()]),
             TestBehavior::RemoteError => Err(DispatchError::remote("synthetic remote failure")),
             TestBehavior::TemporaryError => Err(DispatchError::temporary(
                 "synthetic temporary failure",
@@ -300,6 +299,7 @@ pub(super) fn with_operation_id(mut request_body: Value, operation_id: &str) -> 
 
 pub(super) fn device(app_id: &str, push_key: &str) -> Value {
     json!({
+        "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
         "app_id": app_id,
         "push_key": push_key
     })

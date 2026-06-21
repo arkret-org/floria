@@ -2,63 +2,13 @@ use std::time::Instant;
 
 use blake2::Blake2s256;
 use blake2::digest::Digest;
-use cokret::EffectiveScope;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
-use thiserror::Error;
 
-/// Request body for `POST /_cokret/edge/push/notify`.
-///
-/// SPEC-CR-016: transport-level fields (`operation_id`,
-/// `idempotency_key`, `origin_service_did`, `destination_service_did`)
-/// no longer ride the body. They are carried as HTTP headers
-/// (`Idempotency-Key` / `Source-Service-DID` / `Destination-Service-DID`)
-/// or determined by the URL path (`operationId`), matching the canonical
-/// `push_notify_request_body` schema. The body top level is now
-/// `{notification, event_kind?, reason_code?, audit_envelope?}`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct FloriaPushNotifyEnvelope {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_kind: Option<String>,
-    /// Round 4 (spec a77b995) — caller-supplied wire-safe `reason_code`
-    /// on the inbound request. When set to
-    /// [`cokret::ERROR_CODE_HISTORICAL_ONLY`] the request is a soland
-    /// diagnostic replay and MUST NOT trigger a fresh push fanout — the
-    /// gateway answers a 200 idempotency-style ack instead. Other values
-    /// are rejected with `schema_violation` (floria only honors the
-    /// `historical_only` no-op shape).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_code: Option<String>,
-    /// Round 4 — `ck.audit.policy_access` envelope routing fragment.
-    /// When present, the request is an audit-pipeline event (e.g. an
-    /// `e2ee_late_recovery` access notice), NOT a push notify. The
-    /// gateway writes the audit event, acks with 200, and skips the
-    /// push pipeline entirely.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub audit_envelope: Option<AuditEnvelopeMetadata>,
-    pub notification: Notification,
-}
-
-/// Round 4 — typed `ck.audit.policy_access` envelope routing fragment
-/// carried alongside a `ck.edge.push.command.notify` request. Receiving the
-/// `e2ee_late_recovery` access_kind here means soland routed an audit
-/// event through the gateway's HTTP surface; the gateway forwards it
-/// to the configured audit sink and MUST NOT do any push fanout.
-/// Mirrors [`cokret::AuditPolicyAccessPayload`] but with
-/// only the wire fields floria needs to make the routing decision.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AuditEnvelopeMetadata {
-    /// `ck.audit.policy_access.access_kind`. The round-4 enum widens
-    /// to include `e2ee_late_recovery`; floria specifically branches
-    /// on that value to skip the push pipeline.
-    pub access_kind: String,
-    /// REQUIRED when `access_kind == e2ee_late_recovery`. References
-    /// the original event the late recovery targets.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub late_recovery_original_event_id: Option<String>,
-}
+pub type AuditEnvelopeMetadata = cokret::PushAuditEnvelopeMetadata;
+pub type Counts = cokret::PushCounts;
+pub type Device = cokret::PushDeviceRoute;
+pub type Notification = cokret::PushNotificationEnvelope;
+pub type RoutingMetadata = cokret::PushRoutingMetadata;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
@@ -117,13 +67,6 @@ impl RejectedDevice {
         }
     }
 
-    /// Attach a wire-safe reason code. Empty / whitespace strings are
-    /// dropped — floria never emits an empty `reason_code` field, only
-    /// `None`. The matching T4.4 contract is: caller is responsible
-    /// for using only the wire-safe `reason_code` set (e.g.
-    /// `muted` / `not_mentioned` / `not_participating`); internal
-    /// diagnostic strings are caller's problem to suppress before
-    /// they reach floria.
     pub fn with_reason_code(mut self, reason_code: Option<&str>) -> Self {
         self.reason_code = reason_code
             .map(str::trim)
@@ -151,328 +94,138 @@ pub struct DeliveryReceipt {
     pub request_id: Option<String>,
 }
 
-/// SPEC-CR-016 — gateway-internal routing fragment carried under
-/// `notification.routing_metadata`. Every field here drives gateway-side
-/// routing / dedup / per-(provider,realm,circle) circuit-breaker state and
-/// MUST be stripped before the gateway calls any push provider; it MUST
-/// NOT be forwarded to a provider.
-///
-/// NOTE: `routing_metadata.realm_id` is a distinct gateway-internal
-/// routing path and is NOT the client-visible top-level `realm_id` that a
-/// blind notification forbids; the two coexist and are deliberately
-/// separated in the canonical schema.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct RoutingMetadata {
-    /// Security-boundary id (`ck:realm:`) used for gateway-internal
-    /// routing / dedup / circuit-breaker keying. Container `space_id` is
-    /// forbidden on the push wire model and does not appear here.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realm_id: Option<String>,
-    /// CKP-0007 Circle primitive (spec b7d35be) — typed `ck:circle:` id
-    /// of the encryption sub-boundary this notification belongs to. When
-    /// present, routing / dedup / per-(provider,realm,circle) circuit
-    /// breaker stats key off this id rather than the parent realm so two
-    /// strands with the same name in different Circles do not collide.
-    /// Plaintext `circle_id` is NEVER forwarded to providers — it lives
-    /// on the wire only to drive gateway-internal routing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub circle_id: Option<String>,
-    /// Strand-declared `scope_circle_id` when the originating Strand is bound
-    /// to a Circle scope. Gateway-internal; stripped before any provider.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope_circle_id: Option<String>,
-    /// CKP-0007 — reducer-stamped envelope scope binding mirrored on the
-    /// push wire model (`event_envelope.effective_scope`). Carries the
-    /// `{realm_id}` (Realm-default scope) or `{realm_id, circle_id}`
-    /// (Circle scope) discriminator the principal server stamped onto
-    /// the originating Event. When present and inconsistent with the
-    /// notification's `realm_id` / `circle_id` the request is rejected
-    /// with `effective_scope_mismatch`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effective_scope: Option<EffectiveScope>,
-    /// Round 4 (spec a77b995, commit 7fae9ba) — plaintext routing
-    /// fragment that mirrors the SDK's
-    /// [`cokret::MentionRedirectRouting`]. When the list is non-empty
-    /// each device's [`Device::target_actor_id`] MUST appear in this
-    /// allow-list or the device is failed-closed (rejected without
-    /// fanout, no provider call, no body decryption). An empty / missing
-    /// list means "no mention-redirect scope is in effect" — every
-    /// device passes the routing gate. The receiver gets to verify its
-    /// inclusion via this plaintext field WITHOUT needing to decrypt
-    /// the message blob.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mention_redirect_target_actor_ids: Vec<String>,
-    /// Receiver's accepted Realm delivery-binding frontier when the
-    /// notify originated from a federation hop. Receiver returns
-    /// `delivery_binding_stale` if its accepted frontier is ahead.
-    /// Delivery binding is a Realm-level concept. Spec 0a5ab85 §4.1.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delivery_binding_frontier: Option<String>,
+pub trait NotificationExt {
+    fn scope_id(&self) -> Option<&str>;
+    fn scope_title(&self) -> Option<&str>;
+    fn circle_id(&self) -> Option<&str>;
+    fn strand_id(&self) -> Option<&str>;
+    fn message_id(&self) -> Option<&str>;
+    fn realm_id(&self) -> Option<&str>;
+    fn effective_scope(&self) -> Option<&cokret::EffectiveScope>;
+    fn mention_redirect_target_actor_ids(&self) -> &[cokret::Did];
+    fn strand_title(&self) -> Option<&str>;
+    fn realm_title(&self) -> Option<&str>;
+    fn sender_label(&self) -> Option<&str>;
+    fn wakeup_kind(&self) -> Option<&str>;
+    fn push_hint_text(&self) -> Option<&str>;
+    fn content_body(&self) -> Option<&str>;
+    fn is_low_priority(&self) -> bool;
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct Notification {
-    // --- visible_notification profile-gated fields (SPEC-CR-016 class C):
-    //     produced only on the visible path, never in a blind wakeup. ---
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strand_title: Option<String>,
-    /// Human-readable label for the Realm security boundary. Container
-    /// Space names do not surface on the push wire model.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realm_title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub membership: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sender_actor_display_name: Option<String>,
-    /// Legacy product-private preview container. The notify ingress keeps
-    /// this field only to return a stable schema violation for stale callers;
-    /// provider adapters MUST NOT render or forward it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content: Option<Map<String, Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strand_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub user_is_target: Option<bool>,
-    // --- base fields shared by blind + visible ---
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push_target_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wakeup_kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push_hint: Option<String>,
-    /// SPEC-CR-016 (class B) — gateway-internal routing fragment.
-    /// Stripped before any provider call.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub routing_metadata: Option<RoutingMetadata>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub devices: Vec<Device>,
-    #[serde(default)]
-    pub counts: Counts,
-}
-
-impl Notification {
-    /// CKP-0007 — the most-specific scope id the gateway should key
-    /// per-(provider, scope) state off (rate limits, circuit breaker
-    /// windows, retry queues). Precedence:
-    ///   1. `circle_id` (encryption sub-boundary)
-    ///   2. `strand_id`   (Realm-default-scoped conversation)
-    ///   3. `realm_id`  (security boundary)
-    pub fn scope_id(&self) -> Option<&str> {
+impl NotificationExt for Notification {
+    fn scope_id(&self) -> Option<&str> {
         self.circle_id()
             .or_else(|| self.strand_id())
             .or_else(|| self.realm_id())
     }
 
-    pub fn scope_title(&self) -> Option<&str> {
-        self.strand_title().or(self.realm_title())
+    fn scope_title(&self) -> Option<&str> {
+        self.strand_title().or_else(|| self.realm_title())
     }
 
-    pub fn circle_id(&self) -> Option<&str> {
-        non_empty(
-            self.routing_metadata
-                .as_ref()
-                .and_then(|routing| routing.circle_id.as_deref()),
-        )
+    fn circle_id(&self) -> Option<&str> {
+        self.routing_metadata
+            .as_ref()
+            .and_then(|routing| routing.circle_id.as_ref())
+            .map(cokret::CircleId::as_str)
+            .and_then(non_empty)
     }
 
-    pub fn strand_id(&self) -> Option<&str> {
-        non_empty(self.strand_id.as_deref())
+    fn strand_id(&self) -> Option<&str> {
+        self.strand_id
+            .as_ref()
+            .map(cokret::StrandId::as_str)
+            .and_then(non_empty)
     }
 
-    pub fn message_id(&self) -> Option<&str> {
-        non_empty(self.message_id.as_deref())
+    fn message_id(&self) -> Option<&str> {
+        self.message_id
+            .as_ref()
+            .map(cokret::MessageId::as_str)
+            .and_then(non_empty)
     }
 
-    pub fn realm_id(&self) -> Option<&str> {
-        non_empty(
-            self.routing_metadata
-                .as_ref()
-                .and_then(|routing| routing.realm_id.as_deref()),
-        )
+    fn realm_id(&self) -> Option<&str> {
+        self.routing_metadata
+            .as_ref()
+            .and_then(|routing| routing.realm_id.as_ref())
+            .map(cokret::RealmId::as_str)
+            .and_then(non_empty)
     }
 
-    /// SPEC-CR-016 — reducer-stamped scope binding (routing-only).
-    pub fn effective_scope(&self) -> Option<&EffectiveScope> {
+    fn effective_scope(&self) -> Option<&cokret::EffectiveScope> {
         self.routing_metadata
             .as_ref()
             .and_then(|routing| routing.effective_scope.as_ref())
     }
 
-    /// SPEC-CR-016 — mention-redirect routing allow-list (routing-only).
-    pub fn mention_redirect_target_actor_ids(&self) -> &[String] {
+    fn mention_redirect_target_actor_ids(&self) -> &[cokret::Did] {
         self.routing_metadata
             .as_ref()
             .map(|routing| routing.mention_redirect_target_actor_ids.as_slice())
             .unwrap_or(&[])
     }
 
-    pub fn strand_title(&self) -> Option<&str> {
-        non_empty(self.strand_title.as_deref())
+    fn strand_title(&self) -> Option<&str> {
+        self.strand_title.as_deref().and_then(non_empty)
     }
 
-    pub fn realm_title(&self) -> Option<&str> {
-        non_empty(self.realm_title.as_deref())
+    fn realm_title(&self) -> Option<&str> {
+        self.realm_title.as_deref().and_then(non_empty)
     }
 
-    pub fn sender_label(&self) -> Option<&str> {
-        non_empty(self.sender_actor_display_name.as_deref())
+    fn sender_label(&self) -> Option<&str> {
+        self.sender_actor_display_name
+            .as_deref()
+            .and_then(non_empty)
     }
 
-    pub fn wakeup_kind(&self) -> Option<&str> {
-        non_empty(self.wakeup_kind.as_deref())
+    fn wakeup_kind(&self) -> Option<&str> {
+        self.wakeup_kind.as_deref().and_then(non_empty)
     }
 
-    pub fn push_hint_text(&self) -> Option<&str> {
-        non_empty(self.push_hint.as_deref())
+    fn push_hint_text(&self) -> Option<&str> {
+        self.push_hint.as_deref().and_then(non_empty)
     }
 
-    pub fn content_body(&self) -> Option<&str> {
+    fn content_body(&self) -> Option<&str> {
         None
     }
 
-    pub fn is_low_priority(&self) -> bool {
+    fn is_low_priority(&self) -> bool {
         self.priority.as_deref() == Some("low")
     }
 }
 
-fn non_empty(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
+pub trait DeviceExt {
+    fn app_id(&self) -> Option<&str>;
+    fn push_key(&self) -> Option<&str>;
+    fn redacted_push_key(&self) -> String;
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct Device {
-    pub push_key: String,
-    pub app_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<Map<String, Value>>,
-    #[serde(default)]
-    pub tweaks: Tweaks,
-    /// T4.4 — Caller-supplied push-rule decision. When `deliver=false`
-    /// floria records the device as rejected with the supplied
-    /// `reason_code` (without re-evaluating watch-level rules, which
-    /// are the Sync Service's responsibility). When absent the device
-    /// is treated as delivery-eligible. Internal reasons never travel
-    /// across this hop — only the wire-safe `reason_code` is honored,
-    /// matching the `ck.edge.push.command.notify` privacy descriptor.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push_decision: Option<PushDecisionHint>,
-    /// Round 4 (spec a77b995) — actor DID this device's user is
-    /// registered as on the recipient principal server. Used as the
-    /// lookup key for the plaintext
-    /// [`Notification::mention_redirect_target_actor_ids`] allow-list.
-    /// MUST be a DID (the SDK enforces the round-4 tightened DID regex
-    /// upstream); floria treats it as an opaque token.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_actor_id: Option<String>,
-}
-
-/// T4.4 — Caller-supplied wire-safe push-rule decision hint.
-///
-/// floria does **not** evaluate watch levels itself — receiver-level
-/// muted / mentions_only / participating / all checks are the Sync
-/// Service's job. When the caller has already evaluated and chose to
-/// skip the device, it forwards the decision here so the rejection
-/// surfaces with a stable wire reason (e.g. `not_mentioned`) in the
-/// delivery receipt.
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct PushDecisionHint {
-    /// `true` if the dispatcher should fan the device out to the
-    /// gateway. `false` means caller's rule engine already decided
-    /// `dont_notify`.
-    #[serde(default = "default_deliver")]
-    pub deliver: bool,
-    /// `true` when delivery should be a body-free blind wakeup. Only
-    /// meaningful when `deliver=true`. floria does not currently
-    /// rewrite the wakeup_kind based on this flag — it's recorded for
-    /// downstream observability.
-    #[serde(default)]
-    pub blind_wakeup: bool,
-    /// Wire-safe reason code. Mirrored into
-    /// `RejectedDevice.reason_code` when `deliver=false`. Empty / missing
-    /// is treated as `dont_notify` (no public reason emitted) — this
-    /// keeps the wire surface tight without leaking diagnostics.
-    #[serde(default)]
-    pub reason_code: Option<String>,
-}
-
-fn default_deliver() -> bool {
-    true
-}
-
-impl Device {
-    pub fn data_value(&self, key: &str) -> Option<&Value> {
-        self.data.as_ref()?.get(key)
+impl DeviceExt for Device {
+    fn app_id(&self) -> Option<&str> {
+        self.app_id.as_deref().and_then(non_empty)
     }
 
-    pub fn data_string(&self, key: &str) -> Option<&str> {
-        self.data_value(key)?.as_str()
+    fn push_key(&self) -> Option<&str> {
+        self.push_key.as_deref().and_then(non_empty)
     }
 
-    pub fn data_bool(&self, key: &str) -> Option<bool> {
-        self.data_value(key)?.as_bool()
+    fn redacted_push_key(&self) -> String {
+        redact_push_token(self.push_key().unwrap_or_default())
     }
-
-    pub fn default_payload(&self) -> Result<Map<String, Value>, DefaultPayloadError> {
-        let Some(data) = &self.data else {
-            return Ok(Map::new());
-        };
-        let Some(value) = data.get("default_payload") else {
-            return Ok(Map::new());
-        };
-        match value {
-            Value::Object(object) => Ok(object.clone()),
-            _ => Err(DefaultPayloadError::InvalidType),
-        }
-    }
-
-    pub fn default_payload_lossy(&self) -> Map<String, Value> {
-        self.data_value("default_payload")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    pub fn redacted_push_key(&self) -> String {
-        redact_push_token(&self.push_key)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-pub enum DefaultPayloadError {
-    #[error("device default_payload must be a JSON object")]
-    InvalidType,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct Tweaks {
-    #[serde(default)]
-    pub sound: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct Counts {
-    #[serde(default)]
-    pub unread: Option<u64>,
-    #[serde(default)]
-    pub missed_calls: Option<u64>,
-    #[serde(default)]
-    pub highlight_count: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 pub struct NotificationContext {
     pub request_id: String,
     pub start_time: Instant,
+}
+
+fn non_empty(value: &str) -> Option<&str> {
+    let value = value.trim();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 pub fn redact_push_token(token: &str) -> String {
@@ -499,8 +252,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        Counts, DeliveryReceipt, FloriaPushNotifyEnvelope as PushNotifyRequestBody,
-        FloriaPushNotifyOutcome as PushNotifyOutcome, Notification,
+        Counts, DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification,
+        NotificationExt,
     };
 
     #[test]
@@ -518,13 +271,14 @@ mod tests {
     #[test]
     fn counts_accept_active_fields() {
         let counts: Counts = serde_json::from_value(json!({
-            "unread": 3,
-            "highlight_count": 1
+            "badge": "2-5",
+            "unread_increment": 2,
+            "missed_call": 0
         }))
         .unwrap();
 
-        assert_eq!(counts.unread, Some(3));
-        assert_eq!(counts.highlight_count, Some(1));
+        assert_eq!(counts.badge, Some(json!("2-5")));
+        assert_eq!(counts.unread_increment, Some(2));
     }
 
     #[test]
@@ -539,13 +293,7 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
-        // SPEC-CR-016: transport fields (operation_id / idempotency_key /
-        // origin_service_did / destination_service_did) ride HTTP headers,
-        // not the body. The body top level is
-        // {notification, event_kind?, reason_code?, audit_envelope?};
-        // routing fields (realm_id / circle_id / ...) live under
-        // notification.routing_metadata.
-        let request: PushNotifyRequestBody = serde_json::from_value(json!({
+        let request: cokret::PushNotifyRequestBody = serde_json::from_value(json!({
             "event_kind": "ck.message",
             "notification": {
                 "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
@@ -555,6 +303,7 @@ mod tests {
                     "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
                 },
                 "devices": [{
+                    "device_id": "ck:device:0196419b-0000-7000-8000-000000000004",
                     "app_id": "app.example.android",
                     "push_key": "token-123"
                 }]
@@ -572,15 +321,13 @@ mod tests {
 
     #[test]
     fn notify_envelope_rejects_transport_fields_in_body() {
-        // The four transport fields are now header-only; their presence in
-        // the body is an unknown field under deny_unknown_fields.
         for field in [
             "operation_id",
             "idempotency_key",
             "origin_service_did",
             "destination_service_did",
         ] {
-            let err = serde_json::from_value::<PushNotifyRequestBody>(json!({
+            let err = serde_json::from_value::<cokret::PushNotifyRequestBody>(json!({
                 field: "x",
                 "notification": { "devices": [] }
             }))

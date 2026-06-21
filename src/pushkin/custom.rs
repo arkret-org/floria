@@ -14,11 +14,12 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use base64::Engine;
+use hmac::{Hmac, KeyInit, Mac};
 use prometheus::{Histogram, register_histogram, register_int_counter_vec};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, Identity, Proxy};
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
@@ -30,7 +31,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -149,7 +150,7 @@ impl CustomPushkin {
         if !self.url_template.contains(PUSH_KEY_PLACEHOLDER) {
             return Ok(self.url_template.clone());
         }
-        let escaped = urlencoding_encode(&device.push_key);
+        let escaped = urlencoding_encode(device.push_key().unwrap_or_default());
         Ok(self.url_template.replace(PUSH_KEY_PLACEHOLDER, &escaped))
     }
 
@@ -178,7 +179,10 @@ impl CustomPushkin {
                     .as_secs()
             ),
         );
-        payload.insert("app_id".to_owned(), Value::String(device.app_id.clone()));
+        payload.insert(
+            "app_id".to_owned(),
+            Value::String(device.app_id().unwrap_or_default().to_owned()),
+        );
         payload.insert(
             "push_key_hash".to_owned(),
             Value::String(device.redacted_push_key()),
@@ -214,12 +218,14 @@ impl CustomPushkin {
                 secret,
                 header,
             } => {
-                let mut hasher = Sha256::new();
-                hasher.update(secret);
-                hasher.update(&body_bytes);
-                let signature = hasher.finalize();
+                type HmacSha256 = Hmac<Sha256>;
+                let mut mac = HmacSha256::new_from_slice(secret).map_err(|error| {
+                    DispatchError::internal(format!("invalid hmac secret: {error}"))
+                })?;
+                mac.update(&body_bytes);
+                let signature = mac.finalize().into_bytes();
                 let value = format!(
-                    "keyId=\"{key_id}\";alg=\"sha256\";signature=\"{}\"",
+                    "keyId=\"{key_id}\";alg=\"hmac-sha256\";signature=\"{}\"",
                     base64::engine::general_purpose::STANDARD.encode(signature)
                 );
                 let header_name: reqwest::header::HeaderName = header.parse().map_err(|error| {
@@ -251,7 +257,7 @@ impl CustomPushkin {
         let body_text = response.text().await.unwrap_or_default();
         match status.as_u16() {
             200..=299 => Ok(vec![]),
-            410 | 404 => Ok(vec![device.push_key.clone()]),
+            410 | 404 => Ok(vec![device.push_key().unwrap_or_default().to_owned()]),
             429 | 500..=599 => Err(DispatchError::temporary(
                 format!(
                     "custom pushkin {} responded {status}: {body_text}",
@@ -288,8 +294,8 @@ impl Pushkin for CustomPushkin {
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
-        if device.push_key.trim().is_empty() {
-            return Ok(vec![device.push_key.clone()]);
+        if device.push_key().is_none() {
+            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
         }
 
         for attempt in 0..CUSTOM_MAX_TRIES {
@@ -363,9 +369,12 @@ mod tests {
             auth: CustomAuth::None,
         };
         let device = Device {
-            app_id: "com.example.custom".to_owned(),
-            push_key: "user/abc".to_owned(),
-            ..Device::default()
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.custom".to_owned()),
+            push_key: Some("user/abc".to_owned()),
+            platform: None,
+            target_actor_id: None,
         };
         let url = pushkin.resolve_url(&device).unwrap();
         assert_eq!(url, "https://example.com/notify/user%2Fabc");

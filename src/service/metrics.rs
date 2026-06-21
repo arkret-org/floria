@@ -9,7 +9,9 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use crate::metrics as app_metrics;
-use crate::models::{DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification};
+use crate::models::{
+    DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationExt,
+};
 
 /// Cardinality guard threshold for `metrics_detailed_circle_labels`.
 /// Once the count of unique circle_ids observed since startup crosses

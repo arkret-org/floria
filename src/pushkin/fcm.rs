@@ -18,12 +18,13 @@ use tokio::time::sleep;
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, build_blind_routing_data, inflight_limit,
-    max_connections, sanitized_provider_payload,
+    max_connections, notification_badge_count, notification_unread_increment,
+    sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
 
 static FCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -218,7 +219,10 @@ impl FcmPushkin {
             data_strings.insert(key, Value::String(string_value));
         }
         message.insert("data".to_owned(), Value::Object(data_strings));
-        message.insert("token".to_owned(), Value::String(device.push_key.clone()));
+        message.insert(
+            "token".to_owned(),
+            Value::String(device.push_key().unwrap_or_default().to_owned()),
+        );
 
         let priority = Value::String(if notification.is_low_priority() {
             "normal".to_owned()
@@ -274,7 +278,10 @@ impl FcmPushkin {
                     FCM_STATUS_CODES
                         .with_label_values(&[self.name(), &response.status().as_u16().to_string()])
                         .inc();
-                    match self.handle_v1_response(response, &device.push_key).await {
+                    match self
+                        .handle_v1_response(response, device.push_key().unwrap_or_default())
+                        .await
+                    {
                         Ok(result) => return Ok(result),
                         Err(error @ DispatchError::Temporary { .. })
                             if attempt + 1 < FCM_MAX_TRIES =>
@@ -315,7 +322,6 @@ impl FcmPushkin {
     fn build_data(
         &self,
         notification: &Notification,
-        default_payload: Map<String, Value>,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
         // T4.3 — the FCM data dictionary used to auto-copy event_id /
         // message_id / strand_id / realm_id / sender / names / push_hint
@@ -329,11 +335,7 @@ impl FcmPushkin {
         //   * Counts are bucketed (0 / 1 / 2-5 / 6+) per §5.1 so the absolute figure can't ride the
         //     wire as a per-`push_target_id` activity correlator.
         //
-        // The caller-supplied `default_payload` is still respected so
-        // operators can plug in static client-config keys
-        // (`client=android`, theme overrides, …) — but it goes through
-        // the same sanitizer and any forbidden key is stripped.
-        let mut data = default_payload;
+        let mut data = Map::new();
 
         data.extend(build_blind_routing_data(notification));
 
@@ -348,25 +350,19 @@ impl FcmPushkin {
 
         let mut emitted_count = false;
         if self.send_badge_counts {
-            // §5.1 — bucket the absolute counts (0 / 1 / 2-5 / 6+) so the
-            // exact figure never reaches FCM as a per-`push_target_id`
-            // activity correlator. Bucketing supersedes the old bare
-            // clamp.
-            if let Some(unread) = notification.counts.unread
-                && unread > 0
+            if let Some(unread_increment) = notification_unread_increment(notification)
+                && unread_increment > 0
             {
-                let bucketed = crate::sanitize::bucket_count(unread);
                 data.insert(
                     "unread_count".to_owned(),
-                    Value::String(bucketed.to_string()),
+                    Value::String(unread_increment.to_string()),
                 );
                 emitted_count = true;
             }
-            if let Some(missed_calls) = notification.counts.missed_calls
-                && missed_calls > 0
+            if let Some(badge) = notification_badge_count(notification)
+                && badge > 0
             {
-                let bucketed = crate::sanitize::bucket_count(missed_calls);
-                data.insert("badge".to_owned(), Value::String(bucketed.to_string()));
+                data.insert("badge".to_owned(), Value::String(badge.to_string()));
                 emitted_count = true;
             }
         }
@@ -384,8 +380,6 @@ impl FcmPushkin {
             return Ok(None);
         }
 
-        // Final defence — even if some caller plugged a forbidden key
-        // into `default_payload`, this strips it before we hit FCM.
         let data = sanitized_provider_payload(data).map_err(|rejection| {
             tracing::warn!(
                 pushkin = self.name(),
@@ -418,9 +412,12 @@ impl Pushkin for FcmPushkin {
         _notification: &Notification,
         device: &Device,
     ) -> Vec<DispatchTarget> {
+        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
+            return Vec::new();
+        };
         vec![DispatchTarget {
-            app_id: device.app_id.clone(),
-            push_key: device.push_key.clone(),
+            app_id: app_id.to_owned(),
+            push_key: push_key.to_owned(),
         }]
     }
 
@@ -432,17 +429,7 @@ impl Pushkin for FcmPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        let default_payload = match device.default_payload() {
-            Ok(default_payload) => default_payload,
-            Err(_) => {
-                tracing::warn!(
-                    push_key_hash = %device.redacted_push_key(),
-                    "rejecting FCM push_key due to invalid default_payload"
-                );
-                return Ok(vec![device.push_key.clone()]);
-            }
-        };
-        let Some(data) = self.build_data(notification, default_payload)? else {
+        let Some(data) = self.build_data(notification)? else {
             return Ok(vec![]);
         };
         self.dispatch_v1(notification, device, data).await
@@ -613,10 +600,8 @@ fn classify_fcm_v1_response(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn pushkin() -> FcmPushkin {
         FcmPushkin {
@@ -635,11 +620,11 @@ mod tests {
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.fcm".to_owned(),
-            push_key: "spqr".to_owned(),
-            data: None,
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.fcm".to_owned()),
+            push_key: Some("spqr".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -651,20 +636,19 @@ mod tests {
             priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "I'm floating in a most peculiar way."
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -672,21 +656,18 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: Some(1),
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
 
     #[test]
     fn builds_v1_data_payload() {
-        let payload = pushkin()
-            .build_data(&notification(), Map::new())
-            .unwrap()
-            .unwrap();
+        let payload = pushkin().build_data(&notification()).unwrap().unwrap();
 
         // T4.3 — provider payload now carries only allowed blind
         // fields. event_id / message_id / strand_id / realm_id /
@@ -706,13 +687,13 @@ mod tests {
             payload.get("priority"),
             Some(&Value::String("normal".to_owned()))
         );
-        // §5.1 — unread=2 is bucketed to the `2-5` representative value 5.
+        // unread_increment travels as a bounded delta; badge keeps the
+        // bucket representative for the SDK badge field.
         assert_eq!(
             payload.get("unread_count"),
-            Some(&Value::String("5".to_owned()))
+            Some(&Value::String("2".to_owned()))
         );
-        // missed_calls=1 → `1` bucket → badge "1".
-        assert_eq!(payload.get("badge"), Some(&Value::String("1".to_owned())));
+        assert_eq!(payload.get("badge"), Some(&Value::String("5".to_owned())));
 
         for forbidden in [
             "event_id",
@@ -748,11 +729,11 @@ mod tests {
         let pushkin = pushkin();
         let primary = device();
         let secondary = Device {
-            app_id: "com.example.fcm".to_owned(),
-            push_key: "spqr2".to_owned(),
-            data: None,
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.fcm".to_owned()),
+            push_key: Some("spqr2".to_owned()),
+            platform: None,
             target_actor_id: None,
         };
         let mut notification = notification();
@@ -779,7 +760,6 @@ mod tests {
             priority: None,
             membership: None,
             sender_actor_display_name: None,
-            content: None,
             event_id: None,
             message_id: None,
             strand_id: None,
@@ -788,18 +768,15 @@ mod tests {
             wakeup_kind: None,
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(0),
-                missed_calls: Some(0),
-                highlight_count: Some(0),
-            },
+            counts: Some(Counts {
+                badge: None,
+                unread_increment: None,
+                missed_call: None,
+            }),
             ..Default::default()
         };
 
-        assert_eq!(
-            pushkin().build_data(&notification, Map::new()).unwrap(),
-            None
-        );
+        assert_eq!(pushkin().build_data(&notification).unwrap(), None);
     }
 
     #[test]

@@ -23,7 +23,7 @@ use super::reqwest_support::{
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, Notification, NotificationContext};
 
 static HONOR_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -165,7 +165,9 @@ impl HonorPushkin {
         let mut message = Map::new();
         message.insert(
             "token".to_owned(),
-            Value::Array(vec![Value::String(device.push_key.clone())]),
+            Value::Array(vec![Value::String(
+                device.push_key().unwrap_or_default().to_owned(),
+            )]),
         );
         message.insert(
             "notification".to_owned(),
@@ -186,7 +188,9 @@ impl HonorPushkin {
         })
         .as_object()
         .unwrap()
-        .clone())
+        .clone()
+        .into_iter()
+        .collect())
     }
 
     fn android_config(&self, payload: AndroidNotificationPayload) -> Map<String, Value> {
@@ -306,16 +310,22 @@ impl HonorPushkin {
                 Ok(response) if response.code.as_deref().is_none_or(is_honor_success_code) => {
                     Ok(vec![])
                 }
-                Ok(response) if response.is_invalid_token() => Ok(vec![device.push_key.clone()]),
+                Ok(response) if response.is_invalid_token() => {
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
+                }
                 Ok(response) => Err(DispatchError::remote(format!(
                     "HONOR Push rejected request: {} {}",
                     response.code.unwrap_or_else(|| status.as_u16().to_string()),
                     response.msg.unwrap_or_else(|| body.to_owned())
                 ))),
-                Err(_) if looks_like_invalid_token(body) => Ok(vec![device.push_key.clone()]),
+                Err(_) if looks_like_invalid_token(body) => {
+                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
+                }
                 Err(_) => Ok(vec![]),
             },
-            _ if looks_like_invalid_token(body) => Ok(vec![device.push_key.clone()]),
+            _ if looks_like_invalid_token(body) => {
+                Ok(vec![device.push_key().unwrap_or_default().to_owned()])
+            }
             _ => Err(DispatchError::remote(honor_error_message(body, status))),
         }
     }
@@ -343,24 +353,14 @@ impl Pushkin for HonorPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key.trim().is_empty() {
+        if device.push_key().is_none() {
             tracing::warn!("rejecting HONOR Push device due to empty token");
-            return Ok(vec![device.push_key.clone()]);
+            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
         }
 
-        let default_payload = match device.default_payload() {
-            Ok(default_payload) => default_payload,
-            Err(_) => {
-                tracing::warn!(
-                    push_key_hash = %device.redacted_push_key(),
-                    "rejecting HONOR Push token due to invalid default_payload"
-                );
-                return Ok(vec![device.push_key.clone()]);
-            }
-        };
         let Some(payload) = build_android_notification_payload(
             notification,
-            default_payload,
+            Map::new(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -428,24 +428,15 @@ impl HonorSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata, Tweaks};
+    use crate::models::{Counts, Device, Notification, RoutingMetadata};
 
     fn device() -> Device {
         Device {
-            app_id: "com.example.honor".to_owned(),
-            push_key: "honor-token".to_owned(),
-            data: Some(
-                json!({
-                    "default_payload": {
-                        "client": "android"
-                    }
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-            tweaks: Tweaks::default(),
-            push_decision: None,
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.honor".to_owned()),
+            push_key: Some("honor-token".to_owned()),
+            platform: None,
             target_actor_id: None,
         }
     }
@@ -457,20 +448,19 @@ mod tests {
             priority: Some("low".to_owned()),
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
-            content: Some(
-                json!({
-                    "msgtype": "m.text",
-                    "body": "Ground control to Major Tom"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            event_id: Some(
+                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
-            event_id: Some("ck:event:0196419b-0000-7000-8000-000000000001".to_owned()),
-            message_id: Some("ck:message:0196419b-0000-7000-8000-000000000002".to_owned()),
-            strand_id: Some("ck:strand:019640f9-8000-7000-8000-000000000000".to_owned()),
+            message_id: Some(
+                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+            ),
+            strand_id: Some(
+                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+            ),
             routing_metadata: Some(RoutingMetadata {
-                realm_id: Some("ck:realm:0196419b-0000-7000-8000-000000000003".to_owned()),
+                realm_id: Some(
+                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -478,11 +468,11 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Counts {
-                unread: Some(2),
-                missed_calls: Some(1),
-                highlight_count: None,
-            },
+            counts: Some(Counts {
+                badge: Some(serde_json::json!("2-5")),
+                unread_increment: Some(2),
+                missed_call: Some(1),
+            }),
             ..Default::default()
         }
     }
@@ -511,7 +501,9 @@ mod tests {
                     })
                     .as_object()
                     .unwrap()
-                    .clone(),
+                    .clone()
+                    .into_iter()
+                    .collect(),
                 ),
                 send_badge_counts: true,
             },
@@ -521,12 +513,8 @@ mod tests {
     #[test]
     fn builds_request_body() {
         let device = device();
-        let payload = build_android_notification_payload(
-            &notification(),
-            device.default_payload().unwrap(),
-            true,
-        )
-        .unwrap();
+        let payload =
+            build_android_notification_payload(&notification(), Map::new(), true).unwrap();
         let body = Value::Object(pushkin().build_request_body(&device, payload).unwrap());
 
         assert_eq!(
