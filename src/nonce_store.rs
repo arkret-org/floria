@@ -26,6 +26,7 @@ use anyhow::{Context, Result};
 use lru::LruCache;
 
 use crate::auth::redact_url_credentials;
+use crate::redis_support::{RedisConnection, RedisPool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NonceCheck {
@@ -72,7 +73,7 @@ struct MemoryNonceStore {
 
 #[derive(Debug)]
 struct RedisNonceStore {
-    client: redis::Client,
+    pool: RedisPool,
     target_label: String,
     key_prefix: String,
     failure_policy: RedisFailurePolicy,
@@ -119,11 +120,12 @@ impl NonceStore {
                 redact_url_credentials(redis_url)
             )
         })?;
+        let target_label = redact_url_credentials(redis_url);
         Ok(Self {
             ttl,
             backend: NonceBackend::Redis(RedisNonceStore {
-                client,
-                target_label: redact_url_credentials(redis_url),
+                pool: RedisPool::from_client(client, target_label.clone())?,
+                target_label,
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
                 failure_policy,
             }),
@@ -251,10 +253,8 @@ impl RedisNonceStore {
         }
     }
 
-    fn connection(&self) -> Result<redis::Connection> {
-        self.client
-            .get_connection()
-            .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    fn connection(&self) -> Result<RedisConnection> {
+        self.pool.connection()
     }
 
     fn key(&self, fingerprint: &str) -> String {

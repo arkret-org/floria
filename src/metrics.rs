@@ -253,6 +253,15 @@ static NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE: LazyLock<IntGaugeVec> = LazyLock
     .expect("register floria_notify_retry_queue_depth")
 });
 
+static CIRCUIT_BREAKER_STATE_GAUGE: LazyLock<IntGaugeVec> = LazyLock::new(|| {
+    register_int_gauge_vec!(
+        "floria_circuit_breaker_state",
+        "Circuit breaker state by pushkin and scope: 0=closed, 2=open",
+        &["pushkin", "scope_kind", "scope_id"]
+    )
+    .expect("register floria_circuit_breaker_state")
+});
+
 pub fn init() {
     LazyLock::force(&NOTIFS_RECEIVED_COUNTER);
     LazyLock::force(&NOTIFY_REQUEST_CACHE_HITS_COUNTER);
@@ -279,6 +288,7 @@ pub fn init() {
     LazyLock::force(&DEVICE_DEDUP_CACHE_SIZE_GAUGE);
     LazyLock::force(&RETRY_QUEUE_DEPTH_GAUGE);
     LazyLock::force(&NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE);
+    LazyLock::force(&CIRCUIT_BREAKER_STATE_GAUGE);
 }
 
 pub fn set_device_dedup_cache_size(value: i64) {
@@ -311,6 +321,26 @@ pub fn set_notify_retry_queue_depth_labelled(
     NOTIFY_RETRY_QUEUE_DEPTH_LABELLED_GAUGE
         .with_label_values(&[provider, scope_kind, scope_id])
         .set(value);
+}
+
+pub fn set_circuit_breaker_state(
+    pushkin: &str,
+    scope_kind: &str,
+    scope_id: Option<&str>,
+    state: i64,
+) {
+    let pushkin = if pushkin.is_empty() {
+        "_unknown"
+    } else {
+        pushkin
+    };
+    let scope_id = scope_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("_unknown");
+    CIRCUIT_BREAKER_STATE_GAUGE
+        .with_label_values(&[pushkin, scope_kind, scope_id])
+        .set(state);
 }
 
 pub fn notification_received() {
@@ -546,6 +576,7 @@ mod tests {
         notify_delivery_outcomes(1, 2, 3, 4);
         notify_delivery_outcome_by_provider("apns", "accepted", 1);
         notify_delivery_outcome_by_app("com.example.app", "accepted", 1);
+        set_circuit_breaker_state("apns", "realm", Some("ck:realm:test"), 2);
         notify_rate_limit_reject("origin_service");
         notify_dedup_lookup("hit");
         audit_divert("policy_access", "success");
@@ -568,6 +599,7 @@ mod tests {
         assert!(body.contains("floria_notify_delivery_outcome_total"));
         assert!(body.contains("floria_notify_delivery_outcome_by_provider_total"));
         assert!(body.contains("floria_notify_delivery_outcome_by_app_total"));
+        assert!(body.contains("floria_circuit_breaker_state"));
         assert!(body.contains("floria_notify_rate_limit_reject_total"));
         assert!(body.contains("floria_notify_dedup_lookup_total"));
         assert!(body.contains("floria_audit_divert_total"));

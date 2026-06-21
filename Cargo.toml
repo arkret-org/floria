@@ -30,8 +30,10 @@ opentelemetry_sdk = {workspace = true,default-features = false,features = ["trac
 postgres = {workspace = true}
 prometheus = {workspace = true}
 rand = {workspace = true}
+r2d2 = {workspace = true}
 redis = {workspace = true}
 reqwest = {workspace = true,default-features = false,features = ["form", "http2", "json", "rustls"]}
+rustls = {workspace = true}
 salvo = {workspace = true,features = ["affix-state", "logging"]}
 sentry = {workspace = true,default-features = false,features = ["backtrace", "contexts", "panic", "reqwest", "rustls"]}
 sentry-tracing = {workspace = true}
@@ -42,6 +44,7 @@ sha2 = {workspace = true}
 subtle = {workspace = true}
 thiserror = {workspace = true}
 tokio = {workspace = true,features = ["macros", "rt-multi-thread", "sync", "time"]}
+tokio-postgres-rustls = {workspace = true}
 tracing = {workspace = true}
 tracing-opentelemetry = {workspace = true,default-features = false,features = ["tracing-log"]}
 tracing-subscriber = {workspace = true,features = ["env-filter", "fmt", "json", "registry"]}
@@ -89,9 +92,11 @@ opentelemetry_sdk = {version = "0.32.1",default-features = false}
 postgres = "0.19.13"
 prometheus = "0.14.0"
 proptest = {version = "1",default-features = false}
+r2d2 = "0.8.10"
 rand = "0.10"
 redis = "1.2.2"
 reqwest = {version = "0.13.4",default-features = false}
+rustls = {version = "0.23.40",default-features = false,features = ["ring", "std"]}
 salvo = "0.93.0"
 sentry = {version = "0.48.2",default-features = false}
 sentry-tracing = "0.48.2"
@@ -102,6 +107,7 @@ sha2 = "0.11.0"
 subtle = "2.6.1"
 thiserror = "2.0.18"
 tokio = "1.52.3"
+tokio-postgres-rustls = {version = "0.14.0",features = ["native-certs", "ring"]}
 tracing = "0.1.44"
 tracing-opentelemetry = {version = "0.33.0",default-features = false}
 tracing-subscriber = "0.3.23"

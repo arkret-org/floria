@@ -132,14 +132,14 @@ pub(super) fn validate_origin_service_did(
     else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
+            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "Source-Service-DID header is required".to_owned(),
         });
     };
     if origin_service_did != caller.origin_service_did {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
+            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "origin service DID does not match the authenticated caller".to_owned(),
         });
     }
@@ -174,7 +174,7 @@ pub(super) fn validate_destination_service_did(
     {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
+            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "destination service DID does not match this gateway".to_owned(),
         });
     }

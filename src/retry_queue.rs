@@ -31,7 +31,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::auth::redact_url_credentials;
-use crate::postgres_support::SqlTableName;
+use crate::postgres_support::{PostgresPool, SqlTableName};
+use crate::redis_support::{RedisConnection, RedisPool};
 
 /// AAD tag bound into every encrypted retry-queue envelope so a
 /// payload moved between key prefixes / queues can't be replayed
@@ -128,7 +129,7 @@ impl RetryQueueCipher {
 /// ```
 #[derive(Debug)]
 pub struct DeadLetterPgOverlay {
-    url: String,
+    pool: PostgresPool,
     target_label: String,
     table: SqlTableName,
 }
@@ -139,19 +140,16 @@ impl DeadLetterPgOverlay {
     /// `[A-Za-z0-9_]` plus an optional schema-qualifier dot.
     pub fn new(url: &str, table: &str) -> Result<Self> {
         let table = SqlTableName::parse(table, "notify_retry_queue.deadletter_pg_table")?;
+        let target_label = redact_url_credentials(url);
         Ok(Self {
-            url: url.to_owned(),
-            target_label: redact_url_credentials(url),
+            pool: PostgresPool::new(url, target_label.clone())?,
+            target_label,
             table,
         })
     }
 
     /// Idempotent schema bootstrap. Safe to call on every startup.
     pub fn ensure_schema(&self) -> Result<()> {
-        use postgres::NoTls;
-        let mut client = postgres::Client::connect(&self.url, NoTls).with_context(|| {
-            format!("deadletter PG: failed to connect to {}", self.target_label)
-        })?;
         let stmt = format!(
             "CREATE TABLE IF NOT EXISTS {table} (\n\
                  request_id  TEXT NOT NULL,\n\
@@ -162,11 +160,13 @@ impl DeadLetterPgOverlay {
              )",
             table = self.table.as_sql()
         );
-        client.batch_execute(&stmt).with_context(|| {
-            format!(
-                "deadletter PG: failed to create table {}",
-                self.table.as_sql()
-            )
+        self.pool.with_client(|client| {
+            client.batch_execute(&stmt).with_context(|| {
+                format!(
+                    "deadletter PG: failed to create table {}",
+                    self.table.as_sql()
+                )
+            })
         })?;
         Ok(())
     }
@@ -175,26 +175,23 @@ impl DeadLetterPgOverlay {
     /// logged and swallowed so a PG outage cannot block the live
     /// dispatch path.
     pub fn record(&self, envelope: &RetryEnvelope) {
-        use postgres::NoTls;
-        let mut client = match postgres::Client::connect(&self.url, NoTls) {
-            Ok(c) => c,
-            Err(error) => {
-                tracing::warn!(error = %error, backend = %self.target_label, "deadletter PG: connect failed");
-                return;
-            }
-        };
         let stmt = format!(
             "INSERT INTO {table} (request_id, pushkin, last_error) VALUES ($1, $2, $3)",
             table = self.table.as_sql()
         );
-        if let Err(error) = client.execute(
-            stmt.as_str(),
-            &[
-                &envelope.request_id,
-                &envelope.pushkin,
-                &envelope.last_error,
-            ],
-        ) {
+        if let Err(error) = self.pool.with_client(|client| {
+            client
+                .execute(
+                    stmt.as_str(),
+                    &[
+                        &envelope.request_id,
+                        &envelope.pushkin,
+                        &envelope.last_error,
+                    ],
+                )
+                .map(|_| ())
+                .context("deadletter PG: insert failed")
+        }) {
             tracing::warn!(error = %error, backend = %self.target_label, request_id = %envelope.request_id, "deadletter PG: insert failed");
         }
     }
@@ -292,7 +289,7 @@ impl Ord for MemoryEntry {
 
 #[derive(Debug)]
 struct RedisQueue {
-    client: redis::Client,
+    pool: RedisPool,
     target_label: String,
     key_prefix: String,
     dead_letter_capacity: usize,
@@ -358,11 +355,12 @@ impl RetryQueue {
             )
         })?;
         let dead_letter_capacity = config.dead_letter_capacity;
+        let target_label = redact_url_credentials(redis_url);
         Ok(Self {
             config,
             backend: Backend::Redis(RedisQueue {
-                client,
-                target_label: redact_url_credentials(redis_url),
+                pool: RedisPool::from_client(client, target_label.clone())?,
+                target_label,
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
                 dead_letter_capacity,
                 cipher,
@@ -430,6 +428,10 @@ impl RetryQueue {
     /// True iff a PG dead-letter overlay is attached.
     pub fn has_deadletter_pg(&self) -> bool {
         self.deadletter_pg.is_some()
+    }
+
+    pub fn uses_blocking_io(&self) -> bool {
+        matches!(self.backend, Backend::Redis(_)) || self.deadletter_pg.is_some()
     }
 
     pub fn pending_len(&self) -> usize {
@@ -696,10 +698,8 @@ impl RedisQueue {
         }
     }
 
-    fn connection(&self) -> Result<redis::Connection> {
-        self.client
-            .get_connection()
-            .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    fn connection(&self) -> Result<RedisConnection> {
+        self.pool.connection()
     }
 
     fn pending_key(&self) -> String {
@@ -745,6 +745,50 @@ fn now_unix_ms() -> u64 {
         .as_millis() as u64
 }
 
+async fn queue_operation<T>(
+    queue: &std::sync::Arc<RetryQueue>,
+    operation: impl FnOnce(&RetryQueue) -> T + Send + 'static,
+) -> Option<T>
+where
+    T: Send + 'static,
+{
+    if queue.uses_blocking_io() {
+        let queue = queue.clone();
+        tokio::task::spawn_blocking(move || operation(&queue))
+            .await
+            .map(Some)
+            .unwrap_or_else(|error| {
+                tracing::warn!(error = %error, "retry queue blocking operation task failed");
+                None
+            })
+    } else {
+        Some(operation(queue))
+    }
+}
+
+async fn pending_len_for_worker(queue: &std::sync::Arc<RetryQueue>) -> usize {
+    queue_operation(queue, RetryQueue::pending_len)
+        .await
+        .unwrap_or(0)
+}
+
+async fn dequeue_due_for_worker(
+    queue: &std::sync::Arc<RetryQueue>,
+    batch_size: usize,
+) -> Vec<RetryEnvelope> {
+    queue_operation(queue, move |queue| queue.dequeue_due(batch_size))
+        .await
+        .unwrap_or_default()
+}
+
+async fn enqueue_for_worker(queue: &std::sync::Arc<RetryQueue>, envelope: RetryEnvelope) {
+    let _ = queue_operation(queue, move |queue| queue.enqueue(envelope)).await;
+}
+
+async fn dead_letter_for_worker(queue: &std::sync::Arc<RetryQueue>, envelope: RetryEnvelope) {
+    let _ = queue_operation(queue, move |queue| queue.dead_letter(envelope)).await;
+}
+
 /// Background-worker entry point. Drains due envelopes, re-dispatches
 /// each through the registry, and either re-enqueues (with
 /// exponential backoff) or dead-letters when `max_attempts` is hit.
@@ -771,7 +815,7 @@ pub async fn run_worker(
         // `floria_retry_queue_depth` gauge tracks the live backlog
         // rather than only the most recent enqueue. Cheap for memory
         // backends and a single ZCARD/EXISTS on Redis.
-        crate::metrics::set_retry_queue_depth(queue.pending_len() as i64);
+        crate::metrics::set_retry_queue_depth(pending_len_for_worker(&queue).await as i64);
         // P5 — labelled breakdown. Memory backend reports exact
         // per-provider counts; Redis backend returns an empty map
         // (and the labelled metric simply stops getting updated for
@@ -788,7 +832,7 @@ pub async fn run_worker(
                 depth as i64,
             );
         }
-        let due = queue.dequeue_due(batch_size.max(1));
+        let due = dequeue_due_for_worker(&queue, batch_size.max(1)).await;
         if due.is_empty() {
             tokio::select! {
                 _ = tokio::time::sleep(poll_interval) => {}
@@ -811,7 +855,7 @@ pub async fn run_worker(
                         "dead-lettering retry: pushkin no longer registered"
                     );
                     crate::metrics::notify_dead_letter(&envelope.pushkin, "pushkin_unregistered");
-                    queue.dead_letter(envelope);
+                    dead_letter_for_worker(&queue, envelope).await;
                     continue;
                 }
             };
@@ -851,14 +895,14 @@ pub async fn run_worker(
                 }
                 Ok(_) => {
                     crate::metrics::notify_retry_replayed(&envelope.pushkin, "rejected");
-                    queue.dead_letter(envelope);
+                    dead_letter_for_worker(&queue, envelope).await;
                 }
                 Err(DispatchError::Temporary { retry_after, .. }) => {
                     let next_attempt = envelope.attempts.saturating_add(1);
                     if next_attempt >= queue.config().max_attempts {
                         crate::metrics::notify_dead_letter(&envelope.pushkin, "max_attempts");
                         crate::metrics::notify_retry_replayed(&envelope.pushkin, "dead_letter");
-                        queue.dead_letter(envelope.with_attempt(next_attempt));
+                        dead_letter_for_worker(&queue, envelope.with_attempt(next_attempt)).await;
                     } else {
                         let backoff =
                             retry_after.unwrap_or_else(|| queue.next_retry_at(next_attempt));
@@ -866,7 +910,7 @@ pub async fn run_worker(
                         next.retry_at_unix_ms = now_unix_ms()
                             .saturating_add(u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX));
                         crate::metrics::notify_retry_replayed(&envelope.pushkin, "retry");
-                        queue.enqueue(next);
+                        enqueue_for_worker(&queue, next).await;
                     }
                 }
                 Err(error) => {
@@ -874,7 +918,7 @@ pub async fn run_worker(
                     crate::metrics::notify_dead_letter(&envelope.pushkin, "permanent_error");
                     let mut envelope = envelope;
                     envelope.last_error = error.to_string();
-                    queue.dead_letter(envelope);
+                    dead_letter_for_worker(&queue, envelope).await;
                 }
             }
         }

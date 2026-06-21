@@ -71,7 +71,7 @@ pub async fn authenticate_notify_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "anonymous /notify is disabled in production mode".to_owned(),
             });
         }
@@ -100,7 +100,7 @@ pub async fn authenticate_notify_request(
                 );
                 return Err(AuthFailure {
                     status: StatusCode::FORBIDDEN,
-                    code: "capability_denied",
+                    code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
                     message: "origin service endpoint does not match configured service binding"
                         .to_owned(),
                 });
@@ -120,7 +120,7 @@ pub async fn authenticate_notify_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "HTTP Message Signature is required".to_owned(),
             });
         }
@@ -134,7 +134,7 @@ pub async fn authenticate_notify_request(
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
-                    code: "unauthenticated",
+                    code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                     message: "production mode requires HTTP Message Signature or mTLS".to_owned(),
                 });
             }
@@ -154,7 +154,7 @@ pub async fn authenticate_notify_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "missing or invalid service credential".to_owned(),
             });
         }
@@ -186,7 +186,7 @@ pub async fn authenticate_notify_request(
         );
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: "unauthenticated",
+            code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
             message: "production mode requires a configured service principal".to_owned(),
         });
     }
@@ -219,7 +219,7 @@ fn authenticate_bearer_request(
         );
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: "unauthenticated",
+            code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
             message: "HTTP Message Signature is required".to_owned(),
         });
     }
@@ -238,7 +238,7 @@ fn authenticate_bearer_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "origin service DID is required for bearer authentication".to_owned(),
             });
         };
@@ -250,7 +250,7 @@ fn authenticate_bearer_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "origin service DID does not have a configured principal".to_owned(),
             });
         };
@@ -268,7 +268,7 @@ fn authenticate_bearer_request(
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
-                    code: "unauthenticated",
+                    code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                     message: "missing bearer service token".to_owned(),
                 });
             }
@@ -280,7 +280,7 @@ fn authenticate_bearer_request(
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
-                    code: "unauthenticated",
+                    code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                     message: "bearer service token is not bound to the declared origin service DID"
                         .to_owned(),
                 });
@@ -307,7 +307,7 @@ fn authenticate_bearer_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "missing bearer service token".to_owned(),
             });
         }
@@ -318,7 +318,7 @@ fn authenticate_bearer_request(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: "unauthenticated",
+                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "invalid bearer service token".to_owned(),
             });
         }
@@ -326,7 +326,7 @@ fn authenticate_bearer_request(
 
     let origin_did = origin_did.ok_or_else(|| AuthFailure {
         status: StatusCode::FORBIDDEN,
-        code: "capability_denied",
+        code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
         message: "origin service DID is required".to_owned(),
     })?;
 
@@ -343,7 +343,7 @@ fn authenticate_bearer_request(
         );
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: "capability_denied",
+            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "origin service DID is not allowlisted".to_owned(),
         });
     }

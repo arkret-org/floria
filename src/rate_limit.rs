@@ -8,6 +8,7 @@ use redis::Commands;
 use crate::auth::redact_url_credentials;
 use crate::config::NotifyRateLimitConfig;
 use crate::nonce_store::RedisFailurePolicy;
+use crate::redis_support::{RedisConnection, RedisPool};
 
 /// Default fallback for `notify_rate_limits.per_provider_concurrency`
 /// when the operator leaves the field unset. Mirrors the
@@ -44,7 +45,7 @@ struct MemoryRateLimiter {
 
 #[derive(Debug)]
 struct RedisRateLimiter {
-    client: redis::Client,
+    pool: RedisPool,
     target_label: String,
     key_prefix: String,
     failure_policy: RedisFailurePolicy,
@@ -94,12 +95,13 @@ impl NotifyRateLimiter {
                 redact_url_credentials(redis_url)
             )
         })?;
+        let target_label = redact_url_credentials(redis_url);
         Ok(Self {
             window: Duration::from_secs(config.window_seconds.max(1)),
             config,
             backend: RateLimiterBackend::Redis(RedisRateLimiter {
-                client,
-                target_label: redact_url_credentials(redis_url),
+                pool: RedisPool::from_client(client, target_label.clone())?,
+                target_label,
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
                 failure_policy,
             }),
@@ -479,7 +481,7 @@ impl RedisRateLimiter {
 
     fn retry_after_for(
         &self,
-        connection: &mut redis::Connection,
+        connection: &mut RedisConnection,
         key: &str,
         window: Duration,
     ) -> Duration {
@@ -490,10 +492,8 @@ impl RedisRateLimiter {
         .max(Duration::from_secs(1))
     }
 
-    fn connection(&self) -> Result<redis::Connection> {
-        self.client
-            .get_connection()
-            .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    fn connection(&self) -> Result<RedisConnection> {
+        self.pool.connection()
     }
 
     /// Wrap the dynamic component in Redis cluster hash tags so every

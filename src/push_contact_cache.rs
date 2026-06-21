@@ -27,11 +27,10 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use postgres::NoTls;
 use serde::Deserialize;
 
 use crate::auth::redact_url_credentials;
-use crate::postgres_support::SqlTableName;
+use crate::postgres_support::{PostgresPool, SqlTableName};
 
 /// Verdict cached for a PSI check. floria does NOT need a richer
 /// distinction — anything ambiguous forces a re-check.
@@ -179,33 +178,22 @@ struct PushContactCacheInner {
 
 #[derive(Debug, Clone)]
 pub struct PostgresPushContactOverlay {
-    postgres_url: String,
+    pool: PostgresPool,
     table: SqlTableName,
-    target_label: String,
 }
 
 impl PostgresPushContactOverlay {
     pub fn new(postgres_url: impl Into<String>, table: impl AsRef<str>) -> Result<Self> {
         let postgres_url = postgres_url.into();
         let table = SqlTableName::parse(table.as_ref(), "storage.push_contact_cache_table")?;
+        let target_label = redact_url_credentials(&postgres_url);
         Ok(Self {
-            target_label: redact_url_credentials(&postgres_url),
-            postgres_url,
+            pool: PostgresPool::new(&postgres_url, target_label)?,
             table,
         })
     }
 
-    fn connect(&self) -> Result<postgres::Client> {
-        postgres::Client::connect(&self.postgres_url, NoTls).with_context(|| {
-            format!(
-                "failed to connect to PostgreSQL push contact cache {}",
-                self.target_label
-            )
-        })
-    }
-
     fn insert(&self, principal_id: &str, peer_psi_token: &str, verdict: PsiVerdict) -> Result<()> {
-        let mut client = self.connect()?;
         let sql = format!(
             "INSERT INTO {} (principal_id, peer_psi_token, verdict, updated_at) \
              VALUES ($1, $2, $3, NOW()) \
@@ -213,65 +201,70 @@ impl PostgresPushContactOverlay {
              DO UPDATE SET verdict = EXCLUDED.verdict, updated_at = NOW()",
             self.table.as_sql()
         );
-        client
-            .execute(&sql, &[&principal_id, &peer_psi_token, &verdict.as_str()])
-            .with_context(|| {
-                format!(
-                    "failed to upsert PostgreSQL push contact cache table {}",
-                    self.table.as_sql()
-                )
-            })?;
+        self.pool.with_client(|client| {
+            client
+                .execute(&sql, &[&principal_id, &peer_psi_token, &verdict.as_str()])
+                .with_context(|| {
+                    format!(
+                        "failed to upsert PostgreSQL push contact cache table {}",
+                        self.table.as_sql()
+                    )
+                })
+        })?;
         Ok(())
     }
 
     fn get(&self, principal_id: &str, peer_psi_token: &str) -> Result<Option<PsiVerdict>> {
-        let mut client = self.connect()?;
         let sql = format!(
             "SELECT verdict FROM {} WHERE principal_id = $1 AND peer_psi_token = $2",
             self.table.as_sql()
         );
-        let row = client
-            .query_opt(&sql, &[&principal_id, &peer_psi_token])
-            .with_context(|| {
-                format!(
-                    "failed to read PostgreSQL push contact cache table {}",
-                    self.table.as_sql()
-                )
-            })?;
+        let row = self.pool.with_client(|client| {
+            client
+                .query_opt(&sql, &[&principal_id, &peer_psi_token])
+                .with_context(|| {
+                    format!(
+                        "failed to read PostgreSQL push contact cache table {}",
+                        self.table.as_sql()
+                    )
+                })
+        })?;
         Ok(row
             .and_then(|row| row.try_get::<_, String>(0).ok())
             .and_then(|value| PsiVerdict::from_str(&value)))
     }
 
     fn invalidate_principal(&self, principal_id: &str) -> Result<usize> {
-        let mut client = self.connect()?;
         let sql = format!(
             "DELETE FROM {} WHERE principal_id = $1",
             self.table.as_sql()
         );
-        client
-            .execute(&sql, &[&principal_id])
-            .with_context(|| {
-                format!(
-                    "failed to invalidate PostgreSQL push contact cache table {}",
-                    self.table.as_sql()
-                )
-            })
-            .map(|count| count as usize)
+        self.pool.with_client(|client| {
+            client
+                .execute(&sql, &[&principal_id])
+                .with_context(|| {
+                    format!(
+                        "failed to invalidate PostgreSQL push contact cache table {}",
+                        self.table.as_sql()
+                    )
+                })
+                .map(|count| count as usize)
+        })
     }
 
     fn clear_all(&self) -> Result<usize> {
-        let mut client = self.connect()?;
         let sql = format!("DELETE FROM {}", self.table.as_sql());
-        client
-            .execute(&sql, &[])
-            .with_context(|| {
-                format!(
-                    "failed to clear PostgreSQL push contact cache table {}",
-                    self.table.as_sql()
-                )
-            })
-            .map(|count| count as usize)
+        self.pool.with_client(|client| {
+            client
+                .execute(&sql, &[])
+                .with_context(|| {
+                    format!(
+                        "failed to clear PostgreSQL push contact cache table {}",
+                        self.table.as_sql()
+                    )
+                })
+                .map(|count| count as usize)
+        })
     }
 }
 

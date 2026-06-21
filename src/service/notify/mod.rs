@@ -53,6 +53,28 @@ const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 /// device-loop reject path and the per-device dedup test that the
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
 const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
+const CIRCUIT_BREAKER_RETRY_AFTER: Duration = Duration::from_secs(30);
+
+fn circuit_breaker_key(
+    pushkin: &str,
+    notification: &crate::models::Notification,
+) -> crate::circuit_breaker::BreakerKey {
+    crate::circuit_breaker::BreakerKey::new(
+        pushkin,
+        notification.realm_id(),
+        notification.circle_id(),
+    )
+}
+
+fn circuit_breaker_scope(
+    notification: &crate::models::Notification,
+) -> (&'static str, Option<&str>) {
+    if let Some(circle_id) = notification.circle_id() {
+        ("circle", Some(circle_id))
+    } else {
+        ("realm", notification.realm_id())
+    }
+}
 
 #[handler]
 pub(super) async fn notify_method_not_allowed(res: &mut Response) {
@@ -64,7 +86,7 @@ pub(super) async fn notify_method_not_allowed(res: &mut Response) {
     finish_error(
         res,
         StatusCode::METHOD_NOT_ALLOWED,
-        "method_not_allowed",
+        cokret::error::ERROR_CODE_METHOD_NOT_ALLOWED,
         "method not allowed",
         None,
         None,
@@ -92,7 +114,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
+                cokret::error::ERROR_CODE_INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -110,7 +132,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::PAYLOAD_TOO_LARGE,
-                "payload_too_large",
+                cokret::error::ERROR_CODE_PAYLOAD_TOO_LARGE,
                 "request body exceeds 512 KiB",
                 None,
                 Some(&request_id),
@@ -123,7 +145,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "failed to read request body",
                 None,
                 Some(&request_id),
@@ -170,7 +192,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "expected Cokret push notify request body",
                 None,
                 Some(&request_id),
@@ -186,7 +208,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
+                cokret::error::ERROR_CODE_INTERNAL_ERROR,
                 "failed to validate typed request",
                 None,
                 Some(&request_id),
@@ -228,7 +250,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            "schema_violation",
+            cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
             &message,
             None,
             Some(&request_id),
@@ -264,7 +286,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "reason_code is only valid as `historical_only` on /push/notify",
                 None,
                 Some(&request_id),
@@ -334,7 +356,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "audit_envelope.access_kind must be a non-empty string",
                 None,
                 Some(&request_id),
@@ -350,7 +372,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,
-                    "schema_violation",
+                    cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                     "audit_envelope.access_kind is not a registered access kind",
                     None,
                     Some(&request_id),
@@ -365,7 +387,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,
-                    "schema_violation",
+                    cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                     "audit policy_access requires notification realm_id",
                     None,
                     Some(&request_id),
@@ -394,7 +416,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     finish_error(
                         res,
                         StatusCode::BAD_REQUEST,
-                        "schema_violation",
+                        cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                         &format!("invalid audit policy_access payload: {error}"),
                         None,
                         Some(&request_id),
@@ -407,7 +429,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &error.to_string(),
                 None,
                 Some(&request_id),
@@ -446,7 +468,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::SERVICE_UNAVAILABLE,
-                "temporarily_unavailable",
+                cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
                 &message,
                 None,
                 Some(&request_id),
@@ -475,7 +497,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &message,
                 None,
                 Some(&request_id),
@@ -501,7 +523,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::PRECONDITION_FAILED,
-                "failed_precondition",
+                cokret::error::ERROR_CODE_FAILED_PRECONDITION,
                 &message,
                 None,
                 Some(&request_id),
@@ -513,7 +535,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::FORBIDDEN,
-                "capability_denied",
+                cokret::error::ERROR_CODE_CAPABILITY_DENIED,
                 &message,
                 None,
                 Some(&request_id),
@@ -525,7 +547,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &message,
                 None,
                 Some(&request_id),
@@ -542,9 +564,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         // the failure is "wrong profile", and `capability_denied`
         // when the caller lacks the credential entirely.
         let (status, code) = if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) {
-            (StatusCode::PRECONDITION_FAILED, "failed_precondition")
+            (
+                StatusCode::PRECONDITION_FAILED,
+                cokret::error::ERROR_CODE_FAILED_PRECONDITION,
+            )
         } else {
-            (StatusCode::FORBIDDEN, "capability_denied")
+            (
+                StatusCode::FORBIDDEN,
+                cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+            )
         };
         finish_error(
             res,
@@ -573,7 +601,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::CONFLICT,
-                "duplicate_conflict",
+                cokret::error::ERROR_CODE_DUPLICATE_CONFLICT,
                 "same idempotency key maps to different canonical request body",
                 None,
                 Some(&request_id),
@@ -607,7 +635,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            "schema_violation",
+            cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
             "no devices in notification",
             None,
             Some(&request_id),
@@ -631,7 +659,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
+                cokret::error::ERROR_CODE_RATE_LIMITED,
                 &format!("notify rate limit exceeded for {}", rejection.scope),
                 Some(rejection.retry_after),
                 Some(&request_id),
@@ -775,10 +803,84 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
                 app_metrics::pushkin_selected(pushkin.name());
                 let dispatch_targets = pushkin.dispatch_targets(&notification, device);
+                let breaker_key = circuit_breaker_key(pushkin.name(), &notification);
+                let (breaker_scope_kind, breaker_scope_id) = circuit_breaker_scope(&notification);
+                if let Some(breaker) = state.circuit_breaker.as_ref()
+                    && breaker.is_open(&breaker_key)
+                {
+                    app_metrics::set_circuit_breaker_state(
+                        pushkin.name(),
+                        breaker_scope_kind,
+                        breaker_scope_id,
+                        2,
+                    );
+                    tracing::warn!(
+                        request_id = %context.request_id,
+                        app_id,
+                        pushkin = %pushkin.name(),
+                        realm_id = ?notification.realm_id(),
+                        circle_id = ?notification.circle_id(),
+                        "short-circuiting dispatch because circuit breaker is open"
+                    );
+                    provider_retries.push(ProviderRetry::new(
+                        pushkin.name(),
+                        Some(CIRCUIT_BREAKER_RETRY_AFTER),
+                    ));
+                    for target in &dispatch_targets {
+                        delivery_receipts.push(delivery_receipt(
+                            Some(pushkin.name()),
+                            &target.push_key,
+                            "retryable",
+                            Some(CIRCUIT_BREAKER_RETRY_AFTER),
+                            &context.request_id,
+                        ));
+                    }
+                    first_temporary_error.get_or_insert_with(|| {
+                        (
+                            "push provider circuit breaker is open".to_owned(),
+                            Some(CIRCUIT_BREAKER_RETRY_AFTER),
+                        )
+                    });
+                    app_metrics::notify_delivery_outcome_by_app(app_id, "retryable", 1);
+                    continue;
+                }
                 let dispatch_started = Instant::now();
                 let dispatch_result = pushkin
                     .dispatch_notification(&notification, device, &context)
                     .await;
+                if let Some(breaker) = state.circuit_breaker.as_ref() {
+                    match &dispatch_result {
+                        Ok(_) => {
+                            breaker.record_success(&breaker_key);
+                            app_metrics::set_circuit_breaker_state(
+                                pushkin.name(),
+                                breaker_scope_kind,
+                                breaker_scope_id,
+                                0,
+                            );
+                        }
+                        Err(error) => {
+                            let opened = breaker.record_failure(&breaker_key);
+                            app_metrics::set_circuit_breaker_state(
+                                pushkin.name(),
+                                breaker_scope_kind,
+                                breaker_scope_id,
+                                if opened { 2 } else { 0 },
+                            );
+                            if opened {
+                                tracing::warn!(
+                                    error = %error,
+                                    request_id = %context.request_id,
+                                    app_id,
+                                    pushkin = %pushkin.name(),
+                                    realm_id = ?notification.realm_id(),
+                                    circle_id = ?notification.circle_id(),
+                                    "opened push provider circuit breaker"
+                                );
+                            }
+                        }
+                    }
+                }
                 let dispatch_outcome = match &dispatch_result {
                     Ok(rejected) if rejected.is_empty() => "accepted",
                     Ok(_) => "partial",
@@ -1040,7 +1142,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
+            cokret::error::ERROR_CODE_INTERNAL_ERROR,
             &message,
             None,
             Some(&context.request_id),
@@ -1071,7 +1173,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
+            cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
             &message,
             retry_after,
             Some(&context.request_id),
@@ -1102,7 +1204,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_GATEWAY,
-            "temporarily_unavailable",
+            cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
             &message,
             None,
             Some(&context.request_id),

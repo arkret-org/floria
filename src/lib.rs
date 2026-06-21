@@ -15,6 +15,7 @@ pub mod postgres_support;
 pub mod push_contact_cache;
 pub mod pushkin;
 pub mod rate_limit;
+pub(crate) mod redis_support;
 pub mod retry_queue;
 pub mod sanitize;
 pub mod service;
@@ -23,6 +24,7 @@ use std::sync::Arc;
 
 use audit::AuditSink;
 use broadcast::InProcessBroadcastBus;
+use circuit_breaker::CircuitBreaker;
 use config::{InternalAuthConfig, NotifyAuthConfig};
 use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
@@ -56,6 +58,7 @@ pub struct AppState {
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
     pub notify_nonce_store: Option<Arc<NonceStore>>,
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
+    pub circuit_breaker: Option<Arc<CircuitBreaker>>,
     pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
     pub push_contact_cache: Option<Arc<PushContactCache>>,
     pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
@@ -76,6 +79,7 @@ impl AppState {
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,
+            circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
             deactivation_ledger: None,
             push_contact_cache: None,
             broadcast_bus: None,
@@ -96,6 +100,7 @@ impl AppState {
             notify_rate_limiter: None,
             notify_nonce_store: None,
             notify_retry_queue: None,
+            circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
             deactivation_ledger: None,
             push_contact_cache: None,
             broadcast_bus: None,

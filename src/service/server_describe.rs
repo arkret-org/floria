@@ -50,7 +50,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             ok: false,
             request_id: None,
             error: ErrorBody {
-                code: "internal_error",
+                code: cokret::error::ERROR_CODE_INTERNAL_ERROR,
                 message: "application state missing",
                 retry_after_ms: None,
             },

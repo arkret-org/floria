@@ -243,7 +243,7 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            "temporarily_unavailable",
+            cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
             &message,
             None,
             Some(request_id),

@@ -37,6 +37,7 @@ use redis::Commands;
 
 use crate::auth::redact_url_credentials;
 use crate::models::FloriaPushNotifyOutcome as PushNotifyOutcome;
+use crate::redis_support::{RedisConnection, RedisPool};
 
 /// Lightweight status snapshot for the `GET /_floria/admin/push/status/{key}`
 /// endpoint. Derived from the dedup cache when the request completed,
@@ -90,7 +91,7 @@ impl MemoryNotifyDeduplicator {
 
 #[derive(Debug)]
 struct RedisNotifyDeduplicator {
-    client: redis::Client,
+    pool: RedisPool,
     target_label: String,
     key_prefix: String,
 }
@@ -122,11 +123,12 @@ impl NotifyDeduplicator {
                 redact_url_credentials(redis_url)
             )
         })?;
+        let target_label = redact_url_credentials(redis_url);
         Ok(Self {
             ttl,
             backend: NotifyDedupBackend::Redis(RedisNotifyDeduplicator {
-                client,
-                target_label: redact_url_credentials(redis_url),
+                pool: RedisPool::from_client(client, target_label.clone())?,
+                target_label,
                 key_prefix: normalize_key_prefix(&key_prefix.into()),
             }),
         })
@@ -578,10 +580,8 @@ impl RedisNotifyDeduplicator {
         }
     }
 
-    fn connection(&self) -> Result<redis::Connection> {
-        self.client
-            .get_connection()
-            .with_context(|| format!("failed to connect to Redis backend {}", self.target_label))
+    fn connection(&self) -> Result<RedisConnection> {
+        self.pool.connection()
     }
 
     fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {

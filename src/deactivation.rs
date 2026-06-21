@@ -27,16 +27,19 @@
 //! push-key hashes. The expected table columns are:
 //! `actor_id text`, `device_id text`, and `push_key_hash text`.
 
-use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use postgres::NoTls;
+use lru::LruCache;
 use postgres::types::ToSql;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::redact_url_credentials;
-use crate::postgres_support::SqlTableName;
+use crate::postgres_support::{PostgresPool, SqlTableName};
+
+const DEFAULT_DEACTIVATION_LEDGER_FANOUT_CAPACITY: usize = 16_384;
+const DEFAULT_DEACTIVATION_LEDGER_BINDING_CAPACITY: usize = 65_536;
 
 /// Round R2/R3 (T07) — broadcast envelope soland sends to every push
 /// gateway when a deactivation fanout starts.
@@ -138,35 +141,24 @@ pub trait DeactivationQueueDrain: std::fmt::Debug + Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct PostgresDeactivationQueueDrain {
-    postgres_url: String,
+    pool: PostgresPool,
     table: SqlTableName,
-    target_label: String,
 }
 
 impl PostgresDeactivationQueueDrain {
     pub fn new(postgres_url: impl Into<String>, table: impl AsRef<str>) -> Result<Self> {
         let postgres_url = postgres_url.into();
         let table = SqlTableName::parse(table.as_ref(), "storage.deactivation_queue_table")?;
+        let target_label = redact_url_credentials(&postgres_url);
         Ok(Self {
-            target_label: redact_url_credentials(&postgres_url),
-            postgres_url,
+            pool: PostgresPool::new(&postgres_url, target_label)?,
             table,
-        })
-    }
-
-    fn connect(&self) -> Result<postgres::Client> {
-        postgres::Client::connect(&self.postgres_url, NoTls).with_context(|| {
-            format!(
-                "failed to connect to PostgreSQL deactivation queue {}",
-                self.target_label
-            )
         })
     }
 }
 
 impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
     fn drain(&self, broadcast: &AccountDeactivateFanoutBroadcast) -> Result<usize> {
-        let mut client = self.connect()?;
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![&broadcast.actor_id];
         let sql = if broadcast.devices.is_empty() {
             format!("DELETE FROM {} WHERE actor_id = $1", self.table.as_sql())
@@ -195,15 +187,17 @@ impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
                 clauses.join(" OR ")
             )
         };
-        client
-            .execute(&sql, &params)
-            .with_context(|| {
-                format!(
-                    "failed to drain deactivation queue table {}",
-                    self.table.as_sql()
-                )
-            })
-            .map(|count| count as usize)
+        self.pool.with_client(|client| {
+            client
+                .execute(&sql, &params)
+                .with_context(|| {
+                    format!(
+                        "failed to drain deactivation queue table {}",
+                        self.table.as_sql()
+                    )
+                })
+                .map(|count| count as usize)
+        })
     }
 }
 
@@ -234,21 +228,54 @@ impl Default for DeactivationLedger {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct DeactivationLedgerInner {
     /// fanout_id -> first-seen result
-    seen: HashMap<String, DeactivationFanoutResult>,
+    seen: LruCache<String, DeactivationFanoutResult>,
     /// Set of (actor_id, device_id) bindings the ledger knows are
     /// unbound. Used so a retry of the same fanout doesn't re-count
     /// devices that were already torn down.
-    unbound_devices: HashSet<(String, String)>,
+    unbound_devices: LruCache<(String, String), ()>,
     /// Set of actor_id values whose actor-level binding has been
     /// torn down.
-    unbound_actors: HashSet<String>,
+    unbound_actors: LruCache<String, ()>,
     /// Set of (actor_id, device_id) bindings whose underlying push
     /// channel is sealed (provider rejected the token previously).
     /// Populated by [`DeactivationLedger::mark_channel_sealed`].
-    sealed: HashSet<(String, String)>,
+    sealed: LruCache<(String, String), ()>,
+}
+
+impl Default for DeactivationLedgerInner {
+    fn default() -> Self {
+        Self::with_capacities(
+            DEFAULT_DEACTIVATION_LEDGER_FANOUT_CAPACITY,
+            DEFAULT_DEACTIVATION_LEDGER_BINDING_CAPACITY,
+        )
+    }
+}
+
+impl DeactivationLedgerInner {
+    fn with_capacities(fanout_capacity: usize, binding_capacity: usize) -> Self {
+        Self {
+            seen: LruCache::new(non_zero_capacity(fanout_capacity)),
+            unbound_devices: LruCache::new(non_zero_capacity(binding_capacity)),
+            unbound_actors: LruCache::new(non_zero_capacity(binding_capacity)),
+            sealed: LruCache::new(non_zero_capacity(binding_capacity)),
+        }
+    }
+}
+
+fn non_zero_capacity(value: usize) -> NonZeroUsize {
+    NonZeroUsize::new(value.max(1)).expect("value.max(1) is non-zero")
+}
+
+fn lru_insert_absent<K>(cache: &mut LruCache<K, ()>, key: K) -> bool
+where
+    K: std::hash::Hash + Eq,
+{
+    let existed = cache.contains(&key);
+    cache.put(key, ());
+    !existed
 }
 
 impl DeactivationLedger {
@@ -263,6 +290,17 @@ impl DeactivationLedger {
         }
     }
 
+    #[cfg(test)]
+    fn with_capacities(fanout_capacity: usize, binding_capacity: usize) -> Self {
+        Self {
+            inner: Mutex::new(DeactivationLedgerInner::with_capacities(
+                fanout_capacity,
+                binding_capacity,
+            )),
+            queue_drain: None,
+        }
+    }
+
     /// Mark a channel as sealed so a subsequent fanout for the same
     /// `(actor, device)` reports the cell as drained-via-sealed rather
     /// than partially completed.
@@ -270,7 +308,7 @@ impl DeactivationLedger {
         let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
         inner
             .sealed
-            .insert((actor_id.to_owned(), device_id.to_owned()));
+            .put((actor_id.to_owned(), device_id.to_owned()), ());
     }
 
     /// Process a fanout broadcast. Idempotent: a retry with the same
@@ -280,7 +318,7 @@ impl DeactivationLedger {
         broadcast: &AccountDeactivateFanoutBroadcast,
     ) -> DeactivationFanoutResult {
         {
-            let inner = self.inner.lock().expect("deactivation ledger poisoned");
+            let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
             if let Some(prior) = inner.seen.get(&broadcast.fanout_id) {
                 return prior.clone();
             }
@@ -307,20 +345,21 @@ impl DeactivationLedger {
                 sealed_channels += 1;
                 // Still mark as unbound so a future fanout for the
                 // same cell is a no-op rather than re-counted.
-                inner.unbound_devices.insert(key);
+                inner.unbound_devices.put(key, ());
                 continue;
             }
-            if inner.unbound_devices.insert(key) {
+            if lru_insert_absent(&mut inner.unbound_devices, key) {
                 device_bindings_unbound += 1;
             }
         }
 
         // Actor-level binding is unbound exactly once per actor.
-        let actor_bindings_unbound = if inner.unbound_actors.insert(broadcast.actor_id.clone()) {
-            1
-        } else {
-            0
-        };
+        let actor_bindings_unbound =
+            if lru_insert_absent(&mut inner.unbound_actors, broadcast.actor_id.clone()) {
+                1
+            } else {
+                0
+            };
 
         let (messages_drained, drain_failed) = match drain_result {
             Some(Ok(count)) => (count, false),
@@ -355,9 +394,7 @@ impl DeactivationLedger {
             sealed_channels,
             messages_drained,
         };
-        inner
-            .seen
-            .insert(broadcast.fanout_id.clone(), result.clone());
+        inner.seen.put(broadcast.fanout_id.clone(), result.clone());
         result
     }
 }
@@ -473,5 +510,20 @@ mod tests {
         assert_eq!(result.outcome, DeactivateFanoutOutcome::NoOp);
         assert_eq!(result.actor_bindings_unbound, 0);
         assert_eq!(result.device_bindings_unbound, 0);
+    }
+
+    #[test]
+    fn ledger_lru_bounds_seen_and_binding_state() {
+        let ledger = DeactivationLedger::with_capacities(2, 2);
+        for index in 0..4 {
+            let fanout_id = format!("fanout-{index}");
+            let actor = format!("did:web:actor-{index}.example");
+            let device = format!("device-{index}");
+            let _ = ledger.record_fanout(&broadcast(&fanout_id, &actor, &[&device]));
+        }
+        let inner = ledger.inner.lock().expect("deactivation ledger poisoned");
+        assert!(inner.seen.len() <= 2);
+        assert!(inner.unbound_devices.len() <= 2);
+        assert!(inner.unbound_actors.len() <= 2);
     }
 }
