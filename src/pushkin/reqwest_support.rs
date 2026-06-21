@@ -19,8 +19,7 @@ pub(super) const TOKEN_REFRESH_SKEW: Duration = Duration::from_secs(30);
 /// TCP connect timeout for every outbound provider / token / OEM HTTP
 /// client. Single-sourced here so no provider can ship a client that
 /// blocks forever on a half-open or unresponsive upstream and pins an
-/// in-flight permit (see FLO-02-001). Applied to every reqwest client and
-/// mirrored by the isahc-based WebPush client.
+/// in-flight permit (see FLO-02-001). Applied to every reqwest client.
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Overall per-request timeout (connect + send + receive) for outbound

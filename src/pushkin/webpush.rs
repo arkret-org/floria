@@ -1,29 +1,36 @@
-use std::fs::File;
+use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use aes_gcm::aead::Aead;
+use aes_gcm::{Aes128Gcm, KeyInit, Nonce};
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
+use base64::Engine;
+use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use blake2::digest::Digest;
 use globset::{Glob, GlobMatcher};
-use isahc::HttpClient;
-use isahc::config::{Configurable, ResolveMap};
+use hkdf::Hkdf;
+use p256::ecdh::EphemeralSecret;
+use p256::ecdsa::signature::Signer;
+use p256::ecdsa::{Signature, SigningKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::pkcs8::DecodePrivateKey;
+use p256::{PublicKey, SecretKey};
 use prometheus::{Histogram, IntGauge, register_histogram, register_int_gauge};
-use reqwest::Url;
+use rand_core_06::{OsRng, RngCore};
+use reqwest::{Client, StatusCode, Url};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use sha2_010::Sha256;
 use tokio::sync::Semaphore;
-use web_push::{
-    ContentEncoding, IsahcWebPushClient, PartialVapidSignatureBuilder, SubscriptionInfo, Urgency,
-    VapidSignatureBuilder, WebPushClient, WebPushError, WebPushMessageBuilder,
-};
 
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
     max_connections, notification_badge_count, notification_unread_increment,
     sanitized_provider_payload,
 };
-use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
@@ -70,23 +77,25 @@ static WEBPUSH_VAPID_ACTIVE_KEY: LazyLock<prometheus::IntGaugeVec> = LazyLock::n
 });
 
 const DEFAULT_WEBPUSH_TTL_SECS: u32 = 15 * 60;
+const WEBPUSH_MAX_RESPONSE_SIZE: usize = 64 * 1024;
+const WEBPUSH_MAX_PLAINTEXT_SIZE: usize = 3052;
+const ECE_AES_KEY_LENGTH: usize = 16;
+const ECE_AUTH_SECRET_LENGTH: usize = 16;
+const ECE_DEFAULT_PADDING_BLOCK_SIZE: usize = 128;
+const ECE_DEFAULT_RS: u32 = 4096;
+const ECE_KEY_ID_LENGTH: u8 = 65;
+const ECE_NONCE_LENGTH: usize = 12;
+const ECE_PUBLIC_KEY_LENGTH: usize = 65;
+const ECE_SALT_LENGTH: usize = 16;
 #[cfg(test)]
 const MAX_BODY_LENGTH: usize = 1000;
-#[cfg(test)]
-const MAX_CIPHERTEXT_LENGTH: usize = 2000;
 
 pub struct WebpushPushkin {
     matcher: AppMatcher,
     gate: ConcurrencyGate,
     connection_semaphore: Arc<Semaphore>,
-    /// Parameters needed to (re)build the isahc WebPush client. isahc has
-    /// no dynamic per-connection resolver hook like reqwest's
-    /// `EgressGuardResolver`, so instead of one shared client we rebuild
-    /// the client per dispatch with a `ResolveMap` that pins the endpoint
-    /// host to the exact IP we just validated against the egress
-    /// blocklist — closing the TOCTOU / DNS-rebinding gap (FLO-03-001).
-    client_params: WebpushClientParams,
-    vapid_builder: PartialVapidSignatureBuilder,
+    client: Client,
+    vapid_key: VapidKeyMaterial,
     vapid_contact_email: String,
     vapid_key_id: String,
     vapid_key_fingerprint: String,
@@ -94,42 +103,129 @@ pub struct WebpushPushkin {
     ttl: u32,
 }
 
-/// Everything required to build (or rebuild) the isahc WebPush client,
-/// captured once at construction so each dispatch can mint a client whose
-/// DNS resolution is pinned to a pre-validated IP.
-#[derive(Clone)]
-struct WebpushClientParams {
-    max_connections: usize,
-    proxy: Option<isahc::http::Uri>,
+struct VapidKeyMaterial {
+    signing_key: SigningKey,
+    public_key: Vec<u8>,
 }
 
-impl WebpushClientParams {
-    /// Build an isahc WebPush client. When `pinned` is supplied, every
-    /// connection for the listed host:port pairs is forced to the given
-    /// IP via curl's resolve override (`CURLOPT_RESOLVE`); the original
-    /// host is still used for the TLS SNI and HTTP Host header.
-    fn build_client(&self, pinned: Option<ResolveMap>) -> Result<IsahcWebPushClient> {
-        // Bound connect + overall request time so a stalled WebPush
-        // endpoint cannot pin a gate permit / connection forever
-        // (FLO-02-001). isahc's read-timeout alone does not cap connect
-        // or total duration.
-        let mut builder = HttpClient::builder()
-            .max_connections(self.max_connections)
-            .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
-            .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-            .default_header("user-agent", "floria");
-        if let Some(proxy) = &self.proxy {
-            builder = builder.proxy(Some(proxy.clone()));
-        }
-        if let Some(resolve) = pinned {
-            builder = builder.dns_resolve(resolve);
-        }
-        Ok(IsahcWebPushClient::from(
-            builder
-                .build()
-                .context("failed to build webpush HTTP client")?,
-        ))
+impl VapidKeyMaterial {
+    fn from_pem(bytes: &[u8]) -> Result<Self> {
+        let pem = std::str::from_utf8(bytes).context("VAPID private key must be UTF-8 PEM")?;
+        let secret_key = SecretKey::from_sec1_pem(pem)
+            .or_else(|_| SecretKey::from_pkcs8_pem(pem))
+            .context("VAPID private key must be a P-256 PEM key")?;
+        Ok(Self::from_signing_key(SigningKey::from(secret_key)))
     }
+
+    fn from_signing_key(signing_key: SigningKey) -> Self {
+        let public_key = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .as_bytes()
+            .to_vec();
+        Self {
+            signing_key,
+            public_key,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SubscriptionInfo {
+    endpoint: String,
+    keys: SubscriptionKeys,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubscriptionKeys {
+    p256dh: String,
+    auth: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Urgency {
+    Low,
+    Normal,
+}
+
+impl Urgency {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Normal => "normal",
+        }
+    }
+}
+
+struct WebpushMessage {
+    endpoint: String,
+    ttl: u32,
+    urgency: Urgency,
+    authorization: String,
+    body: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebpushErrorInfo {
+    #[serde(default)]
+    code: u16,
+    #[serde(default)]
+    errno: u16,
+    #[serde(default)]
+    error: String,
+    #[serde(default)]
+    message: String,
+}
+
+impl fmt::Display for WebpushErrorInfo {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.message.is_empty() {
+            write!(
+                formatter,
+                "{} (code {}, errno {})",
+                self.error, self.code, self.errno
+            )
+        } else {
+            write!(
+                formatter,
+                "{} (code {}, errno {}): {}",
+                self.error, self.code, self.errno, self.message
+            )
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum WebpushError {
+    #[error("webpush request failed")]
+    Unspecified,
+    #[error("invalid webpush endpoint URI")]
+    InvalidUri,
+    #[error("missing webpush crypto keys")]
+    MissingCryptoKeys,
+    #[error("invalid webpush crypto keys")]
+    InvalidCryptoKeys,
+    #[error("invalid VAPID claims")]
+    InvalidClaims,
+    #[error("webpush payload is too large")]
+    PayloadTooLarge,
+    #[error("webpush response exceeded size limit")]
+    ResponseTooLarge,
+    #[error("webpush unauthorized: {0}")]
+    Unauthorized(WebpushErrorInfo),
+    #[error("webpush bad request: {0}")]
+    BadRequest(WebpushErrorInfo),
+    #[error("webpush endpoint not found: {0}")]
+    EndpointNotFound(WebpushErrorInfo),
+    #[error("webpush endpoint not valid: {0}")]
+    EndpointNotValid(WebpushErrorInfo),
+    #[error("webpush server error: {info}")]
+    ServerError {
+        retry_after: Option<Duration>,
+        info: WebpushErrorInfo,
+    },
+    #[error("webpush endpoint error: {0}")]
+    Other(WebpushErrorInfo),
 }
 
 impl WebpushPushkin {
@@ -150,6 +246,8 @@ impl WebpushPushkin {
         let gate = ConcurrencyGate::new(inflight_limit(app)?);
         let max_connections = max_connections(app)?.max(1);
         let connection_semaphore = Arc::new(Semaphore::new(max_connections));
+        let client = super::reqwest_support::build_reqwest_client(config, "floria")
+            .context("failed to build webpush HTTP client")?;
 
         let vapid_private_key = app
             .require_existing_file(base_dir, "vapid_private_key")?
@@ -179,34 +277,14 @@ impl WebpushPushkin {
             })
             .transpose()?;
 
-        let proxy = config
-            .outbound_proxy()
-            .map(|proxy| {
-                proxy.parse::<isahc::http::Uri>().with_context(|| {
-                    format!("invalid proxy URL `{}`", redact_url_credentials(proxy))
-                })
-            })
-            .transpose()?;
-        let client_params = WebpushClientParams {
-            max_connections,
-            proxy,
-        };
-        // Fail fast at startup if the client config is unbuildable, rather
-        // than surfacing it on the first dispatch.
-        client_params.build_client(None)?;
-
-        let vapid_builder = VapidSignatureBuilder::from_pem_no_sub(
-            File::open(&vapid_private_key)
-                .with_context(|| format!("failed to read {}", vapid_private_key.display()))?,
-        )
-        .context("invalid VAPID private key")?;
-
         let key_bytes = std::fs::read(&vapid_private_key).with_context(|| {
             format!(
                 "failed to read VAPID private key {}",
                 vapid_private_key.display()
             )
         })?;
+        let vapid_key =
+            VapidKeyMaterial::from_pem(&key_bytes).context("invalid VAPID private key")?;
         let mut hasher = blake2::Blake2s256::new();
         hasher.update(&key_bytes);
         let vapid_key_fingerprint = hex::encode(hasher.finalize());
@@ -231,8 +309,8 @@ impl WebpushPushkin {
             matcher,
             gate,
             connection_semaphore,
-            client_params,
-            vapid_builder,
+            client,
+            vapid_key,
             vapid_contact_email,
             vapid_key_id,
             vapid_key_fingerprint,
@@ -302,60 +380,100 @@ impl WebpushPushkin {
         endpoint_allowed(self.allowed_endpoints.as_deref(), endpoint_domain)
     }
 
-    /// Validate the endpoint against the egress blocklist and build a
-    /// WebPush client whose DNS resolution for this endpoint's host:port
-    /// is pinned to the exact IPs that passed validation.
-    ///
-    /// isahc/web-push offer no per-request resolver hook (unlike reqwest's
-    /// `EgressGuardResolver`), so we resolve + filter here and pin the
-    /// surviving IPs via `ResolveMap`. The connection therefore dials only
-    /// an already-validated address — a DNS rebind between this check and
-    /// the actual connect cannot redirect us to `169.254.169.254`, `::1`,
-    /// `10.x`, etc. (FLO-03-001). SNI/Host stay the original hostname.
-    fn pinned_client_for_endpoint(&self, endpoint: &str) -> Result<IsahcWebPushClient, String> {
+    /// Validate the endpoint against the egress blocklist before building
+    /// the request. The shared reqwest client also installs
+    /// `EgressGuardResolver`, so every connection re-applies the same
+    /// blocklist at dial time and closes the DNS-rebinding gap.
+    fn validate_endpoint_for_egress(&self, endpoint: &str) -> Result<(), String> {
         let url = Url::parse(endpoint)
             .map_err(|error| format!("webpush endpoint: invalid URL: {error}"))?;
         crate::egress::validate_url_for_egress(
             &url,
             "webpush endpoint",
             crate::egress::private_networks_allowed(),
-        )?;
-        let host = url
-            .host_str()
-            .ok_or_else(|| "webpush endpoint: URL host is required".to_owned())?;
-        let port = url.port_or_known_default().unwrap_or(443);
-        let ips = crate::egress::resolved_egress_ips(host, port, "webpush endpoint")?;
-
-        let mut resolve = ResolveMap::new();
-        for ip in ips {
-            resolve = resolve.add(host, port, ip);
-        }
-        self.client_params
-            .build_client(Some(resolve))
-            .map_err(|error| format!("webpush endpoint: failed to build pinned client: {error}"))
+        )
     }
 
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
-        let _ = device;
-        Err(DispatchError::remote(
-            "webpush subscription endpoint/auth must be resolved outside notify device_route",
+        let push_key = device
+            .push_key()
+            .ok_or_else(|| DispatchError::remote("webpush device is missing push_key"))?;
+        serde_json::from_str(push_key).map_err(|error| {
+            DispatchError::remote(format!("invalid webpush subscription in push_key: {error}"))
+        })
+    }
+
+    fn vapid_authorization(&self, subscription: &SubscriptionInfo) -> Result<String, WebpushError> {
+        #[derive(Serialize)]
+        struct VapidHeader<'a> {
+            typ: &'a str,
+            alg: &'a str,
+        }
+
+        #[derive(Serialize)]
+        struct VapidClaims<'a> {
+            aud: &'a str,
+            exp: u64,
+            sub: String,
+        }
+
+        let endpoint = Url::parse(&subscription.endpoint).map_err(|_| WebpushError::InvalidUri)?;
+        let audience = endpoint.origin().ascii_serialization();
+        if audience == "null" {
+            return Err(WebpushError::InvalidUri);
+        }
+
+        let expires_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| WebpushError::InvalidClaims)?
+            .as_secs()
+            + 12 * 60 * 60;
+        let header = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&VapidHeader {
+                typ: "JWT",
+                alg: "ES256",
+            })
+            .map_err(|_| WebpushError::InvalidClaims)?,
+        );
+        let claims = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&VapidClaims {
+                aud: &audience,
+                exp: expires_at,
+                sub: format!("mailto:{}", self.vapid_contact_email),
+            })
+            .map_err(|_| WebpushError::InvalidClaims)?,
+        );
+        let signing_input = format!("{header}.{claims}");
+        let signature: Signature = self.vapid_key.signing_key.sign(signing_input.as_bytes());
+        let token = format!(
+            "{signing_input}.{}",
+            URL_SAFE_NO_PAD.encode(signature.to_bytes())
+        );
+        Ok(format!(
+            "vapid t={token}, k={}",
+            URL_SAFE_NO_PAD.encode(&self.vapid_key.public_key)
         ))
     }
 
-    fn signature_for(
+    fn build_message(
         &self,
         subscription: &SubscriptionInfo,
-    ) -> Result<web_push::VapidSignature, DispatchError> {
-        let mut builder = self.vapid_builder.clone().add_sub_info(subscription);
-        builder.add_claim("sub", format!("mailto:{}", self.vapid_contact_email));
-        builder.build().map_err(|error| {
-            DispatchError::internal(format!("failed to build VAPID signature: {error}"))
+        payload: &[u8],
+        urgency: Urgency,
+    ) -> Result<WebpushMessage, WebpushError> {
+        let body = encrypt_webpush_payload(subscription, payload)?;
+        let authorization = self.vapid_authorization(subscription)?;
+        Ok(WebpushMessage {
+            endpoint: subscription.endpoint.clone(),
+            ttl: self.ttl,
+            urgency,
+            authorization,
+            body,
         })
     }
 
     async fn send_message(
         &self,
-        client: &IsahcWebPushClient,
         subscription: &SubscriptionInfo,
         notification: &Notification,
         device: &Device,
@@ -364,30 +482,24 @@ impl WebpushPushkin {
             serde_json::to_vec(&Self::build_payload(notification, device)).map_err(|error| {
                 DispatchError::internal(format!("failed to encode webpush payload: {error}"))
             })?;
-        let signature = self.signature_for(subscription)?;
-
-        let mut builder = WebPushMessageBuilder::new(subscription);
-        builder.set_ttl(self.ttl);
-        builder.set_urgency(if notification.is_low_priority() {
+        let urgency = if notification.is_low_priority() {
             Urgency::Low
         } else {
             Urgency::Normal
-        });
-        builder.set_payload(ContentEncoding::Aes128Gcm, &payload);
-        builder.set_vapid_signature(signature);
+        };
 
-        let message = match builder.build() {
+        let message = match self.build_message(subscription, &payload, urgency) {
             Ok(message) => message,
-            Err(WebPushError::InvalidUri)
-            | Err(WebPushError::MissingCryptoKeys)
-            | Err(WebPushError::InvalidCryptoKeys) => {
+            Err(WebpushError::InvalidUri)
+            | Err(WebpushError::MissingCryptoKeys)
+            | Err(WebpushError::InvalidCryptoKeys) => {
                 tracing::warn!(
                     push_key_hash = %device.redacted_push_key(),
                     "rejecting invalid webpush crypto material"
                 );
                 return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
             }
-            Err(WebPushError::InvalidTopic | WebPushError::InvalidClaims) => {
+            Err(WebpushError::InvalidClaims) => {
                 return Err(DispatchError::internal(
                     "failed to build webpush request".to_owned(),
                 ));
@@ -414,11 +526,43 @@ impl WebpushPushkin {
 
         WEBPUSH_ACTIVE_REQUESTS.inc();
         let request_started = Instant::now();
-        let result = client.send(message).await;
+        let result = self.send_webpush_message(message).await;
         WEBPUSH_ACTIVE_REQUESTS.dec();
         WEBPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
 
         classify_webpush_result(result, device.push_key().unwrap_or_default())
+    }
+
+    async fn send_webpush_message(&self, message: WebpushMessage) -> Result<(), WebpushError> {
+        let request = self.client.post(&message.endpoint);
+        let content_length = message.body.len().to_string();
+        let mut response = request
+            .header("TTL", message.ttl.to_string())
+            .header("Urgency", message.urgency.as_str())
+            .header(reqwest::header::AUTHORIZATION, message.authorization)
+            .header(reqwest::header::CONTENT_ENCODING, "aes128gcm")
+            .header(reqwest::header::CONTENT_LENGTH, content_length)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(message.body)
+            .send()
+            .await
+            .map_err(|_| WebpushError::Unspecified)?;
+        let retry_after = super::reqwest_support::parse_retry_after(response.headers());
+        let status = response.status();
+
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| WebpushError::Unspecified)?
+        {
+            body.extend_from_slice(&chunk);
+            if body.len() > WEBPUSH_MAX_RESPONSE_SIZE {
+                return Err(WebpushError::ResponseTooLarge);
+            }
+        }
+
+        parse_webpush_response(status, body, retry_after)
     }
 }
 
@@ -477,22 +621,151 @@ impl Pushkin for WebpushPushkin {
             return Ok(vec![]);
         }
 
-        let pinned_client = match self.pinned_client_for_endpoint(&subscription.endpoint) {
-            Ok(client) => client,
-            Err(error) => {
-                tracing::error!(
-                    push_key_hash = %device.redacted_push_key(),
-                    endpoint = %endpoint_domain,
-                    error = %error,
-                    "webpush endpoint rejected by egress policy"
-                );
-                return Ok(vec![]);
-            }
-        };
+        if let Err(error) = self.validate_endpoint_for_egress(&subscription.endpoint) {
+            tracing::error!(
+                push_key_hash = %device.redacted_push_key(),
+                endpoint = %endpoint_domain,
+                error = %error,
+                "webpush endpoint rejected by egress policy"
+            );
+            return Ok(vec![]);
+        }
 
-        self.send_message(&pinned_client, &subscription, notification, device)
-            .await
+        self.send_message(&subscription, notification, device).await
     }
+}
+
+fn decode_webpush_key(raw: &str) -> Result<Vec<u8>, WebpushError> {
+    if raw.is_empty() {
+        return Err(WebpushError::MissingCryptoKeys);
+    }
+    URL_SAFE_NO_PAD
+        .decode(raw)
+        .or_else(|_| URL_SAFE.decode(raw))
+        .map_err(|_| WebpushError::InvalidCryptoKeys)
+}
+
+fn encrypt_webpush_payload(
+    subscription: &SubscriptionInfo,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, WebpushError> {
+    if plaintext.is_empty() {
+        return Err(WebpushError::InvalidCryptoKeys);
+    }
+    if plaintext.len() > WEBPUSH_MAX_PLAINTEXT_SIZE {
+        return Err(WebpushError::PayloadTooLarge);
+    }
+
+    let receiver_public = decode_webpush_key(&subscription.keys.p256dh)?;
+    let auth_secret = decode_webpush_key(&subscription.keys.auth)?;
+    if receiver_public.len() != ECE_PUBLIC_KEY_LENGTH || auth_secret.len() != ECE_AUTH_SECRET_LENGTH
+    {
+        return Err(WebpushError::InvalidCryptoKeys);
+    }
+
+    let receiver_public = PublicKey::from_sec1_bytes(&receiver_public)
+        .map_err(|_| WebpushError::InvalidCryptoKeys)?;
+    let mut rng = OsRng;
+    let mut salt = [0u8; ECE_SALT_LENGTH];
+    rng.fill_bytes(&mut salt);
+    let sender_secret = EphemeralSecret::random(&mut rng);
+    let sender_public = sender_secret
+        .public_key()
+        .to_encoded_point(false)
+        .as_bytes()
+        .to_vec();
+    if sender_public.len() != ECE_PUBLIC_KEY_LENGTH {
+        return Err(WebpushError::InvalidCryptoKeys);
+    }
+
+    let shared_secret = sender_secret.diffie_hellman(&receiver_public);
+    let ikm_info = webpush_ikm_info(
+        receiver_public.to_encoded_point(false).as_bytes(),
+        &sender_public,
+    )?;
+    let auth_hkdf = Hkdf::<Sha256>::new(Some(&auth_secret), shared_secret.raw_secret_bytes());
+    let mut ikm = [0u8; 32];
+    auth_hkdf
+        .expand(&ikm_info, &mut ikm)
+        .map_err(|_| WebpushError::InvalidCryptoKeys)?;
+
+    let salt_hkdf = Hkdf::<Sha256>::new(Some(&salt), &ikm);
+    let mut key = [0u8; ECE_AES_KEY_LENGTH];
+    salt_hkdf
+        .expand(b"Content-Encoding: aes128gcm\0", &mut key)
+        .map_err(|_| WebpushError::InvalidCryptoKeys)?;
+    let mut nonce = [0u8; ECE_NONCE_LENGTH];
+    salt_hkdf
+        .expand(b"Content-Encoding: nonce\0", &mut nonce)
+        .map_err(|_| WebpushError::InvalidCryptoKeys)?;
+
+    let padding_length =
+        ECE_DEFAULT_PADDING_BLOCK_SIZE - (plaintext.len() % ECE_DEFAULT_PADDING_BLOCK_SIZE);
+    let record_len = plaintext.len() + padding_length;
+    if record_len + 16 > ECE_DEFAULT_RS as usize {
+        return Err(WebpushError::PayloadTooLarge);
+    }
+    let mut padded = Vec::with_capacity(record_len);
+    padded.extend_from_slice(plaintext);
+    padded.push(2);
+    padded.resize(record_len, 0);
+
+    let cipher = Aes128Gcm::new_from_slice(&key).map_err(|_| WebpushError::InvalidCryptoKeys)?;
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), padded.as_slice())
+        .map_err(|_| WebpushError::InvalidCryptoKeys)?;
+
+    let mut body =
+        Vec::with_capacity(ECE_SALT_LENGTH + 4 + 1 + ECE_PUBLIC_KEY_LENGTH + ciphertext.len());
+    body.extend_from_slice(&salt);
+    body.extend_from_slice(&ECE_DEFAULT_RS.to_be_bytes());
+    body.push(ECE_KEY_ID_LENGTH);
+    body.extend_from_slice(&sender_public);
+    body.extend_from_slice(&ciphertext);
+    Ok(body)
+}
+
+fn webpush_ikm_info(receiver_public: &[u8], sender_public: &[u8]) -> Result<Vec<u8>, WebpushError> {
+    if receiver_public.len() != ECE_PUBLIC_KEY_LENGTH
+        || sender_public.len() != ECE_PUBLIC_KEY_LENGTH
+    {
+        return Err(WebpushError::InvalidCryptoKeys);
+    }
+    let mut info = Vec::with_capacity("WebPush: info\0".len() + ECE_PUBLIC_KEY_LENGTH * 2);
+    info.extend_from_slice(b"WebPush: info\0");
+    info.extend_from_slice(receiver_public);
+    info.extend_from_slice(sender_public);
+    Ok(info)
+}
+
+fn parse_webpush_response(
+    status: StatusCode,
+    body: Vec<u8>,
+    retry_after: Option<Duration>,
+) -> Result<(), WebpushError> {
+    if status.is_success() {
+        return Ok(());
+    }
+
+    let info = webpush_error_info(status, body);
+    match status {
+        StatusCode::UNAUTHORIZED => Err(WebpushError::Unauthorized(info)),
+        StatusCode::GONE => Err(WebpushError::EndpointNotValid(info)),
+        StatusCode::NOT_FOUND => Err(WebpushError::EndpointNotFound(info)),
+        StatusCode::PAYLOAD_TOO_LARGE => Err(WebpushError::PayloadTooLarge),
+        StatusCode::BAD_REQUEST => Err(WebpushError::BadRequest(info)),
+        status if status.is_server_error() => Err(WebpushError::ServerError { retry_after, info }),
+        _ => Err(WebpushError::Other(info)),
+    }
+}
+
+fn webpush_error_info(status: StatusCode, body: Vec<u8>) -> WebpushErrorInfo {
+    serde_json::from_slice(&body).unwrap_or_else(|_| WebpushErrorInfo {
+        code: status.as_u16(),
+        errno: 999,
+        error: "unknown error".to_owned(),
+        message: String::from_utf8(body).unwrap_or_else(|_| "-".to_owned()),
+    })
 }
 
 fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: &str) -> bool {
@@ -504,28 +777,28 @@ fn endpoint_allowed(allowed_endpoints: Option<&[GlobMatcher]>, endpoint_domain: 
 }
 
 fn classify_webpush_result(
-    result: Result<(), WebPushError>,
+    result: Result<(), WebpushError>,
     push_key: &str,
 ) -> Result<Vec<String>, DispatchError> {
     match result {
         Ok(()) => Ok(vec![]),
-        Err(WebPushError::EndpointNotFound(_) | WebPushError::EndpointNotValid(_)) => {
+        Err(WebpushError::EndpointNotFound(_) | WebpushError::EndpointNotValid(_)) => {
             Ok(vec![push_key.to_owned()])
         }
-        Err(WebPushError::ServerError { retry_after, info }) => Err(DispatchError::temporary(
+        Err(WebpushError::ServerError { retry_after, info }) => Err(DispatchError::temporary(
             format!("webpush server error: {info}"),
             retry_after,
         )),
-        Err(WebPushError::Unauthorized(info)) => Err(DispatchError::remote(format!(
+        Err(WebpushError::Unauthorized(info)) => Err(DispatchError::remote(format!(
             "webpush unauthorized: {info}"
         ))),
-        Err(WebPushError::BadRequest(info)) => Err(DispatchError::remote(format!(
+        Err(WebpushError::BadRequest(info)) => Err(DispatchError::remote(format!(
             "webpush bad request: {info}"
         ))),
-        Err(WebPushError::Other(info)) => Err(DispatchError::remote(format!(
+        Err(WebpushError::Other(info)) => Err(DispatchError::remote(format!(
             "webpush endpoint error: {info}"
         ))),
-        Err(WebPushError::Unspecified) => Err(DispatchError::temporary(
+        Err(WebpushError::Unspecified) => Err(DispatchError::temporary(
             "webpush request failed".to_owned(),
             None,
         )),
@@ -539,7 +812,6 @@ fn classify_webpush_result(
 mod tests {
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener};
-    use std::path::PathBuf;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use std::{fs, thread};
 
@@ -560,26 +832,26 @@ mod tests {
         }
     }
 
-    fn network_device(endpoint: &str) -> Device {
-        Device { device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001").unwrap(), app_id: Some("com.example.web".to_owned()),
-            push_key: Some("BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8".to_owned()),
-            target_actor_id: None
-        }
+    fn subscription_push_key(endpoint: &str) -> String {
+        json!({
+            "endpoint": endpoint,
+            "keys": {
+                "p256dh": "BH1HTeKM7-NwaLGHEqxeu2IamQaVVLkcsFHPIHmsCnqxcBHPQBprF41bEMOr3O1hUQ2jU1opNEm1F_lZV_sxMP8",
+                "auth": "sBXU5_tIYz-5w7G2B25BEw"
+            }
+        })
+        .to_string()
     }
 
-    fn vapid_test_key_path() -> PathBuf {
-        let cargo_home = std::env::var_os("CARGO_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(std::env::var_os("USERPROFILE").expect("USERPROFILE")).join(".cargo")
-            });
-        cargo_home
-            .join("registry")
-            .join("src")
-            .join("index.crates.io-1949cf8c6b5b557f")
-            .join("web-push-0.11.0")
-            .join("resources")
-            .join("vapid_test_key.pem")
+    fn network_device(endpoint: &str) -> Device {
+        Device {
+            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+                .unwrap(),
+            app_id: Some("com.example.web".to_owned()),
+            push_key: Some(subscription_push_key(endpoint)),
+            platform: None,
+            target_actor_id: None,
+        }
     }
 
     fn pushkin_with_allowed_endpoints(
@@ -589,14 +861,12 @@ mod tests {
             matcher: AppMatcher::new("com.example.web".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
             connection_semaphore: Arc::new(Semaphore::new(1)),
-            client_params: WebpushClientParams {
-                max_connections: 1,
-                proxy: None,
-            },
-            vapid_builder: VapidSignatureBuilder::from_pem_no_sub(
-                File::open(vapid_test_key_path()).unwrap(),
+            client: super::super::reqwest_support::build_reqwest_client(
+                &Config::default(),
+                "floria",
             )
             .unwrap(),
+            vapid_key: VapidKeyMaterial::from_signing_key(SigningKey::random(&mut OsRng)),
             vapid_contact_email: "push@example.com".to_owned(),
             vapid_key_id: "test".to_owned(),
             vapid_key_fingerprint: "test".to_owned(),
@@ -605,7 +875,7 @@ mod tests {
         }
     }
 
-    fn notification(body: &str) -> Notification {
+    fn notification(_body: &str) -> Notification {
         Notification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
@@ -648,11 +918,7 @@ mod tests {
             &device(),
         );
 
-        // Device-supplied static config still survives.
-        assert_eq!(
-            payload.get("client"),
-            Some(&Value::String("web".to_owned()))
-        );
+        assert!(payload.get("client").is_none());
         // T4.3 — allowed blind-wakeup fields survive.
         assert_eq!(
             payload.get("push_target_id"),
@@ -664,10 +930,10 @@ mod tests {
             payload.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // §5.1 — unread=2 is bucketed to the `2-5` representative value 5;
-        // missed_calls=1 stays in the `1` bucket.
-        assert_eq!(payload.get("unread_count"), Some(&Value::Number(5.into())));
-        assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
+        // unread_increment travels as a bounded delta; badge keeps the
+        // bucket representative for the provider badge field.
+        assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
+        assert_eq!(payload.get("badge"), Some(&Value::Number(5.into())));
 
         // T4.3 — stable correlation identifiers are stripped.
         for forbidden in [
@@ -840,30 +1106,17 @@ mod tests {
         let notification = notification("hello");
         let subscription = pushkin.subscription_from_device(&device).unwrap();
 
-        // The 410-handling path is orthogonal to IP pinning; use an
-        // unpinned client so the loopback test server is reachable.
-        let client = pushkin.client_params.build_client(None).unwrap();
         let rejected = pushkin
-            .send_message(&client, &subscription, &notification, &device)
+            .send_message(&subscription, &notification, &device)
             .await
             .unwrap();
 
-        assert_eq!(rejected, vec![device.push_key.clone()]);
+        assert_eq!(rejected, vec![device.push_key().unwrap().to_owned()]);
         server.join().unwrap();
     }
 
     #[tokio::test]
-    async fn webpush_pins_validated_ip_and_rejects_rebind_to_private() {
-        // A hostname that the egress validation would pass (public IP)
-        // but which, at connect time, an attacker rebinds to a private
-        // address. Because we pin the connection to the *validated* IP
-        // (and reject endpoints that resolve only to blocked addresses),
-        // the isahc path must refuse to build a client / dispatch.
-        //
-        // Here the endpoint host is itself a private IP literal, which is
-        // the strongest form of the rebind target: `pinned_client_for_endpoint`
-        // must reject it via the shared egress blocklist rather than
-        // dialing it.
+    async fn webpush_egress_validation_rejects_private_targets() {
         let pushkin =
             pushkin_with_allowed_endpoints(Some(vec![Glob::new("*").unwrap().compile_matcher()]));
 
@@ -872,8 +1125,8 @@ mod tests {
             "http://10.0.0.5/push",
             "http://[::1]/push",
         ] {
-            let error = match pushkin.pinned_client_for_endpoint(blocked) {
-                Ok(_) => panic!("expected pinned client build to reject {blocked}"),
+            let error = match pushkin.validate_endpoint_for_egress(blocked) {
+                Ok(_) => panic!("expected egress validation to reject {blocked}"),
                 Err(error) => error,
             };
             assert!(

@@ -119,44 +119,6 @@ fn validate_resolved_ip(ip: IpAddr, purpose: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Resolve `host` and return *only* the addresses that survive the egress
-/// blocklist, so a caller that cannot install [`EgressGuardResolver`]
-/// (e.g. the isahc-based WebPush client, which has no dynamic resolver
-/// hook) can pin the connection to these exact validated IPs and close
-/// the same TOCTOU / DNS-rebinding gap (FLO-03-001).
-///
-/// `host` may itself be an IP literal, in which case it is validated and
-/// returned as-is. The returned vector is never empty on `Ok`; if every
-/// resolved address is blocked, this returns `Err` instead so the caller
-/// fails closed.
-///
-/// When `FLORIA_EGRESS_ALLOW_PRIVATE_NETWORKS` is set the blocklist is
-/// disabled (local-dev override) and every resolved address is returned.
-pub fn resolved_egress_ips(host: &str, port: u16, purpose: &str) -> Result<Vec<IpAddr>, String> {
-    let allow_private = private_networks_allowed();
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if !allow_private {
-            validate_resolved_ip(ip, purpose)?;
-        }
-        return Ok(vec![ip]);
-    }
-    let resolved: Vec<IpAddr> = (host, port)
-        .to_socket_addrs()
-        .map_err(|error| format!("{purpose}: DNS resolution for {host} failed: {error}"))?
-        .map(|addr| addr.ip())
-        .collect();
-    if allow_private {
-        return Ok(resolved);
-    }
-    let safe: Vec<IpAddr> = resolved.into_iter().filter(|ip| !blocked_ip(*ip)).collect();
-    if safe.is_empty() {
-        return Err(format!(
-            "{purpose}: egress target {host} resolved only to blocked (private/metadata) addresses"
-        ));
-    }
-    Ok(safe)
-}
-
 fn blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => blocked_ipv4(ip),

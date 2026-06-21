@@ -10,6 +10,7 @@ description = "cokret-compatible push gateway service with APNS, FCM, WebPush, a
 # `full-surface` is required to expose `cokret::http_signature`.
 anyhow = {workspace = true}
 async-trait = {workspace = true}
+aes-gcm = {workspace = true}
 base64 = {workspace = true}
 blake2 = {workspace = true}
 chacha20poly1305 = {workspace = true}
@@ -19,7 +20,7 @@ futures = {workspace = true,default-features = false,features = ["std"]}
 globset = {workspace = true}
 hex = {workspace = true}
 hmac = {workspace = true}
-isahc = {workspace = true,default-features = false,features = ["http2"]}
+hkdf = {workspace = true}
 jsonwebtoken = {workspace = true}
 kdl = {workspace = true}
 lru = {workspace = true}
@@ -27,9 +28,11 @@ md-5 = {workspace = true}
 opentelemetry = {workspace = true,default-features = false,features = ["trace"]}
 opentelemetry-otlp = {workspace = true,default-features = false,features = ["trace", "grpc-tonic"]}
 opentelemetry_sdk = {workspace = true,default-features = false,features = ["trace", "rt-tokio"]}
+p256 = {workspace = true,features = ["ecdh"]}
 postgres = {workspace = true}
 prometheus = {workspace = true}
 rand = {workspace = true}
+rand_core_06 = {workspace = true}
 r2d2 = {workspace = true}
 redis = {workspace = true}
 reqwest = {workspace = true,default-features = false,features = ["form", "http2", "json", "rustls"]}
@@ -41,6 +44,7 @@ serde = {workspace = true,features = ["derive"]}
 serde-saphyr = {workspace = true}
 serde_json = {workspace = true}
 sha2 = {workspace = true}
+sha2_010 = {workspace = true}
 subtle = {workspace = true}
 thiserror = {workspace = true}
 tokio = {workspace = true,features = ["macros", "rt-multi-thread", "sync", "time"]}
@@ -49,12 +53,11 @@ tracing = {workspace = true}
 tracing-opentelemetry = {workspace = true,default-features = false,features = ["tracing-log"]}
 tracing-subscriber = {workspace = true,features = ["env-filter", "fmt", "json", "registry"]}
 uuid = {workspace = true,features = ["serde", "v4"]}
-web-push = {workspace = true,default-features = false,features = ["isahc-client"],optional = true}
 x509-parser = {workspace = true}
 
 [features]
 default = []
-webpush-provider = ["dep:web-push"]
+webpush-provider = []
 
 [dev-dependencies]
 # T8.2 — property tests for the provider-payload sanitizer.
@@ -66,6 +69,7 @@ resolver = "3"
 [workspace.dependencies]
 anyhow = "1.0.102"
 async-trait = "0.1.89"
+aes-gcm = "0.10.3"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
@@ -75,13 +79,7 @@ futures = {version = "0.3.32",default-features = false}
 globset = "0.4.18"
 hex = "0.4.3"
 hmac = {version = "0.13.0",default-features = false}
-# Pinned to the same major as the isahc that `web-push` (isahc-client)
-# depends on so floria's `isahc::HttpClient` is the exact type
-# `IsahcWebPushClient::from` accepts, and so the WebPush client can be
-# rebuilt per-request with an egress `ResolveMap` to pin connections to
-# pre-validated IPs (FLO-03-001). A 2.x here resolved to a *second*,
-# incompatible isahc and broke `IsahcWebPushClient::from(HttpClient)`.
-isahc = {version = "1.7.2",default-features = false}
+hkdf = "0.12.4"
 jsonwebtoken = "10.4.0"
 kdl = "6.7.1"
 lru = "0.18.0"
@@ -89,11 +87,13 @@ md-5 = "0.11.0"
 opentelemetry = {version = "0.32.0",default-features = false}
 opentelemetry-otlp = {version = "0.32.0",default-features = false}
 opentelemetry_sdk = {version = "0.32.1",default-features = false}
+p256 = "0.13.2"
 postgres = "0.19.13"
 prometheus = "0.14.0"
 proptest = {version = "1",default-features = false}
 r2d2 = "0.8.10"
 rand = "0.10"
+rand_core_06 = {package = "rand_core",version = "0.6.4",features = ["getrandom"]}
 redis = "1.2.2"
 reqwest = {version = "0.13.4",default-features = false}
 rustls = {version = "0.23.40",default-features = false,features = ["ring", "std"]}
@@ -104,6 +104,7 @@ serde = "1.0.228"
 serde-saphyr = "0.0.27"
 serde_json = "1.0.150"
 sha2 = "0.11.0"
+sha2_010 = {package = "sha2",version = "0.10.9"}
 subtle = "2.6.1"
 thiserror = "2.0.18"
 tokio = "1.52.3"
@@ -112,5 +113,4 @@ tracing = "0.1.44"
 tracing-opentelemetry = {version = "0.33.0",default-features = false}
 tracing-subscriber = "0.3.23"
 uuid = "1.23.3"
-web-push = {version = "0.11.0",default-features = false}
 x509-parser = "0.18.1"
