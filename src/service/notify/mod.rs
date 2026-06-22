@@ -16,8 +16,8 @@ use super::metrics::{
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
 use crate::models::{
-    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
-    ProviderRetry,
+    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
+    NotificationExt, ProviderRetry,
 };
 use crate::{AppState, metrics as app_metrics};
 
@@ -55,21 +55,63 @@ const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
 const CIRCUIT_BREAKER_RETRY_AFTER: Duration = Duration::from_secs(30);
 #[cfg(not(test))]
-const PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(60);
+const DEFAULT_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(60);
 #[cfg(test)]
-const PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
+const DEFAULT_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
+#[cfg(not(test))]
+const HIGH_PRIVACY_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(300);
+#[cfg(test)]
+const HIGH_PRIVACY_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
 
-async fn wait_for_provider_timing_bucket(request_id: &str) {
-    let delay = provider_timing_bucket_delay(SystemTime::now(), PROVIDER_TIMING_BUCKET);
+async fn wait_for_provider_timing_bucket(request_id: &str, bucket: Duration) {
+    let delay = provider_timing_bucket_delay(SystemTime::now(), bucket);
     if delay == Duration::ZERO {
         return;
     }
     tracing::info!(
         request_id,
         delay_ms = delay.as_millis(),
+        bucket_ms = bucket.as_millis(),
         "delaying provider dispatch until timing bucket boundary"
     );
     tokio::time::sleep(delay).await;
+}
+
+fn provider_timing_bucket_for_notification(notification: &Notification) -> Duration {
+    if notification_uses_high_privacy_timing(notification) {
+        HIGH_PRIVACY_PROVIDER_TIMING_BUCKET
+    } else {
+        DEFAULT_PROVIDER_TIMING_BUCKET
+    }
+}
+
+fn notification_uses_high_privacy_timing(notification: &Notification) -> bool {
+    notification.evaluation_locus_unresolved.unwrap_or(false)
+        || notification.push_hint.as_deref() == Some("l10n_key")
+        || notification
+            .push_hint_l10n_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        || has_high_privacy_timing_hint(notification.push_hint.as_deref())
+        || has_high_privacy_timing_hint(notification.wakeup_kind.as_deref())
+        || has_high_privacy_timing_hint(notification.priority.as_deref())
+        || has_high_privacy_timing_hint(notification.membership.as_deref())
+}
+
+fn has_high_privacy_timing_hint(value: Option<&str>) -> bool {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let value = value.to_ascii_lowercase();
+    [
+        "traffic_metadata_hardened",
+        "minimal_metadata",
+        "high_privacy",
+        "batch_wakeup",
+        "no_notification",
+    ]
+    .iter()
+    .any(|needle| value.contains(needle))
 }
 
 fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
@@ -703,6 +745,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
     let mut first_internal_error: Option<String> = None;
     let mut provider_timing_bucket_applied = false;
+    let provider_timing_bucket = provider_timing_bucket_for_notification(&notification);
     for device in &notification.devices {
         let app_id = device.app_id().unwrap_or_default();
         let push_key = device.push_key().unwrap_or_default();
@@ -865,7 +908,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     continue;
                 }
                 if !provider_timing_bucket_applied {
-                    wait_for_provider_timing_bucket(&context.request_id).await;
+                    wait_for_provider_timing_bucket(&context.request_id, provider_timing_bucket)
+                        .await;
                     provider_timing_bucket_applied = true;
                 }
                 let dispatch_started = Instant::now();

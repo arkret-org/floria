@@ -200,7 +200,7 @@ async fn record_rejected_devices_audit(
     let event = AuditEvent::RejectedDevices {
         request_id: request_id.to_owned(),
         origin_service_did: caller.origin_service_did.clone(),
-        devices: rejected.to_vec(),
+        devices: rejected.iter().map(rejected_device_for_audit).collect(),
     };
     match sink.record(&event).await {
         Ok(()) => {
@@ -215,6 +215,18 @@ async fn record_rejected_devices_audit(
             Err(error.to_string())
         }
     }
+}
+
+fn rejected_device_for_audit(device: &RejectedDevice) -> RejectedDevice {
+    RejectedDevice {
+        push_key: device.push_key.clone(),
+        app_id: device.app_id.as_deref().map(redact_app_id_for_audit),
+        reason_code: device.reason_code.clone(),
+    }
+}
+
+fn redact_app_id_for_audit(app_id: &str) -> String {
+    redact_push_token(app_id).replacen("pkh_", "apph_", 1)
 }
 
 pub(super) async fn record_rejected_devices_audit_or_finish(
