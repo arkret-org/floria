@@ -648,6 +648,7 @@ mod tests {
             push_key: Some("target-value".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 

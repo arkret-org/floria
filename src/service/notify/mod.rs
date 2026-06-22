@@ -35,8 +35,8 @@ use helpers::{
     request_destination_service_did, resolve_idempotency_key,
 };
 use validation::{
-    AgentEventRouting, BLIND_PROFILE_PLAINTEXT_REASON, classify_agent_event_kind,
-    validate_destination_service_did, validate_notification_contract,
+    AgentEventRouting, BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON,
+    classify_agent_event_kind, validate_destination_service_did, validate_notification_contract,
     validate_notify_contract_shape, validate_origin_service_did,
     validate_plaintext_identity_metadata,
 };
@@ -580,7 +580,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         // violation, not an authorization failure: the caller could
         // still have the right credentials, the request just can't
         // be carried by the blind profile they're scoped to.
-        Err(message) if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) => {
+        Err(message)
+            if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON)
+                || message.starts_with(VISIBLE_DEVICE_OPT_IN_REASON) =>
+        {
             finish_error(
                 res,
                 StatusCode::PRECONDITION_FAILED,

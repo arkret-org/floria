@@ -100,6 +100,9 @@ pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
     fn kind(&self) -> &'static str;
     fn handles_app_id(&self, app_id: &str) -> bool;
+    fn emits_collapse_key(&self) -> bool {
+        false
+    }
     fn dispatch_targets(
         &self,
         _notification: &Notification,
@@ -160,7 +163,9 @@ pub struct ProviderCapabilities {
     /// Maximum TTL in seconds the upstream provider accepts, or `None`
     /// when the provider does not document a hard cap.
     pub ttl_seconds_max: Option<u64>,
-    /// Whether the provider supports a collapse / replace key.
+    /// Whether the upstream provider supports a collapse / replace key.
+    /// The bridge descriptor additionally requires the concrete adapter
+    /// to emit that key before advertising support.
     pub supports_collapse: bool,
     /// Whether the provider has first-class badge / unread count support.
     pub supports_badge: bool,
@@ -360,7 +365,8 @@ impl PushkinRegistry {
                         kind: capabilities.kind.to_owned(),
                         batch: capabilities.batch.to_owned(),
                         ttl_seconds_max: capabilities.ttl_seconds_max,
-                        supports_collapse: capabilities.supports_collapse,
+                        supports_collapse: capabilities.supports_collapse
+                            && pushkin.emits_collapse_key(),
                         supports_badge: capabilities.supports_badge,
                         provider_payload_shape: capabilities.provider_payload_shape.to_owned(),
                         credential_kinds: capabilities
@@ -611,7 +617,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_target_id` (opaque pseudonym)
 ///   * `wakeup_kind` (closed enum)
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
-///   * `badge` / `unread_count` (clamped at SDK MAX_COUNT_VALUE)
+///   * `badge` as a boolean unread indicator, plus bounded `unread_count` delta
 pub fn build_blind_routing_data(notification: &Notification) -> Map<String, serde_json::Value> {
     use cokret::blind_payload_sanitizer as sdk;
 
@@ -675,8 +681,7 @@ fn counts_badge_count(counts: &Counts) -> Option<u64> {
         .badge
         .as_ref()
         .and_then(badge_value_to_count)
-        .or(counts.missed_call)
-        .map(|value| value.min(cokret::blind_payload_sanitizer::MAX_COUNT_VALUE))
+        .or_else(|| counts.missed_call.map(boolean_count))
 }
 
 fn badge_value_to_count(value: &Value) -> Option<u64> {
@@ -684,10 +689,14 @@ fn badge_value_to_count(value: &Value) -> Option<u64> {
         Value::Bool(false) | Value::Null => Some(0),
         Value::Bool(true) => Some(1),
         Value::String(bucket) if bucket == "1" => Some(1),
-        Value::String(bucket) if bucket == "2-5" => Some(5),
-        Value::String(bucket) if bucket == "6+" => Some(crate::sanitize::BUCKET_SIX_PLUS),
-        _ => value.as_u64(),
+        Value::String(bucket) if bucket == "2-5" => Some(1),
+        Value::String(bucket) if bucket == "6+" => Some(1),
+        _ => value.as_u64().map(boolean_count),
     }
+}
+
+fn boolean_count(value: u64) -> u64 {
+    u64::from(value > 0)
 }
 
 /// Generate a fresh random base64url collapse_key. Used by WebPush /
@@ -890,10 +899,37 @@ mod sanitize_tests {
         assert!(data.contains_key("wakeup_kind"));
         assert!(data.contains_key("push_hint"));
         assert!(data.contains_key("unread_count"));
+        assert_eq!(data.get("badge"), Some(&json!(1)));
         assert!(!data.contains_key("event_id"));
         assert!(!data.contains_key("sender"));
         assert!(!data.contains_key("strand_title"));
         assert!(!data.contains_key("strand_id"));
+    }
+
+    #[test]
+    fn badge_count_is_booleanized_for_blind_wakeup() {
+        for (badge, missed_call, expected) in [
+            (Some(json!("1")), None, Some(1_u64)),
+            (Some(json!("2-5")), None, Some(1_u64)),
+            (Some(json!("6+")), None, Some(1_u64)),
+            (Some(json!(42)), None, Some(1_u64)),
+            (Some(json!(0)), None, Some(0_u64)),
+            (Some(json!(false)), Some(7), Some(0_u64)),
+            (Some(json!(null)), Some(7), Some(0_u64)),
+            (None, Some(7), Some(1_u64)),
+            (None, Some(0), Some(0_u64)),
+            (None, None, None),
+        ] {
+            let notification = Notification {
+                counts: Some(crate::models::Counts {
+                    badge,
+                    unread_increment: None,
+                    missed_call,
+                }),
+                ..Default::default()
+            };
+            assert_eq!(notification_badge_count(&notification), expected);
+        }
     }
 
     #[test]

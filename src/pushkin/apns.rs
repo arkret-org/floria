@@ -746,6 +746,7 @@ mod tests {
             push_key: Some("spqr".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 
@@ -821,8 +822,8 @@ mod tests {
                             "Mission Control"
                         ]
                     },
-                    // §5.1 — unread=3 bucketed to the `2-5` representative 5.
-                    "badge": 5
+                    // Blind wakeups expose only a boolean unread badge.
+                    "badge": 1
                 }
             })
         );

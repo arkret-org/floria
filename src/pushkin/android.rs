@@ -194,6 +194,7 @@ mod tests {
             push_key: Some("push_key".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 
@@ -277,13 +278,13 @@ mod tests {
             payload.data.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge keeps the
-        // bucket representative for the SDK badge field.
+        // unread_increment travels as a bounded delta; badge is reduced
+        // to a boolean unread indicator.
         assert_eq!(
             payload.data.get("unread_count"),
             Some(&Value::Number(2.into()))
         );
-        assert_eq!(payload.data.get("badge"), Some(&Value::Number(5.into())));
+        assert_eq!(payload.data.get("badge"), Some(&Value::Number(1.into())));
     }
 
     #[test]

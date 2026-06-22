@@ -875,6 +875,7 @@ pub async fn run_worker(
                 push_key: Some(envelope.push_key.clone()),
                 platform: None,
                 target_actor_id: None,
+                visible_notification_opt_in: false,
             };
             let notification = Notification {
                 devices: vec![device.clone()],

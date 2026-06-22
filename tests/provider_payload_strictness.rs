@@ -562,7 +562,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
 #[tokio::test]
 async fn notify_visible_profile_accepts_plaintext_metadata() {
     let service = visible_profile_service();
-    let body = blind_payload(
+    let mut body = blind_payload(
         json!({
             "strand_title": "Mission Control",
             "sender_actor_display_name": "Major Tom",
@@ -571,6 +571,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         .unwrap()
         .clone(),
     );
+    body["notification"]["devices"][0]["visible_notification_opt_in"] = json!(true);
 
     let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
@@ -590,6 +591,43 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         response.status_code.unwrap(),
         StatusCode::OK,
         "visible-profile caller must be allowed to send plaintext metadata"
+    );
+}
+
+#[tokio::test]
+async fn notify_visible_profile_requires_device_visible_opt_in() {
+    let service = visible_profile_service();
+    let body = blind_payload(
+        json!({
+            "strand_title": "Mission Control",
+            "sender_actor_display_name": "Major Tom",
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            "x-cokret-destination-service-did",
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&body)
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::PRECONDITION_FAILED,
+        "visible-profile plaintext requires per-device visible opt-in"
+    );
+    let body_text = response.take_string().await.unwrap();
+    assert!(
+        body_text.contains("visible_notification_device_opt_in_required"),
+        "expected visible opt-in reason, got: {body_text}"
     );
 }
 

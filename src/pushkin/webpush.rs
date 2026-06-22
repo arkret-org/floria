@@ -829,6 +829,7 @@ mod tests {
             push_key: Some("p256dh-key".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 
@@ -851,6 +852,7 @@ mod tests {
             push_key: Some(subscription_push_key(endpoint)),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 
@@ -930,10 +932,10 @@ mod tests {
             payload.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge keeps the
-        // bucket representative for the provider badge field.
+        // unread_increment travels as a bounded delta; badge is reduced
+        // to a boolean unread indicator.
         assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
-        assert_eq!(payload.get("badge"), Some(&Value::Number(5.into())));
+        assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
 
         // T4.3 — stable correlation identifiers are stripped.
         for forbidden in [

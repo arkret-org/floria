@@ -375,6 +375,7 @@ mod tests {
             push_key: Some("user/abc".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         };
         let url = pushkin.resolve_url(&device).unwrap();
         assert_eq!(url, "https://example.com/notify/user%2Fabc");

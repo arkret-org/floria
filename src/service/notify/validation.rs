@@ -8,7 +8,7 @@ use super::super::{
 };
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER};
 use crate::config::NotifyAuthConfig;
-use crate::models::{Notification, NotificationExt};
+use crate::models::{DeviceExt, Notification, NotificationExt};
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -513,6 +513,8 @@ fn validate_active_ref(
 // would let an observer correlate pushes across users (forbidden
 // payload keys, sensitive `did:` / `ck:` literals).
 pub(in crate::service) const BLIND_PROFILE_PLAINTEXT_REASON: &str = "plaintext_in_blind_profile";
+pub(in crate::service) const VISIBLE_DEVICE_OPT_IN_REASON: &str =
+    "visible_notification_device_opt_in_required";
 
 pub(super) fn validate_notification_contract(
     notification: &Notification,
@@ -537,6 +539,7 @@ pub(super) fn validate_notification_contract(
     // updated `realm_id` but forgot `circle_id`, or stamped a Circle
     // scope on the envelope but kept `circle_id` blank in the push
     // wire model).
+    validate_visible_notification_device_opt_in(notification, caller)?;
     validate_effective_scope_consistency(notification)?;
 
     if let Some(push_hint) = notification.push_hint.as_deref() {
@@ -544,6 +547,43 @@ pub(super) fn validate_notification_contract(
     }
 
     Ok(())
+}
+
+fn validate_visible_notification_device_opt_in(
+    notification: &Notification,
+    caller: &AuthenticatedNotifyCaller,
+) -> Result<(), String> {
+    if !caller.allow_plaintext_metadata || !notification_has_visible_metadata(notification) {
+        return Ok(());
+    }
+
+    if let Some(device) = notification
+        .devices
+        .iter()
+        .find(|device| !device.visible_notification_opt_in())
+    {
+        return Err(format!(
+            "{VISIBLE_DEVICE_OPT_IN_REASON}: device {} has not explicitly opted in to \
+             `ck.profile.push_gateway.visible_notification.v1`",
+            device.device_id.as_str()
+        ));
+    }
+
+    Ok(())
+}
+
+fn notification_has_visible_metadata(notification: &Notification) -> bool {
+    notification.event_id.is_some()
+        || notification.realm_id.is_some()
+        || notification.sender_actor_id.is_some()
+        || notification.strand_id.is_some()
+        || notification.message_id.is_some()
+        || notification.sender_actor_display_name.is_some()
+        || notification.strand_title.is_some()
+        || notification.realm_title.is_some()
+        || notification.user_is_target.is_some()
+        || notification.priority.is_some()
+        || notification.membership.is_some()
 }
 
 pub(super) fn validate_plaintext_identity_metadata(

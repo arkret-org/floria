@@ -200,6 +200,7 @@ impl NotificationExt for Notification {
 pub trait DeviceExt {
     fn app_id(&self) -> Option<&str>;
     fn push_key(&self) -> Option<&str>;
+    fn visible_notification_opt_in(&self) -> bool;
     fn redacted_push_key(&self) -> String;
 }
 
@@ -210,6 +211,10 @@ impl DeviceExt for Device {
 
     fn push_key(&self) -> Option<&str> {
         self.push_key.as_deref().and_then(non_empty)
+    }
+
+    fn visible_notification_opt_in(&self) -> bool {
+        self.visible_notification_opt_in
     }
 
     fn redacted_push_key(&self) -> String {

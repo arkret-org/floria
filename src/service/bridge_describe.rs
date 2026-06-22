@@ -221,7 +221,13 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                     "strand_id": "ck:strand:01964000-0000-7000-8000-000000000000",
                     "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
                     "push_hint": "new_message",
-                    "counts": {"unread_increment": 1}
+                    "counts": {"unread_increment": 1},
+                    "devices": [{
+                        "device_id": "ck:device:01964000-0000-7000-8000-000000000000",
+                        "app_id": "com.example.app",
+                        "push_key": "<opaque-provider-token>",
+                        "visible_notification_opt_in": true
+                    }]
                 }
             }),
         },

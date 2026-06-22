@@ -348,7 +348,7 @@ async fn bridge_describe_exposes_provider_capability_matrix() {
     assert_eq!(entry["name"], json!("com.example.app"));
     assert_eq!(entry["kind"], json!("fcm"));
     assert_eq!(entry["batch"], json!("multicast"));
-    assert_eq!(entry["supports_collapse"], json!(true));
+    assert_eq!(entry["supports_collapse"], json!(false));
     assert_eq!(entry["supports_badge"], json!(true));
     assert_eq!(
         entry["provider_payload_shape"],

@@ -626,6 +626,7 @@ mod tests {
             push_key: Some("spqr".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         }
     }
 
@@ -687,13 +688,13 @@ mod tests {
             payload.get("priority"),
             Some(&Value::String("normal".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge keeps the
-        // bucket representative for the SDK badge field.
+        // unread_increment travels as a bounded delta; badge is reduced
+        // to a boolean unread indicator.
         assert_eq!(
             payload.get("unread_count"),
             Some(&Value::String("2".to_owned()))
         );
-        assert_eq!(payload.get("badge"), Some(&Value::String("5".to_owned())));
+        assert_eq!(payload.get("badge"), Some(&Value::String("1".to_owned())));
 
         for forbidden in [
             "event_id",
@@ -735,6 +736,7 @@ mod tests {
             push_key: Some("spqr2".to_owned()),
             platform: None,
             target_actor_id: None,
+            visible_notification_opt_in: false,
         };
         let mut notification = notification();
         notification.devices = vec![primary.clone(), secondary];
