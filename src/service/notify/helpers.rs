@@ -187,7 +187,7 @@ async fn record_rejected_devices_audit(
     state: &Arc<AppState>,
     request_id: &str,
     caller: &AuthenticatedNotifyCaller,
-    notification: &Notification,
+    _notification: &Notification,
     rejected: &[RejectedDevice],
 ) -> Result<(), String> {
     if rejected.is_empty() {
@@ -200,11 +200,6 @@ async fn record_rejected_devices_audit(
     let event = AuditEvent::RejectedDevices {
         request_id: request_id.to_owned(),
         origin_service_did: caller.origin_service_did.clone(),
-        notification_event_id: optional_owned_string(
-            notification.event_id.as_ref().map(cokret::EventId::as_str),
-        ),
-        notification_strand_id: notification.strand_id().map(ToOwned::to_owned),
-        notification_realm_id: notification.realm_id().map(ToOwned::to_owned),
         devices: rejected.to_vec(),
     };
     match sink.record(&event).await {

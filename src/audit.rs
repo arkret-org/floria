@@ -24,25 +24,11 @@ pub enum AuditEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         destination_service_did: Option<String>,
         access_kind: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        late_recovery_original_event_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_event_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_strand_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_realm_id: Option<String>,
     },
     #[serde(rename = "ck.push.rejected_devices")]
     RejectedDevices {
         request_id: String,
         origin_service_did: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_event_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_strand_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        notification_realm_id: Option<String>,
         devices: Vec<RejectedDevice>,
     },
 }
@@ -176,10 +162,6 @@ mod tests {
             origin_service_did: "did:web:sync.example.com".to_owned(),
             destination_service_did: Some("did:web:push.example.com".to_owned()),
             access_kind: "e2ee_late_recovery".to_owned(),
-            late_recovery_original_event_id: Some("ck:event:late".to_owned()),
-            notification_event_id: Some("ck:event:notify".to_owned()),
-            notification_strand_id: None,
-            notification_realm_id: None,
         };
 
         sink.record(&event).await.unwrap();

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
@@ -54,6 +54,41 @@ const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
 const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
 const CIRCUIT_BREAKER_RETRY_AFTER: Duration = Duration::from_secs(30);
+#[cfg(not(test))]
+const PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
+
+async fn wait_for_provider_timing_bucket(request_id: &str) {
+    let delay = provider_timing_bucket_delay(SystemTime::now(), PROVIDER_TIMING_BUCKET);
+    if delay == Duration::ZERO {
+        return;
+    }
+    tracing::info!(
+        request_id,
+        delay_ms = delay.as_millis(),
+        "delaying provider dispatch until timing bucket boundary"
+    );
+    tokio::time::sleep(delay).await;
+}
+
+fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
+    if bucket == Duration::ZERO {
+        return Duration::ZERO;
+    }
+    let Ok(elapsed) = now.duration_since(UNIX_EPOCH) else {
+        return bucket;
+    };
+    let bucket_nanos = bucket.as_nanos();
+    if bucket_nanos == 0 {
+        return Duration::ZERO;
+    }
+    let elapsed_in_bucket = elapsed.as_nanos() % bucket_nanos;
+    if elapsed_in_bucket == 0 {
+        return Duration::ZERO;
+    }
+    Duration::from_nanos((bucket_nanos - elapsed_in_bucket).min(u64::MAX as u128) as u64)
+}
 
 fn circuit_breaker_key(
     pushkin: &str,
@@ -442,22 +477,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             origin_service_did: caller.origin_service_did.clone(),
             destination_service_did: request_destination_service_did(req),
             access_kind: access_kind.to_owned(),
-            late_recovery_original_event_id,
-            notification_event_id: optional_owned_string(
-                request
-                    .notification
-                    .event_id
-                    .as_ref()
-                    .map(cokret::EventId::as_str),
-            ),
-            notification_strand_id: optional_owned_string(
-                request
-                    .notification
-                    .strand_id
-                    .as_ref()
-                    .map(cokret::StrandId::as_str),
-            ),
-            notification_realm_id: request.notification.realm_id().map(ToOwned::to_owned),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {
             tracing::error!(
@@ -683,6 +702,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut first_remote_error: Option<String> = None;
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
     let mut first_internal_error: Option<String> = None;
+    let mut provider_timing_bucket_applied = false;
     for device in &notification.devices {
         let app_id = device.app_id().unwrap_or_default();
         let push_key = device.push_key().unwrap_or_default();
@@ -843,6 +863,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     });
                     app_metrics::notify_delivery_outcome_by_app(app_id, "retryable", 1);
                     continue;
+                }
+                if !provider_timing_bucket_applied {
+                    wait_for_provider_timing_bucket(&context.request_id).await;
+                    provider_timing_bucket_applied = true;
                 }
                 let dispatch_started = Instant::now();
                 let dispatch_result = pushkin
