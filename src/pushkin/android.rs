@@ -184,7 +184,7 @@ fn content_body(notification: &Notification) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata};
+    use crate::models::{Counts, Device, Notification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -193,7 +193,7 @@ mod tests {
             app_id: Some("com.example.cn".to_owned()),
             push_key: Some("push_key".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -214,10 +214,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -241,12 +239,12 @@ mod tests {
 
         // Title/body are derived from the (visible-profile) caller's
         // metadata. They go into the provider's notification block,
-        // not the freeform `data` dict — so they're rendered here.
+        // not the freeform `data` dict â€” so they're rendered here.
         assert_eq!(payload.title, "Mission Control");
         assert_eq!(payload.body, "Major Tom sent a message");
         assert_eq!(payload.priority, AndroidPriority::High);
 
-        // T4.3 — the freeform `data` dict MUST NOT carry stable
+        // T4.3 â€” the freeform `data` dict MUST NOT carry stable
         // correlation identifiers any more. The client now derives
         // those from the e2ee wakeup material it pulls server-side.
         assert!(payload.data.get("strand_id").is_none());
@@ -254,7 +252,7 @@ mod tests {
         // id (`realm_id`) AND the renamed container id (`space_id`).
         assert!(payload.data.get("space_id").is_none());
         assert!(payload.data.get("realm_id").is_none());
-        // CKP-0007 — Circle routing identifiers never appear in the
+        // CKP-0007 â€” Circle routing identifiers never appear in the
         // android freeform `data` dict.
         assert!(payload.data.get("circle_id").is_none());
         assert!(payload.data.get("effective_scope").is_none());

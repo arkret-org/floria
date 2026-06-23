@@ -118,8 +118,8 @@ async fn http_message_signature_authenticates_notify_request() {
             "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-            "routing_metadata": {
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+            "route_tokens": {
+                "realm_route_token": "realm_route_token_000000001"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
@@ -173,8 +173,8 @@ async fn mtls_profile_authenticates_notify_request() {
             "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-            "routing_metadata": {
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+            "route_tokens": {
+                "realm_route_token": "realm_route_token_000000001"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
@@ -229,8 +229,8 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
             "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-            "routing_metadata": {
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+            "route_tokens": {
+                "realm_route_token": "realm_route_token_000000001"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
@@ -295,8 +295,8 @@ async fn rejects_tampered_body() {
             "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-            "routing_metadata": {
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+            "route_tokens": {
+                "realm_route_token": "realm_route_token_000000001"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
@@ -309,7 +309,7 @@ async fn rejects_tampered_body() {
         }
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
-    // Sign one body, send a *different* body — content-digest
+    // Sign one body, send a *different* body â€” content-digest
     // recomputation must reject this.
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
@@ -365,7 +365,7 @@ async fn rejects_signature_missing_required_components() {
         base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
     );
     let now = unix_now_secs();
-    // Intentionally omit `@authority` from the covered components —
+    // Intentionally omit `@authority` from the covered components â€”
     // floria's required-component policy must still trip this.
     let signature_input = format!(
         "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",

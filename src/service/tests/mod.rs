@@ -263,14 +263,14 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
     // SPEC-CR-016: transport fields (operation_id / origin_service_did /
     // destination_service_did / idempotency_key) ride HTTP headers, not the
     // body. Gateway-internal routing ids (realm_id / circle_id / ...) live
-    // under notification.routing_metadata.
+    // under notification.route_tokens.
     json!({
         "notification": {
             "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
             "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
             "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-            "routing_metadata": {
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+            "route_tokens": {
+                "realm_route_token": "realm_route_token_000000001"
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",

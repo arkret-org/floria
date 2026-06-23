@@ -109,7 +109,8 @@ implemented:
    `mention_reference_v2_fields_are_not_push_payload_fields` proves the
    gateway rejects them with `schema_violation`. The only mention field
    floria accepts is the push-routing allow-list
-   `mention_redirect_target_actor_ids`, which carries DID targets only.
+   `mention_redirect_target_route_tokens`, which carries opaque route
+   tokens only.
 2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
    tokens. The media token code path was removed from floria;
    `/_cokret/describe` does not advertise an RTC/media token

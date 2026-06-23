@@ -185,13 +185,13 @@ pub(super) fn record_notify_delivery_by_scope(
     // once unique count exceeds DETAILED_CIRCLE_LABEL_THRESHOLD we
     // auto-downgrade to the realm-keyed scheme for the rest of the
     // process lifetime.
-    let effective_detailed = match (detailed_circle_labels, notification.circle_id()) {
-        (true, Some(circle)) => record_circle_and_check_guard(circle),
+    let effective_detailed = match (detailed_circle_labels, notification.scope_route_token()) {
+        (true, Some(scope_token)) => record_circle_and_check_guard(scope_token),
         _ => detailed_circle_labels,
     };
     let (scope_kind, scope_id): (&'static str, Option<&str>) =
-        match (effective_detailed, notification.circle_id()) {
-            (true, Some(circle)) => ("circle", Some(circle)),
+        match (effective_detailed, notification.scope_route_token()) {
+            (true, Some(_)) => ("scope", None),
             // Realm is the default (unbounded) dimension — apply the same
             // cardinality ceiling. Once tripped, drop the per-realm id so
             // the series collapses to a single aggregated `realm` label.

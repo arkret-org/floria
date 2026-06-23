@@ -114,8 +114,8 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
                 "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
                 "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-                "routing_metadata": {
-                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+                "route_tokens": {
+                    "realm_route_token": "realm_route_token_000000001"
                 },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
@@ -134,8 +134,8 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
-                "routing_metadata": {
-                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+                "route_tokens": {
+                    "realm_route_token": "realm_route_token_000000001"
                 },
                 "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
                 "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",

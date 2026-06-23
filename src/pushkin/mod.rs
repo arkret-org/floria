@@ -147,7 +147,7 @@ pub trait Pushkin: Send + Sync {
 /// cotest matrices can plan payload shape, TTL caps, and credential
 /// rotation without per-provider knowledge.
 ///
-/// Values describe the *kind* (apns, fcm, ...) — per-app overrides
+/// Values describe the *kind* (apns, fcm, ...) â€” per-app overrides
 /// (e.g. tighter admin TTL caps) are intentionally not included here.
 ///
 /// Contract version is exposed as `PROVIDER_CAPABILITIES_VERSION`;
@@ -511,14 +511,14 @@ pub fn truncate_str(input: &str, max_bytes: usize) -> (String, bool) {
 }
 
 // ---------------------------------------------------------------------------
-// T4.3 — provider-side sanitization
+// T4.3 â€” provider-side sanitization
 //
 // Final builder for the blind-wakeup payload that goes on the wire to a
 // downstream push provider (APNS, FCM, WebPush, Chinese OEM, custom).
 // Adapters must call [`sanitized_provider_payload`] *just before* they
 // hand the JSON off to the provider so that any forbidden key that
 // slipped past the notify ingress validators (stale call sites, future
-// builder bugs, …) is stripped before fan-out.
+// builder bugs, â€¦) is stripped before fan-out.
 //
 // `sanitize_blind_payload_strict` from the SDK is the last line of
 // defence; if it rejects, the dispatcher must drop the device rather
@@ -578,7 +578,7 @@ impl std::fmt::Display for ProviderPayloadRejection {
 fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // Drop forbidden top-level keys. We do *not* touch keys that are
     // provider-defined wrappers like `aps`, `android`, `notification`,
-    // `payload` — those are themselves on the SDK forbidden list when
+    // `payload` â€” those are themselves on the SDK forbidden list when
     // they appear in the blind-wakeup contract, so anything that gets
     // here with one of those keys gets stripped.
     //
@@ -607,7 +607,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 /// Build a base data map from a [`Notification`] using only the
 /// SDK-allowed blind-wakeup fields. Adapters that want a blind-only
 /// payload (FCM, WebPush blind path, Chinese OEM blind path) can start
-/// from this and append their own provider-specific wrappers — they
+/// from this and append their own provider-specific wrappers â€” they
 /// still MUST run [`sanitized_provider_payload`] before sending.
 ///
 /// This intentionally drops every potentially-correlating identifier
@@ -716,7 +716,7 @@ mod sanitize_tests {
     use serde_json::json;
 
     use super::*;
-    use crate::models::RoutingMetadata;
+    use crate::models::RouteTokens;
 
     #[test]
     fn sanitized_provider_payload_strips_event_id() {
@@ -765,7 +765,7 @@ mod sanitize_tests {
         assert_eq!(out.get("wakeup_kind"), Some(&json!("mention")));
     }
 
-    /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
+    /// Round R2/R3 (T07/T10/T06) â€” the appeal / attestation / audit /
     /// policy-frontier-hash / trust-domain / reset-event-id field names
     /// added by rounds 2+3 MUST be stripped from any provider payload
     /// before it leaves floria. They are all stable correlators that
@@ -813,7 +813,7 @@ mod sanitize_tests {
         assert_eq!(out.get("wakeup_kind"), Some(&json!("message")));
     }
 
-    /// Round R2/R3 — the same field names buried inside a nested object
+    /// Round R2/R3 â€” the same field names buried inside a nested object
     /// are also stripped by the recursive sweep.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields_when_nested() {
@@ -876,10 +876,8 @@ mod sanitize_tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,

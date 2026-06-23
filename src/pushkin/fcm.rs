@@ -323,17 +323,17 @@ impl FcmPushkin {
         &self,
         notification: &Notification,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
-        // T4.3 — the FCM data dictionary used to auto-copy event_id /
+        // T4.3 â€” the FCM data dictionary used to auto-copy event_id /
         // message_id / strand_id / realm_id / sender / names / push_hint
         // / content_*. None of those survive on the wire any more:
         //
-        //   * The client decrypts a server-side e2ee envelope to learn event/space/sender/body —
+        //   * The client decrypts a server-side e2ee envelope to learn event/space/sender/body â€”
         //     the provider wire format only needs to carry the opaque push_target_id + wakeup_kind
         //     so the client knows it has work to pick up.
         //   * `push_hint` survives ONLY when it's one of the SDK's allow-listed literals (no
         //     l10n_key:* form that could embed a stable token).
-        //   * Counts are bucketed (0 / 1 / 2-5 / 6+) per §5.1 so the absolute figure can't ride the
-        //     wire as a per-`push_target_id` activity correlator.
+        //   * Counts are bucketed (0 / 1 / 2-5 / 6+) per Â§5.1 so the absolute figure can't ride
+        //     the wire as a per-`push_target_id` activity correlator.
         //
         let mut data = Map::new();
 
@@ -370,7 +370,7 @@ impl FcmPushkin {
         // We still want to drop the dispatch entirely when the caller
         // gave us nothing routable: no push_target_id + wakeup_kind,
         // no counts. The old "has_routable_context" check used
-        // strand_id/realm_id/event_id/message_id — none of those are
+        // strand_id/realm_id/event_id/message_id â€” none of those are
         // emitted any more, so the check is on the blind fields.
         let has_routable_context = data.contains_key("push_target_id")
             || data.contains_key("wakeup_kind")
@@ -601,7 +601,7 @@ fn classify_fcm_v1_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata};
+    use crate::models::{Counts, Device, Notification, RouteTokens};
 
     fn pushkin() -> FcmPushkin {
         FcmPushkin {
@@ -625,7 +625,7 @@ mod tests {
             app_id: Some("com.example.fcm".to_owned()),
             push_key: Some("spqr".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -646,10 +646,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -670,7 +668,7 @@ mod tests {
     fn builds_v1_data_payload() {
         let payload = pushkin().build_data(&notification()).unwrap().unwrap();
 
-        // T4.3 — provider payload now carries only allowed blind
+        // T4.3 â€” provider payload now carries only allowed blind
         // fields. event_id / message_id / strand_id / realm_id /
         // sender / strand_title / sender_actor_display_name / content_* are
         // all stripped at the gateway.
@@ -705,7 +703,7 @@ mod tests {
             // security id (`realm_id`) AND the renamed container id
             // (`space_id`).
             "space_id",
-            // CKP-0007 — Circle routing identifiers MUST NOT reach
+            // CKP-0007 â€” Circle routing identifiers MUST NOT reach
             // the provider plaintext payload.
             "circle_id",
             "effective_scope",
@@ -735,7 +733,7 @@ mod tests {
             app_id: Some("com.example.fcm".to_owned()),
             push_key: Some("spqr2".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         };
         let mut notification = notification();
@@ -752,7 +750,7 @@ mod tests {
 
     #[test]
     fn zero_badge_counts_are_dropped() {
-        // T4.3 — "no routable context" now means none of the
+        // T4.3 â€” "no routable context" now means none of the
         // SDK-allowed blind fields (push_target_id, wakeup_kind,
         // push_hint) AND no nonzero counts. Without push_target_id the
         // dispatch is dropped entirely.

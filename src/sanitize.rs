@@ -1,8 +1,8 @@
 //! Shared helpers for floria's blind-wakeup provider egress payload
 //! hygiene.
 //!
-//!   * [`STRIP_ONLY_KEYS`] — names accepted at ingress but never sent to an external provider. Some
-//!     are consumed by floria for routing/audit, others are protocol payload names that remain
+//!   * [`STRIP_ONLY_KEYS`] â€” names accepted at ingress but never sent to an external provider.
+//!     Some are consumed by floria for routing/audit, others are protocol payload names that remain
 //!     outside the blind provider surface.
 //!   * Egress also strips everything the SDK's own `is_forbidden_payload_key` covers.
 //!
@@ -20,22 +20,25 @@ use cokret::blind_payload_sanitizer as sdk;
 /// Names accepted inbound but silently stripped before a provider sees
 /// them. Matched case-insensitively.
 ///
-///   * CKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) — drives
+///   * CKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) â€” drives
 ///     gateway-internal routing & dedup normalization; leaking it would disclose the encryption
 ///     sub-boundary / realm binding.
 ///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,
-///     cross-signing reset, policy-frontier hash) — meaningful to the audit pipeline, a stable
+///     cross-signing reset, policy-frontier hash) â€” meaningful to the audit pipeline, a stable
 ///     correlator on the provider wire.
 pub const STRIP_ONLY_KEYS: &[&str] = &[
     // --- SPEC-CR-016 gateway-internal routing fragment ---
-    // The whole `routing_metadata` wrapper plus its leaf routing fields are
+    // The whole `route_tokens` wrapper plus its leaf routing fields are
     // consumed inbound for gateway-side routing / dedup but MUST be stripped
     // before any provider sees them. `build_blind_provider_data` is
     // allow-list based so they never reach a provider by construction; these
     // entries are the defense-in-depth egress backstop.
-    "routing_metadata",
-    "mention_redirect_target_actor_ids",
-    "delivery_binding_frontier",
+    "route_tokens",
+    "realm_route_token",
+    "scope_route_token",
+    "mention_redirect_target_route_tokens",
+    "delivery_binding_frontier_token",
+    "target_route_token",
     // --- Protocol payload names kept off the provider surface ---
     "expected_previous_generation",
     "attestation_evidence",
@@ -62,10 +65,6 @@ pub const STRIP_ONLY_KEYS: &[&str] = &[
     "snooze_until",
     "target_ref",
     "target_key",
-    // --- CKP-0007 Circle primitive (routing-only) ---
-    "circle_id",
-    "effective_scope",
-    "scope_circle_id",
     // --- R2/R3 governance / correlation identifiers ---
     "appeal_id",
     "audit_purpose",
@@ -97,11 +96,11 @@ pub const BLIND_FORBIDDEN_CONTENT_TEXT_KEYS: &[&str] =
 pub const BUCKET_SIX_PLUS: u64 = 6;
 
 /// Bucket an absolute count for the `blind_wakeup` profile per
-/// push-notifications.md §5.1.
+/// push-notifications.md Â§5.1.
 ///
 /// The absolute unread / missed-call count is an activity side channel:
 /// shipping `unread = 37` lets the provider build a cumulative
-/// per-`push_target_id` activity profile. §5.1 requires that, if an
+/// per-`push_target_id` activity profile. Â§5.1 requires that, if an
 /// absolute count is carried at all under `blind_wakeup`, it MUST be
 /// bucketed to the policy-declared granularity (`1` / `2-5` / `6+`).
 ///
@@ -146,7 +145,8 @@ mod tests {
     #[test]
     fn egress_strips_sdk_and_strip_only_keys() {
         // Strip-only routing/audit tail is egress-stripped.
-        assert!(is_forbidden_egress_key("circle_id"));
+        assert!(is_forbidden_egress_key("route_tokens"));
+        assert!(is_forbidden_egress_key("scope_route_token"));
         assert!(is_forbidden_egress_key("policy_frontier_digest"));
         // SDK-covered names are egress-stripped.
         assert!(is_forbidden_egress_key("encrypted_content"));

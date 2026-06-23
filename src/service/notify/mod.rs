@@ -41,15 +41,15 @@ use validation::{
     validate_plaintext_identity_metadata,
 };
 
-/// Round 4 — `reason_code=historical_only` short-circuits soland's
+/// Round 4 â€” `reason_code=historical_only` short-circuits soland's
 /// diagnostic replay. floria MUST NOT fan the request out a second
 /// time; it answers 200 with an empty rejected list and no provider
 /// retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 
-/// Round 4 — wire reason floria attaches to a RejectedDevice when the
-/// device's `target_actor_id` is not present in the
-/// `mention_redirect_target_actor_ids` allow-list. Used by both the
+/// Round 4 â€” wire reason floria attaches to a RejectedDevice when the
+/// device's `target_route_token` is not present in the
+/// `mention_redirect_target_route_tokens` allow-list. Used by both the
 /// device-loop reject path and the per-device dedup test that the
 /// gate is fail-closed (no provider dispatch, no decryption attempt).
 const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
@@ -138,16 +138,18 @@ fn circuit_breaker_key(
 ) -> crate::circuit_breaker::BreakerKey {
     crate::circuit_breaker::BreakerKey::new(
         pushkin,
-        notification.realm_id(),
-        notification.circle_id(),
+        notification
+            .realm_route_token()
+            .or_else(|| notification.realm_id()),
+        notification.scope_route_token(),
     )
 }
 
 fn circuit_breaker_scope(
     notification: &crate::models::Notification,
 ) -> (&'static str, Option<&str>) {
-    if let Some(circle_id) = notification.circle_id() {
-        ("circle", Some(circle_id))
+    if notification.scope_route_token().is_some() {
+        ("scope", None)
     } else {
         ("realm", notification.realm_id())
     }
@@ -335,12 +337,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    // Round 4 (spec a77b995) — short-circuit the push pipeline when
+    // Round 4 (spec a77b995) â€” short-circuit the push pipeline when
     // soland tells us this is a diagnostic replay
     // (`reason_code=historical_only`). We answer 200 with an empty
     // fanout body so soland's idempotency cache stays consistent but
     // no provider call is issued and no per-device dedup state is
-    // touched. Any other `reason_code` value is rejected — floria
+    // touched. Any other `reason_code` value is rejected â€” floria
     // only honors the well-known no-op shape on the request side.
     match request.reason_code.as_deref() {
         None => {}
@@ -372,16 +374,16 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     }
-    // Phase P2 (CKP-0008 / CKP-0009) — route Personal Agent event kinds.
+    // Phase P2 (CKP-0008 / CKP-0009) â€” route Personal Agent event kinds.
     //
     // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `ck.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
+    //   * `ck.agent.{pause, resume, deactivate}` â€” durable lifecycle. Silently consumed: 200 OK +
     //     zero fanout. The authoritative capability-cache invalidation path for these state changes
     //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
     //     a push.
-    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` —
+    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` â€”
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.
@@ -420,10 +422,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
-        // Any other `event_kind` string falls through — floria does not
+        // Any other `event_kind` string falls through â€” floria does not
         // gate non-agent kinds at this layer.
     }
-    // Round 4 — route `ck.audit.policy_access{access_kind=
+    // Round 4 â€” route `ck.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's
     // pipeline advances. It does not do push fanout for this shape.
@@ -576,7 +578,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     match validate_notification_contract(&notification, &caller) {
         Ok(()) => {}
-        // T4.3 — blind profile + plaintext metadata is a precondition
+        // T4.3 â€” blind profile + plaintext metadata is a precondition
         // violation, not an authorization failure: the caller could
         // still have the right credentials, the request just can't
         // be carried by the blind profile they're scoped to.
@@ -624,7 +626,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     if let Some(notification) = notification_object.as_ref()
         && let Err(message) = validate_plaintext_identity_metadata(notification, &caller)
     {
-        // T4.3 — same reasoning: surface `failed_precondition` when
+        // T4.3 â€” same reasoning: surface `failed_precondition` when
         // the failure is "wrong profile", and `capability_denied`
         // when the caller lacks the credential entirely.
         let (status, code) = if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) {
@@ -780,34 +782,31 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             continue;
         }
 
-        // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids`
+        // Round 4 (spec a77b995) â€” `mention_redirect_target_route_tokens`
         // plaintext routing gate. When soland set a non-empty allow-list
-        // the device's `target_actor_id` MUST appear in it, otherwise
+        // the device's `target_route_token` MUST appear in it, otherwise
         // the device is fail-closed: no provider dispatch, no body
         // decryption is attempted, and the rejection is recorded with
         // the wire-safe `mention_redirect_not_targeted` reason so the
         // operator can tell why the device was skipped. Devices with
-        // no `target_actor_id` cannot prove their inclusion in the
-        // allow-list — same outcome (fail-closed).
-        if !notification.mention_redirect_target_actor_ids().is_empty() {
-            let allowed = device
-                .target_actor_id
-                .as_ref()
-                .map(cokret::Did::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .is_some_and(|actor_id| {
-                    notification
-                        .mention_redirect_target_actor_ids()
-                        .iter()
-                        .any(|allowed| allowed.as_str().trim() == actor_id)
-                });
+        // no `target_route_token` cannot prove their inclusion in the
+        // allow-list â€” same outcome (fail-closed).
+        if !notification
+            .mention_redirect_target_route_tokens()
+            .is_empty()
+        {
+            let allowed = device.target_route_token().is_some_and(|route_token| {
+                notification
+                    .mention_redirect_target_route_tokens()
+                    .iter()
+                    .any(|allowed| allowed.trim() == route_token)
+            });
             if !allowed {
                 tracing::info!(
                     request_id = %context.request_id,
                     app_id,
                     push_key_hash = %device.redacted_push_key(),
-                    "fail-closed: device.target_actor_id not in mention_redirect_target_actor_ids"
+                    "fail-closed: device.target_route_token not in mention_redirect_target_route_tokens"
                 );
                 rejected.push(
                     rejected_device(device, device.push_key())
@@ -885,7 +884,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         app_id,
                         pushkin = %pushkin.name(),
                         realm_id = ?notification.realm_id(),
-                        circle_id = ?notification.circle_id(),
+                        has_scope_route_token = notification.scope_route_token().is_some(),
                         "short-circuiting dispatch because circuit breaker is open"
                     );
                     provider_retries.push(ProviderRetry::new(
@@ -945,7 +944,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                     app_id,
                                     pushkin = %pushkin.name(),
                                     realm_id = ?notification.realm_id(),
-                                    circle_id = ?notification.circle_id(),
+                                    has_scope_route_token = notification.scope_route_token().is_some(),
                                     "opened push provider circuit breaker"
                                 );
                             }

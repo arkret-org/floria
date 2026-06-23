@@ -96,9 +96,9 @@ Push-gateway alignment with the round-4 protocol-review commits. See
 [`../_todos.md`](../_todos.md) for the workstream context.
 
 - **BREAKING** `message` / `system_message` payloads now route on
-  `mention_redirect_target_actor_ids[]`: if the receiving device's actor
-  is not in the array, floria runs fail-closed — push is delivered as a
-  blind wakeup, content is never decrypted.
+  `mention_redirect_target_route_tokens[]`: if the receiving device's
+  route token is not in the array, floria runs fail-closed; push is
+  delivered as a blind wakeup, content is never decrypted.
 - **Added** `reason_code=historical_only` recognition on federation
   idempotency replays: floria treats them as diagnostic only and does NOT
   trigger a new push fanout.

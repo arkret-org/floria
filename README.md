@@ -1,4 +1,4 @@
-# floria
+﻿# floria
 
 > **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
 
@@ -23,8 +23,8 @@ adapt to your local toolchain.
 `floria` forwards `ck.device.push_route` and `ck.edge.push.command.notify` events that
 target a specific security boundary:
 
-- **Realm:** security boundary — membership, capability, E2EE, federation.
-- **Space:** navigation container — board, list, section, calendar bucket;
+- **Realm:** security boundary â€” membership, capability, E2EE, federation.
+- **Space:** navigation container â€” board, list, section, calendar bucket;
   lives inside a Realm.
 
 The inbound push notify model uses `realm_id` for the security boundary and
@@ -38,16 +38,16 @@ three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 `[Unreleased]` and [`../_todos.md`](../_todos.md) for the canonical
 wire-breaking list.
 
-- **`mention_redirect_target_actor_ids` plaintext routing** —
+- **`mention_redirect_target_route_tokens` plaintext routing** â€”
   message / system-message payloads now carry an explicit
   redirect-target actor list. If the recipient device's actor is not in
   the list, floria runs fail-closed: a blind wakeup goes out, the
   content is not decrypted.
-- **`historical_only` is push-quiet** — when an upstream service
+- **`historical_only` is push-quiet** â€” when an upstream service
   attaches `reason_code=historical_only` to a federation idempotency
   replay, floria does not run a fresh push fanout. The event is
   diagnostic only.
-- **`e2ee_late_recovery` audit path** —
+- **`e2ee_late_recovery` audit path** â€”
   `ck.audit.policy_access{access_kind=e2ee_late_recovery}` routes
   through the audit pipeline and never produces a push wakeup.
 
@@ -57,9 +57,9 @@ Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`appeal_id`, `attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
 `policy_frontier_digest`, `trust_domain`, `reset_event_id`) and added two
-new internal broadcast endpoints — `POST /_floria/internal/
+new internal broadcast endpoints â€” `POST /_floria/internal/
 account_deactivate_fanout` (T07) and `POST /_floria/internal/
-consent_revoke` (T17) — consumed from soland. See
+consent_revoke` (T17) â€” consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the
 normative source. Ephemeral kinds (`ck.presence`, `ck.typing`,
@@ -68,7 +68,7 @@ entirely; they ride dedicated ephemeral channels in the Sync Service.
 
 ## Cross-project task tracking
 
-Per-project task lists are consolidated upstream — see
+Per-project task lists are consolidated upstream â€” see
 [`../_todos.md`](../_todos.md) for the active cross-project task plan.
 
 ## Stack
@@ -112,8 +112,8 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 ## Configuration
 
 The config format is detected by file extension:
-- `.kdl` — [KDL](https://kdl.dev) (default when `FLORIA_CONF` is not set)
-- `.yaml` / `.yml` — YAML
+- `.kdl` â€” [KDL](https://kdl.dev) (default when `FLORIA_CONF` is not set)
+- `.yaml` / `.yml` â€” YAML
 
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
 See [docs/en/server-integration.md](./docs/en/server-integration.md) for soland / server-side `/notify` integration.
@@ -151,8 +151,8 @@ Quick notes:
 - lightweight readiness probes hit `GET /ready`; strict readiness probes can use `GET /readyz` to require a populated provider registry and reachable Redis-backed dependencies
 
 Sample files:
-- `floria.sample.kdl` — KDL config with all providers commented out
-- `floria.sample.yaml` — YAML config with all providers commented out
+- `floria.sample.kdl` â€” KDL config with all providers commented out
+- `floria.sample.yaml` â€” YAML config with all providers commented out
 
 ## Recommended strategy
 

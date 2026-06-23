@@ -319,7 +319,7 @@ impl WebpushPushkin {
         })
     }
 
-    /// Stable label for the active VAPID key — surfaced via
+    /// Stable label for the active VAPID key â€” surfaced via
     /// `bridge/describe` and the `floria_webpush_vapid_active_key`
     /// gauge so operators can track rotation cadence.
     pub fn vapid_key_id(&self) -> &str {
@@ -819,7 +819,7 @@ mod tests {
 
     use super::*;
     use crate::config::{AppConfig, Config};
-    use crate::models::{Counts, RoutingMetadata};
+    use crate::models::{Counts, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -828,7 +828,7 @@ mod tests {
             app_id: Some("com.example.web".to_owned()),
             push_key: Some("p256dh-key".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -851,7 +851,7 @@ mod tests {
             app_id: Some("com.example.web".to_owned()),
             push_key: Some(subscription_push_key(endpoint)),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -893,10 +893,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -921,7 +919,7 @@ mod tests {
         );
 
         assert!(payload.get("client").is_none());
-        // T4.3 — allowed blind-wakeup fields survive.
+        // T4.3 â€” allowed blind-wakeup fields survive.
         assert_eq!(
             payload.get("push_target_id"),
             Some(&Value::String(
@@ -937,15 +935,15 @@ mod tests {
         assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
         assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
 
-        // T4.3 — stable correlation identifiers are stripped.
+        // T4.3 â€” stable correlation identifiers are stripped.
         for forbidden in [
             "strand_id",
             "realm_id",
             // Both the renamed security id (`realm_id`) AND the
-            // renamed container id (`space_id`) are off-wire — SDK
+            // renamed container id (`space_id`) are off-wire â€” SDK
             // sanitizer covers both since spec 59ac1d4.
             "space_id",
-            // CKP-0007 — Circle routing identifiers MUST NOT surface
+            // CKP-0007 â€” Circle routing identifiers MUST NOT surface
             // on the webpush plaintext envelope.
             "circle_id",
             "effective_scope",
@@ -972,9 +970,9 @@ mod tests {
     fn random_collapse_key_does_not_leak_scope_id() {
         let a = super::super::random_collapse_key();
         let b = super::super::random_collapse_key();
-        // Per-message randomness — two adjacent calls must differ.
+        // Per-message randomness â€” two adjacent calls must differ.
         assert_ne!(a, b);
-        // base64url alphabet only — no `ck:` or other typed-id substrings.
+        // base64url alphabet only â€” no `ck:` or other typed-id substrings.
         assert!(!a.contains(':'));
         assert!(
             a.chars()

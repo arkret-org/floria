@@ -8,7 +8,7 @@ pub type AuditEnvelopeMetadata = cokret::PushAuditEnvelopeMetadata;
 pub type Counts = cokret::PushCounts;
 pub type Device = cokret::PushDeviceRoute;
 pub type Notification = cokret::PushNotificationEnvelope;
-pub type RoutingMetadata = cokret::PushRoutingMetadata;
+pub type RouteTokens = cokret::PushRouteTokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
@@ -97,12 +97,13 @@ pub struct DeliveryReceipt {
 pub trait NotificationExt {
     fn scope_id(&self) -> Option<&str>;
     fn scope_title(&self) -> Option<&str>;
-    fn circle_id(&self) -> Option<&str>;
+    fn realm_route_token(&self) -> Option<&str>;
+    fn scope_route_token(&self) -> Option<&str>;
+    fn delivery_binding_frontier_token(&self) -> Option<&str>;
+    fn mention_redirect_target_route_tokens(&self) -> &[String];
     fn strand_id(&self) -> Option<&str>;
     fn message_id(&self) -> Option<&str>;
     fn realm_id(&self) -> Option<&str>;
-    fn effective_scope(&self) -> Option<&cokret::EffectiveScope>;
-    fn mention_redirect_target_actor_ids(&self) -> &[cokret::Did];
     fn strand_title(&self) -> Option<&str>;
     fn realm_title(&self) -> Option<&str>;
     fn sender_label(&self) -> Option<&str>;
@@ -114,21 +115,39 @@ pub trait NotificationExt {
 
 impl NotificationExt for Notification {
     fn scope_id(&self) -> Option<&str> {
-        self.circle_id()
-            .or_else(|| self.strand_id())
-            .or_else(|| self.realm_id())
+        self.strand_id().or_else(|| self.realm_id())
     }
 
     fn scope_title(&self) -> Option<&str> {
         self.strand_title().or_else(|| self.realm_title())
     }
 
-    fn circle_id(&self) -> Option<&str> {
-        self.routing_metadata
+    fn realm_route_token(&self) -> Option<&str> {
+        self.route_tokens
             .as_ref()
-            .and_then(|routing| routing.circle_id.as_ref())
-            .map(cokret::CircleId::as_str)
+            .and_then(|routing| routing.realm_route_token.as_deref())
             .and_then(non_empty)
+    }
+
+    fn scope_route_token(&self) -> Option<&str> {
+        self.route_tokens
+            .as_ref()
+            .and_then(|routing| routing.scope_route_token.as_deref())
+            .and_then(non_empty)
+    }
+
+    fn delivery_binding_frontier_token(&self) -> Option<&str> {
+        self.route_tokens
+            .as_ref()
+            .and_then(|routing| routing.delivery_binding_frontier_token.as_deref())
+            .and_then(non_empty)
+    }
+
+    fn mention_redirect_target_route_tokens(&self) -> &[String] {
+        self.route_tokens
+            .as_ref()
+            .map(|routing| routing.mention_redirect_target_route_tokens.as_slice())
+            .unwrap_or(&[])
     }
 
     fn strand_id(&self) -> Option<&str> {
@@ -146,24 +165,10 @@ impl NotificationExt for Notification {
     }
 
     fn realm_id(&self) -> Option<&str> {
-        self.routing_metadata
+        self.realm_id
             .as_ref()
-            .and_then(|routing| routing.realm_id.as_ref())
             .map(cokret::RealmId::as_str)
             .and_then(non_empty)
-    }
-
-    fn effective_scope(&self) -> Option<&cokret::EffectiveScope> {
-        self.routing_metadata
-            .as_ref()
-            .and_then(|routing| routing.effective_scope.as_ref())
-    }
-
-    fn mention_redirect_target_actor_ids(&self) -> &[cokret::Did] {
-        self.routing_metadata
-            .as_ref()
-            .map(|routing| routing.mention_redirect_target_actor_ids.as_slice())
-            .unwrap_or(&[])
     }
 
     fn strand_title(&self) -> Option<&str> {
@@ -200,6 +205,7 @@ impl NotificationExt for Notification {
 pub trait DeviceExt {
     fn app_id(&self) -> Option<&str>;
     fn push_key(&self) -> Option<&str>;
+    fn target_route_token(&self) -> Option<&str>;
     fn visible_notification_opt_in(&self) -> bool;
     fn redacted_push_key(&self) -> String;
 }
@@ -211,6 +217,10 @@ impl DeviceExt for Device {
 
     fn push_key(&self) -> Option<&str> {
         self.push_key.as_deref().and_then(non_empty)
+    }
+
+    fn target_route_token(&self) -> Option<&str> {
+        self.target_route_token.as_deref().and_then(non_empty)
     }
 
     fn visible_notification_opt_in(&self) -> bool {
@@ -304,8 +314,9 @@ mod tests {
                 "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "routing_metadata": {
-                    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003",
+                "route_tokens": {
+                    "realm_route_token": "realm_route_token_000000001"
                 },
                 "devices": [{
                     "device_id": "ck:device:0196419b-0000-7000-8000-000000000004",
@@ -320,6 +331,10 @@ mod tests {
         assert_eq!(
             request.notification.realm_id(),
             Some("ck:realm:0196419b-0000-7000-8000-000000000003")
+        );
+        assert_eq!(
+            request.notification.realm_route_token(),
+            Some("realm_route_token_000000001")
         );
         assert_eq!(request.notification.devices.len(), 1);
     }

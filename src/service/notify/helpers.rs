@@ -379,16 +379,26 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // CKP-0007 — `circle_id` and `effective_scope` are routing-affecting
+    // CKP-0007 â€” `circle_id` and `effective_scope` are routing-affecting
     // (two pushes for the same Strand in different Circles must not
     // collide in the dedup cache).
-    if let Some(value) = notification.circle_id() {
-        normalized.insert("circle_id".to_owned(), Value::String(value.to_owned()));
+    if let Some(value) = notification.realm_route_token() {
+        normalized.insert(
+            "realm_route_token".to_owned(),
+            Value::String(value.to_owned()),
+        );
     }
-    if let Some(scope) = notification.effective_scope()
-        && let Ok(value) = serde_json::to_value(scope)
-    {
-        normalized.insert("effective_scope".to_owned(), value);
+    if let Some(value) = notification.scope_route_token() {
+        normalized.insert(
+            "scope_route_token".to_owned(),
+            Value::String(value.to_owned()),
+        );
+    }
+    if let Some(value) = notification.delivery_binding_frontier_token() {
+        normalized.insert(
+            "delivery_binding_frontier_token".to_owned(),
+            Value::String(value.to_owned()),
+        );
     }
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));
@@ -402,20 +412,24 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
     }
-    // Round 4 (spec a77b995) — `mention_redirect_target_actor_ids` is
+    // Round 4 (spec a77b995) â€” `mention_redirect_target_route_tokens` is
     // routing-affecting (two requests with different allow-lists must
     // not collide in the dedup cache). Sort canonically so the
     // fingerprint is order-independent.
-    if !notification.mention_redirect_target_actor_ids().is_empty() {
+    if !notification
+        .mention_redirect_target_route_tokens()
+        .is_empty()
+    {
         let mut sorted = notification
-            .mention_redirect_target_actor_ids()
+            .mention_redirect_target_route_tokens()
             .iter()
-            .map(|actor_id| actor_id.as_str().to_owned())
+            .map(|token| token.trim().to_owned())
+            .filter(|token| !token.is_empty())
             .collect::<Vec<_>>();
         sorted.sort();
         sorted.dedup();
         normalized.insert(
-            "mention_redirect_target_actor_ids".to_owned(),
+            "mention_redirect_target_route_tokens".to_owned(),
             Value::Array(sorted.into_iter().map(Value::String).collect()),
         );
     }
@@ -437,12 +451,12 @@ pub(super) fn normalized_notify_dedup_key(notification: &Notification) -> Option
                 "push_key".to_owned(),
                 Value::String(device.push_key().unwrap_or_default().to_owned()),
             );
-            // Round 4 — `target_actor_id` participates in the routing
+            // Round 4 â€” `target_route_token` participates in the routing
             // decision, so it must be part of the canonical fingerprint.
-            if let Some(actor_id) = device.target_actor_id.as_ref() {
+            if let Some(route_token) = device.target_route_token() {
                 normalized.insert(
-                    "target_actor_id".to_owned(),
-                    Value::String(actor_id.as_str().to_owned()),
+                    "target_route_token".to_owned(),
+                    Value::String(route_token.to_owned()),
                 );
             }
             Some(Value::Object(normalized))

@@ -25,15 +25,6 @@ const ACTIVE_STRAND_ID_PREFIX: &str = "ck:strand:";
 // Push routing is Realm-scoped with typed prefix `ck:realm:`. The push
 // wire model carries `realm_id`, never container-level `space_id`.
 const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
-// CKP-0007 Circle primitive (spec b7d35be) — encryption sub-boundary
-// inside a Realm. Floria routes / dedups / rate-limits by `circle_id`
-// when present so two Strands that share a name in different Circles do
-// not collide. `circle_id` is gateway-routing only; it MUST NOT be
-// echoed back to providers (the shared strip set in
-// `crate::sanitize::STRIP_ONLY_KEYS` / `is_forbidden_egress_key`
-// enforces that).
-const ACTIVE_CIRCLE_ID_PREFIX: &str = "ck:circle:";
-
 // Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
 // floria entirely. The four broadcast ephemeral signal kinds
 // (`ck.presence`, `ck.typing`, `ck.receipt.read`, `ck.call.signal`)

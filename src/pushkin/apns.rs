@@ -246,7 +246,7 @@ impl ApnsPushkin {
         let notif_id = Uuid::new_v4().to_string();
 
         let mut headers = HeaderMap::new();
-        // `HeaderValue: From<u16>` is infallible — no hot-path unwrap.
+        // `HeaderValue: From<u16>` is infallible â€” no hot-path unwrap.
         headers.insert("apns-priority", HeaderValue::from(u16::from(priority)));
         headers.insert("content-type", HeaderValue::from_static("application/json"));
         headers.insert("apns-id", header_value(&notif_id)?);
@@ -426,7 +426,7 @@ impl ApnsPushkin {
             aps_object.insert("badge".to_owned(), Value::Number(badge.into()));
         }
 
-        // T4.3 — stable correlation identifiers must not be copied onto
+        // T4.3 â€” stable correlation identifiers must not be copied onto
         // the APNS payload alongside the `aps` notification block. The
         // client decrypts an e2ee envelope keyed on `push_target_id` to
         // recover them.
@@ -438,7 +438,7 @@ impl ApnsPushkin {
 
         // Final defence - strip anything forbidden that a future builder
         // bug tries to add. Note `aps` IS on the SDK forbidden list because it's a provider
-        // escape hatch — for APNS we explicitly extract it, run the
+        // escape hatch â€” for APNS we explicitly extract it, run the
         // sanitizer on the rest, then put `aps` back. This keeps the
         // allow-list strict for the freeform extension keys while
         // still letting the gateway emit a legitimate `aps` block.
@@ -736,7 +736,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata};
+    use crate::models::{Counts, Device, Notification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -745,7 +745,7 @@ mod tests {
             app_id: Some("com.example.apns".to_owned()),
             push_key: Some("spqr".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -781,10 +781,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -805,7 +803,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // T4.3 — stable correlation identifiers are stripped. The
+        // T4.3 â€” stable correlation identifiers are stripped. The
         // visible alert still renders from allowed labels in `aps.alert`,
         // but message content is ignored and the freeform extension keys
         // only carry the SDK-allowed blind fields.
@@ -848,10 +846,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,

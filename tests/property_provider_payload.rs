@@ -91,13 +91,12 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "policy_frontier_digest",
     "trust_domain",
     "reset_event_id",
-    // CKP-0007 Circle primitive — `circle_id` is the encryption
-    // sub-boundary id, `effective_scope` is the reducer-stamped
-    // envelope binding. Both drive gateway-internal routing only;
-    // either on the plaintext wire is a hard correlation leak.
-    "circle_id",
-    "effective_scope",
-    "scope_circle_id",
+    "route_tokens",
+    "realm_route_token",
+    "scope_route_token",
+    "mention_redirect_target_route_tokens",
+    "delivery_binding_frontier_token",
+    "target_route_token",
     "encrypted_content",
     "encrypted_metadata",
     "metadata",

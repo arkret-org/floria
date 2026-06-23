@@ -1,20 +1,20 @@
-//! T4.3 — end-to-end snapshot tests for the provider payload
+//! T4.3 â€” end-to-end snapshot tests for the provider payload
 //! sanitization layer.
 //!
 //! These tests assert that the provider-facing payload that floria
 //! emits NEVER carries the stable correlation identifiers
 //! (`event_id` / `realm_id` / `space_id` / `strand_id` / `message_id` / sender /
-//! space-name / strand-name / `target_did` / call-setup material …) that
+//! space-name / strand-name / `target_did` / call-setup material â€¦) that
 //! used to leak via the freeform data dictionary. Coverage is split
 //! across three layers:
 //!
-//!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
-//!      include forbidden keys and assert that they are stripped (or the request is rejected).
-//!   2. **Profile gating** — drive the `/_cokret/edge/push/notify` HTTP handler with blind-profile
-//!      callers carrying plaintext metadata and assert that the response is `failed_precondition`
-//!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
-//!      earlier as an unknown product-private field.
-//!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
+//!   1. **Builder snapshots** â€” drive `pushkin::sanitized_provider_payload` with payload trees
+//!      that include forbidden keys and assert that they are stripped (or the request is rejected).
+//!   2. **Profile gating** â€” drive the `/_cokret/edge/push/notify` HTTP handler with
+//!      blind-profile callers carrying plaintext metadata and assert that the response is
+//!      `failed_precondition` (412) with the `plaintext_in_blind_profile` reason;
+//!      `notification.content` is rejected earlier as an unknown product-private field.
+//!   3. **WebPush collapse key randomness** â€” drive `pushkin::random_collapse_key` to confirm two
 //!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
 //!      typed-id substring.
 
@@ -37,7 +37,7 @@ use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
-// (1) Provider payload sanitizer — per-provider snapshot assertions.
+// (1) Provider payload sanitizer â€” per-provider snapshot assertions.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -96,7 +96,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
     let sanitized = sanitized_provider_payload(payload).unwrap();
     assert!(sanitized.get("event_id").is_none());
     // content_body / content_msgtype are not in the forbidden allow-list
-    // *by name*, but they carry the same plaintext-correlation risk —
+    // *by name*, but they carry the same plaintext-correlation risk â€”
     // the gateway should not be emitting them in the first place. This
     // test pins that they survive a sanitizer call but the BUILDERS
     // never produce them. (See `notify_blind_profile_rejects_plaintext_content`.)
@@ -151,9 +151,9 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "event_id":   "ck:event:0196419b-0000-7000-8000-000000000001",
         "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
         "strand_id":    "ck:strand:019640f9-8000-7000-8000-000000000000",
-        // SPEC-CR-016: gateway-internal routing ids live under routing_metadata.
-        "routing_metadata": {
-            "realm_id":   "ck:realm:0196419b-0000-7000-8000-000000000003"
+        // SPEC-CR-016: gateway-internal routing ids live under route_tokens.
+        "route_tokens": {
+            "realm_route_token": "realm_route_token_000000001"
         },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
@@ -178,10 +178,12 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         // (renamed security boundary) MUST stay off the wire.
         "space_id",
         "realm_id",
-        // CKP-0007 — Circle routing identifiers MUST NOT leak.
-        "circle_id",
-        "effective_scope",
-        "scope_circle_id",
+        "route_tokens",
+        "realm_route_token",
+        "scope_route_token",
+        "mention_redirect_target_route_tokens",
+        "delivery_binding_frontier_token",
+        "target_route_token",
         "sender",
         "sender_actor_display_name",
         "strand_title",
@@ -241,44 +243,51 @@ fn sanitizer_strips_private_notification_preferences() {
 }
 
 // ---------------------------------------------------------------------------
-// CKP-0007 Circle primitive — privacy invariants.
+// CKP-0007 Circle primitive â€” privacy invariants.
 //
 // Circle routing metadata (`circle_id`, `effective_scope`,
 // `scope_circle_id`) drives gateway-internal routing only. It MUST
 // NOT surface in any provider plaintext payload, regardless of which
-// profile (blind / visible) the caller is on — Circle identifiers
+// profile (blind / visible) the caller is on â€” Circle identifiers
 // reveal the encryption sub-boundary an observer is looking at and
 // the reducer-stamped realm/circle binding.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn sanitizer_strips_circle_routing_identifiers() {
+fn sanitizer_strips_route_token_identifiers() {
     let payload = json!({
         "client": "ios",
-        "circle_id":         "ck:circle:0196419b-0000-7000-8000-000000000456",
-        "effective_scope":   {
-            "kind": "circle",
-            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000123",
-            "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
+        "route_tokens": {
+            "realm_route_token": "realm_route_token_000000001",
+            "scope_route_token": "scope_route_token_000000001",
+            "mention_redirect_target_route_tokens": ["alice_route_token_000000001"],
+            "delivery_binding_frontier_token": "frontier_route_token_000000001",
         },
-        "scope_circle_id":   "ck:circle:0196419b-0000-7000-8000-000000000456",
+        "target_route_token": "device_route_token_000000001",
         "wakeup_kind": "message",
     })
     .as_object()
     .unwrap()
     .clone();
     let sanitized = sanitized_provider_payload(payload).unwrap();
-    for forbidden in ["circle_id", "effective_scope", "scope_circle_id"] {
+    for forbidden in [
+        "route_tokens",
+        "realm_route_token",
+        "scope_route_token",
+        "mention_redirect_target_route_tokens",
+        "delivery_binding_frontier_token",
+        "target_route_token",
+    ] {
         assert!(
             sanitized.get(forbidden).is_none(),
-            "CKP-0007 circle identifier `{forbidden}` survived the sanitizer"
+            "route-token field `{forbidden}` survived the sanitizer"
         );
     }
     assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));
 }
 
 #[test]
-fn sanitizer_strips_nested_circle_metadata() {
+fn sanitizer_strips_nested_route_token_metadata() {
     // Circle metadata smuggled inside a provider-defined wrapper (e.g.
     // an APNs `aps` block, an Android `notification` block) must also
     // get stripped by the recursive walk. The strings here are
@@ -288,13 +297,9 @@ fn sanitizer_strips_nested_circle_metadata() {
         "client": "android",
         "extra_block": {
             "level_one": {
-                "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
+                "scope_route_token": "scope_route_token_000000001",
                 "nested": {
-                    "effective_scope": {
-                        "kind": "circle",
-                        "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000123",
-                        "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
-                    },
+                    "delivery_binding_frontier_token": "frontier_route_token_000000001",
                 },
             },
         },
@@ -306,32 +311,28 @@ fn sanitizer_strips_nested_circle_metadata() {
     let sanitized = sanitized_provider_payload(payload).unwrap();
     let serialized = serde_json::to_string(&sanitized).unwrap();
     assert!(
-        !serialized.contains("circle_id"),
-        "nested circle_id leaked through the recursive sanitizer: {serialized}"
+        !serialized.contains("scope_route_token"),
+        "nested scope_route_token leaked through the recursive sanitizer: {serialized}"
     );
     assert!(
-        !serialized.contains("effective_scope"),
-        "nested effective_scope leaked through the recursive sanitizer: {serialized}"
+        !serialized.contains("delivery_binding_frontier_token"),
+        "nested delivery_binding_frontier_token leaked through the recursive sanitizer: {serialized}"
     );
 }
 
 #[test]
-fn build_blind_provider_data_never_emits_circle_metadata() {
+fn build_blind_provider_data_never_emits_route_tokens() {
     // Realm + Circle ids must be canonical lower-case UUIDv7 to satisfy
     // the SDK `EffectiveScope` deserializer (which is strict per
-    // `conformance/encoding.md` §4).
+    // `conformance/encoding.md` Â§4).
     let notification: Notification = serde_json::from_value(json!({
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
-        // SPEC-CR-016: Circle routing ids live under routing_metadata.
-        "routing_metadata": {
-            "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
-            "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
-            "effective_scope": {
-                "kind": "circle",
-                "realm_id":  "ck:realm:0196419b-0000-7000-8000-000000000123",
-                "circle_id": "ck:circle:0196419b-0000-7000-8000-000000000456",
-            },
+        "route_tokens": {
+            "realm_route_token": "realm_route_token_000000001",
+            "scope_route_token": "scope_route_token_000000001",
+            "mention_redirect_target_route_tokens": ["alice_route_token_000000001"],
+            "delivery_binding_frontier_token": "frontier_route_token_000000001",
         },
         "counts": { "unread_increment": 3 },
     }))
@@ -339,10 +340,11 @@ fn build_blind_provider_data_never_emits_circle_metadata() {
 
     let data = build_blind_provider_data(&notification);
     for forbidden in [
-        "circle_id",
-        "effective_scope",
-        "scope_circle_id",
-        "realm_id",
+        "route_tokens",
+        "realm_route_token",
+        "scope_route_token",
+        "mention_redirect_target_route_tokens",
+        "delivery_binding_frontier_token",
     ] {
         assert!(
             data.get(forbidden).is_none(),
@@ -467,8 +469,8 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
         "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
         "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
         "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-        "routing_metadata": {
-            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003"
+        "route_tokens": {
+            "realm_route_token": "realm_route_token_000000001"
         },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",

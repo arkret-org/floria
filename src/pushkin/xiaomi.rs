@@ -421,7 +421,7 @@ impl XiaomiSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RoutingMetadata};
+    use crate::models::{Counts, Device, Notification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -430,7 +430,7 @@ mod tests {
             app_id: Some("com.example.xiaomi".to_owned()),
             push_key: Some("regid".to_owned()),
             platform: None,
-            target_actor_id: None,
+            target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
@@ -451,10 +451,8 @@ mod tests {
             strand_id: Some(
                 cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
-            routing_metadata: Some(RoutingMetadata {
-                realm_id: Some(
-                    cokret::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000003").unwrap(),
-                ),
+            route_tokens: Some(RouteTokens {
+                realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -518,7 +516,7 @@ mod tests {
         assert_eq!(map.get("title"), Some(&"Mission Control".to_owned()));
         assert_eq!(map.get("notify_type"), Some(&"2".to_owned()));
         assert_eq!(map.get("extra.channel_id"), Some(&"messages".to_owned()));
-        // T4.3 — payload blob no longer carries strand_id / event_id /
+        // T4.3 â€” payload blob no longer carries strand_id / event_id /
         // sender. Only push_target_id (opaque) survives as the routing
         // hook the client uses to fetch the e2ee envelope.
         let payload_blob = map.get("payload").cloned().unwrap_or_default();
