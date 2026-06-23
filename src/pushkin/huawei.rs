@@ -23,7 +23,7 @@ use super::reqwest_support::{
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static HUAWEI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -346,7 +346,7 @@ impl Pushkin for HuaweiPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -416,7 +416,7 @@ impl HuaweiSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -430,8 +430,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),

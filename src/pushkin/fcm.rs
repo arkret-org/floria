@@ -24,7 +24,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
+use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
 
 static FCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -192,7 +192,7 @@ impl FcmPushkin {
 
     async fn dispatch_v1(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         data: Map<String, Value>,
     ) -> Result<Vec<String>, DispatchError> {
@@ -321,7 +321,7 @@ impl FcmPushkin {
 
     fn build_data(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
         // T4.3 â€” the FCM data dictionary used to auto-copy event_id /
         // message_id / strand_id / realm_id / sender / names / push_hint
@@ -409,7 +409,7 @@ impl Pushkin for FcmPushkin {
 
     fn dispatch_targets(
         &self,
-        _notification: &Notification,
+        _notification: &PushNotification,
         device: &Device,
     ) -> Vec<DispatchTarget> {
         let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
@@ -423,7 +423,7 @@ impl Pushkin for FcmPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -445,7 +445,7 @@ impl FcmPushkin {
     /// the caller does not have to do it manually.
     pub async fn dispatch_batch(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         devices: &[Device],
         context: &NotificationContext,
     ) -> Vec<Result<Vec<String>, DispatchError>> {
@@ -601,7 +601,7 @@ fn classify_fcm_v1_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn pushkin() -> FcmPushkin {
         FcmPushkin {
@@ -630,8 +630,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),
@@ -754,7 +754,7 @@ mod tests {
         // SDK-allowed blind fields (push_target_id, wakeup_kind,
         // push_hint) AND no nonzero counts. Without push_target_id the
         // dispatch is dropped entirely.
-        let notification = Notification {
+        let notification = PushNotification {
             strand_title: None,
             realm_title: None,
             priority: None,

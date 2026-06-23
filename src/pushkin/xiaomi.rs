@@ -18,7 +18,7 @@ use super::reqwest_support::{build_reqwest_client, parse_retry_after};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static XIAOMI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -153,7 +153,7 @@ impl XiaomiPushkin {
 
     fn build_form(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Vec<(String, String)>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
@@ -228,7 +228,7 @@ impl XiaomiPushkin {
 
     async fn send_once(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let form = self.build_form(notification, device)?;
@@ -335,7 +335,7 @@ impl Pushkin for XiaomiPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -421,7 +421,7 @@ impl XiaomiSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -435,8 +435,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,

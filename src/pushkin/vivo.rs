@@ -20,7 +20,7 @@ use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_aft
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -298,7 +298,7 @@ impl VivoPushkin {
 
     fn build_request_body(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Map<String, Value>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
@@ -391,7 +391,7 @@ impl VivoPushkin {
 
     async fn send_once(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.access_token().await?;
@@ -512,7 +512,7 @@ impl Pushkin for VivoPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -686,7 +686,7 @@ struct VivoInvalidUser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -700,8 +700,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,

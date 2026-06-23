@@ -19,7 +19,7 @@ use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_aft
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static OPPO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -462,7 +462,7 @@ impl Pushkin for OppoPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -638,7 +638,7 @@ impl OppoSendResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -652,8 +652,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,

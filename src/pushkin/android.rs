@@ -4,7 +4,7 @@ use super::{
     build_blind_routing_data, notification_badge_count, notification_unread_increment,
     sanitized_provider_payload, truncate_str,
 };
-use crate::models::{Notification, NotificationExt};
+use crate::models::{NotificationExt, PushNotification};
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;
@@ -24,7 +24,7 @@ pub(super) enum AndroidPriority {
 }
 
 pub(super) fn build_android_notification_payload(
-    notification: &Notification,
+    notification: &PushNotification,
     mut provider_payload: Map<String, Value>,
     send_badge_counts: bool,
 ) -> Option<AndroidNotificationPayload> {
@@ -59,7 +59,7 @@ pub(super) fn build_android_notification_payload(
 
 fn merge_notification_data(
     payload: &mut Map<String, Value>,
-    notification: &Notification,
+    notification: &PushNotification,
     send_badge_counts: bool,
 ) {
     // T4.3 - only emit fields that the SDK blind-wakeup contract allows.
@@ -103,7 +103,7 @@ fn merge_notification_data(
     // sanitizer guards.
 }
 
-fn derive_alert(notification: &Notification) -> Option<(String, String)> {
+fn derive_alert(notification: &PushNotification) -> Option<(String, String)> {
     let sender = notification
         .sender_label()
         .map(str::to_owned)
@@ -147,12 +147,12 @@ fn derive_alert(notification: &Notification) -> Option<(String, String)> {
     Some((title, summary))
 }
 
-fn message_summary(notification: &Notification, sender: &str) -> String {
+fn message_summary(notification: &PushNotification, sender: &str) -> String {
     let _ = notification;
     format!("{sender} sent a message")
 }
 
-fn fallback_summary(notification: &Notification, sender: &str) -> String {
+fn fallback_summary(notification: &PushNotification, sender: &str) -> String {
     match notification_unread_increment(notification) {
         Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_SIX_PLUS => {
             format!(
@@ -176,7 +176,7 @@ fn maybe_prefix_sender(has_scope: bool, sender: &str, body: String) -> String {
     }
 }
 
-fn content_body(notification: &Notification) -> Option<String> {
+fn content_body(notification: &PushNotification) -> Option<String> {
     let _ = notification;
     None
 }
@@ -184,7 +184,7 @@ fn content_body(notification: &Notification) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -198,8 +198,8 @@ mod tests {
         }
     }
 
-    fn message_notification() -> Notification {
-        Notification {
+    fn message_notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn invitation_uses_human_readable_summary() {
         let payload = build_android_notification_payload(
-            &Notification {
+            &PushNotification {
                 strand_title: Some("Nebula".to_owned()),
                 realm_title: None,
                 priority: None,

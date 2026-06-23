@@ -28,7 +28,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{
-    Counts, Device, DeviceExt, Notification, NotificationContext, NotificationExt,
+    Counts, Device, DeviceExt, NotificationContext, NotificationExt, PushNotification,
 };
 
 static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
@@ -105,7 +105,7 @@ pub trait Pushkin: Send + Sync {
     }
     fn dispatch_targets(
         &self,
-        _notification: &Notification,
+        _notification: &PushNotification,
         device: &Device,
     ) -> Vec<DispatchTarget> {
         let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
@@ -118,7 +118,7 @@ pub trait Pushkin: Send + Sync {
     }
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
@@ -130,7 +130,7 @@ pub trait Pushkin: Send + Sync {
     /// richer [`DispatchOutcome`].
     async fn dispatch_outcome(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         context: &NotificationContext,
     ) -> Result<DispatchOutcome, DispatchError> {
@@ -604,7 +604,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
     }
 }
 
-/// Build a base data map from a [`Notification`] using only the
+/// Build a base data map from a [`PushNotification`] using only the
 /// SDK-allowed blind-wakeup fields. Adapters that want a blind-only
 /// payload (FCM, WebPush blind path, Chinese OEM blind path) can start
 /// from this and append their own provider-specific wrappers â€” they
@@ -618,7 +618,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `wakeup_kind` (closed enum)
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` as a boolean unread indicator, plus bounded `unread_count` delta
-pub fn build_blind_routing_data(notification: &Notification) -> Map<String, serde_json::Value> {
+pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
     use cokret::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
@@ -649,7 +649,9 @@ pub fn build_blind_routing_data(notification: &Notification) -> Map<String, serd
     data
 }
 
-pub fn build_blind_provider_data(notification: &Notification) -> Map<String, serde_json::Value> {
+pub fn build_blind_provider_data(
+    notification: &PushNotification,
+) -> Map<String, serde_json::Value> {
     let mut data = build_blind_routing_data(notification);
 
     if let Some(unread_increment) = notification_unread_increment(notification) {
@@ -664,7 +666,7 @@ pub fn build_blind_provider_data(notification: &Notification) -> Map<String, ser
     data
 }
 
-pub fn notification_unread_increment(notification: &Notification) -> Option<u64> {
+pub fn notification_unread_increment(notification: &PushNotification) -> Option<u64> {
     notification
         .counts
         .as_ref()
@@ -672,7 +674,7 @@ pub fn notification_unread_increment(notification: &Notification) -> Option<u64>
         .map(|value| value.min(cokret::blind_payload_sanitizer::MAX_COUNT_VALUE))
 }
 
-pub fn notification_badge_count(notification: &Notification) -> Option<u64> {
+pub fn notification_badge_count(notification: &PushNotification) -> Option<u64> {
     notification.counts.as_ref().and_then(counts_badge_count)
 }
 
@@ -861,7 +863,7 @@ mod sanitize_tests {
 
     #[test]
     fn build_blind_provider_data_keeps_only_allowed_fields() {
-        let notification = Notification {
+        let notification = PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -918,7 +920,7 @@ mod sanitize_tests {
             (None, Some(0), Some(0_u64)),
             (None, None, None),
         ] {
-            let notification = Notification {
+            let notification = PushNotification {
                 counts: Some(crate::models::Counts {
                     badge,
                     unread_increment: None,

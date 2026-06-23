@@ -805,7 +805,7 @@ pub async fn run_worker(
     use std::time::Instant;
 
     use crate::error::DispatchError;
-    use crate::models::{Device, Notification, NotificationContext};
+    use crate::models::{Device, NotificationContext, PushNotification};
 
     loop {
         if shutdown.has_changed().unwrap_or(false) && *shutdown.borrow() {
@@ -860,7 +860,7 @@ pub async fn run_worker(
                 }
             };
 
-            // Reconstruct a minimal Notification + Device shell. We
+            // Reconstruct a minimal PushNotification + Device shell. We
             // intentionally do not persist the original notification
             // body â€” the retry exists to re-attempt the wakeup, not
             // to replay payload metadata. Provider implementations
@@ -877,11 +877,11 @@ pub async fn run_worker(
                 target_route_token: None,
                 visible_notification_opt_in: false,
             };
-            let notification = Notification {
+            let notification = PushNotification {
                 devices: vec![device.clone()],
                 priority: Some("low".to_owned()),
                 push_hint: Some("new_message".to_owned()),
-                ..Notification::default()
+                ..PushNotification::default()
             };
             let context = NotificationContext {
                 request_id: envelope.request_id.clone(),

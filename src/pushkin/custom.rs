@@ -31,7 +31,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -156,7 +156,7 @@ impl CustomPushkin {
 
     fn build_body(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Map<String, Value>, DispatchError> {
         // T4.3 â€” the custom-URL pushkin used to forward `event_id` /
@@ -195,7 +195,7 @@ impl CustomPushkin {
 
     async fn send_once(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let url = self.resolve_url(device)?;
@@ -289,7 +289,7 @@ impl Pushkin for CustomPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {

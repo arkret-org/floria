@@ -33,7 +33,7 @@ use super::{
 };
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
+use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -333,7 +333,7 @@ impl WebpushPushkin {
     /// Build the WebPush JSON payload that goes into the encrypted
     /// `aes128gcm` body. Only SDK-allowed blind-wakeup fields survive
     /// on the provider wire.
-    fn build_payload(notification: &Notification, device: &Device) -> Map<String, Value> {
+    fn build_payload(notification: &PushNotification, device: &Device) -> Map<String, Value> {
         let _ = device;
         let mut payload = Map::new();
 
@@ -475,7 +475,7 @@ impl WebpushPushkin {
     async fn send_message(
         &self,
         subscription: &SubscriptionInfo,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
         let payload =
@@ -582,7 +582,7 @@ impl Pushkin for WebpushPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -877,8 +877,8 @@ mod tests {
         }
     }
 
-    fn notification(_body: &str) -> Notification {
-        Notification {
+    fn notification(_body: &str) -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),

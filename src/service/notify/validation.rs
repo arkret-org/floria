@@ -8,7 +8,7 @@ use super::super::{
 };
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER};
 use crate::config::NotifyAuthConfig;
-use crate::models::{DeviceExt, Notification};
+use crate::models::{DeviceExt, PushNotification};
 
 /// Parent key + leaf key pairs that are forbidden. The SDK already
 /// rejects any standalone `signature` field reaching the wire, but
@@ -432,7 +432,7 @@ pub(in crate::service) const VISIBLE_DEVICE_OPT_IN_REASON: &str =
     "visible_notification_device_opt_in_required";
 
 pub(super) fn validate_notification_contract(
-    notification: &Notification,
+    notification: &PushNotification,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
@@ -464,7 +464,7 @@ pub(super) fn validate_notification_contract(
 }
 
 fn validate_visible_notification_device_opt_in(
-    notification: &Notification,
+    notification: &PushNotification,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata || !notification_has_visible_metadata(notification) {
@@ -486,7 +486,7 @@ fn validate_visible_notification_device_opt_in(
     Ok(())
 }
 
-fn notification_has_visible_metadata(notification: &Notification) -> bool {
+fn notification_has_visible_metadata(notification: &PushNotification) -> bool {
     notification.event_id.is_some()
         || notification.realm_id.is_some()
         || notification.sender_actor_id.is_some()

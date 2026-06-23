@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub type AuditEnvelopeMetadata = cokret::PushAuditEnvelopeMetadata;
 pub type Counts = cokret::PushCounts;
 pub type Device = cokret::PushDeviceRoute;
-pub type Notification = cokret::PushNotificationEnvelope;
+pub type PushNotification = cokret::PushNotificationEnvelope;
 pub type RouteTokens = cokret::PushRouteTokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,7 +113,7 @@ pub trait NotificationExt {
     fn is_low_priority(&self) -> bool;
 }
 
-impl NotificationExt for Notification {
+impl NotificationExt for PushNotification {
     fn scope_id(&self) -> Option<&str> {
         self.strand_id().or_else(|| self.realm_id())
     }
@@ -267,13 +267,13 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        Counts, DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification,
-        NotificationExt,
+        Counts, DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
+        PushNotification,
     };
 
     #[test]
     fn notification_uses_priority_wire_field() {
-        let notification: Notification = serde_json::from_value(json!({
+        let notification: PushNotification = serde_json::from_value(json!({
             "priority": "low",
             "devices": []
         }))

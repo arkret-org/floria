@@ -25,7 +25,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext, NotificationExt};
+use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -327,7 +327,7 @@ impl ApnsPushkin {
 
     fn build_payload(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         provider_payload: Map<String, Value>,
     ) -> Result<Option<Value>, DispatchError> {
         Ok(self.payload_full(notification, provider_payload))
@@ -335,7 +335,7 @@ impl ApnsPushkin {
 
     fn payload_full(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         mut provider_payload: Map<String, Value>,
     ) -> Option<Value> {
         let from_display = notification
@@ -479,7 +479,7 @@ impl Pushkin for ApnsPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -736,7 +736,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn builds_message_payload() {
         let pushkin = pushkin();
-        let notification = Notification {
+        let notification = PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -831,7 +831,7 @@ mod tests {
     fn builds_event_id_only_payload() {
         let pushkin = pushkin();
         let device = device();
-        let notification = Notification {
+        let notification = PushNotification {
             strand_title: None,
             realm_title: None,
             priority: None,

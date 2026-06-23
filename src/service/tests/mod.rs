@@ -16,7 +16,7 @@ use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext, RejectedDevice};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
@@ -90,7 +90,7 @@ impl Pushkin for TestPushkin {
 
     async fn dispatch_notification(
         &self,
-        _notification: &Notification,
+        _notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {

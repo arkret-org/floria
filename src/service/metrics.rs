@@ -10,7 +10,8 @@ use serde::Serialize;
 
 use crate::metrics as app_metrics;
 use crate::models::{
-    DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationExt,
+    DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
+    PushNotification,
 };
 
 /// Cardinality guard threshold for `metrics_detailed_circle_labels`.
@@ -175,7 +176,7 @@ pub(super) fn record_delivery_receipt_outcomes(
 /// Otherwise labels with `scope_kind=realm, scope_id=<ck:realm:…>` to
 /// keep the cardinality bounded.
 pub(super) fn record_notify_delivery_by_scope(
-    notification: &Notification,
+    notification: &PushNotification,
     delivery_receipts: &[DeliveryReceipt],
     detailed_circle_labels: bool,
 ) {

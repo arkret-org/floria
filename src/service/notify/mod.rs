@@ -16,8 +16,8 @@ use super::metrics::{
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
 use crate::models::{
-    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, Notification, NotificationContext,
-    NotificationExt, ProviderRetry,
+    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
+    ProviderRetry, PushNotification,
 };
 use crate::{AppState, metrics as app_metrics};
 
@@ -77,7 +77,7 @@ async fn wait_for_provider_timing_bucket(request_id: &str, bucket: Duration) {
     tokio::time::sleep(delay).await;
 }
 
-fn provider_timing_bucket_for_notification(notification: &Notification) -> Duration {
+fn provider_timing_bucket_for_notification(notification: &PushNotification) -> Duration {
     if notification_uses_high_privacy_timing(notification) {
         HIGH_PRIVACY_PROVIDER_TIMING_BUCKET
     } else {
@@ -85,7 +85,7 @@ fn provider_timing_bucket_for_notification(notification: &Notification) -> Durat
     }
 }
 
-fn notification_uses_high_privacy_timing(notification: &Notification) -> bool {
+fn notification_uses_high_privacy_timing(notification: &PushNotification) -> bool {
     notification.evaluation_locus_unresolved.unwrap_or(false)
         || notification.push_hint.as_deref() == Some("l10n_key")
         || notification
@@ -134,7 +134,7 @@ fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
 
 fn circuit_breaker_key(
     pushkin: &str,
-    notification: &crate::models::Notification,
+    notification: &crate::models::PushNotification,
 ) -> crate::circuit_breaker::BreakerKey {
     crate::circuit_breaker::BreakerKey::new(
         pushkin,
@@ -146,7 +146,7 @@ fn circuit_breaker_key(
 }
 
 fn circuit_breaker_scope(
-    notification: &crate::models::Notification,
+    notification: &crate::models::PushNotification,
 ) -> (&'static str, Option<&str>) {
     if notification.scope_route_token().is_some() {
         ("scope", None)
@@ -390,41 +390,41 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     //
     // Either case answers 200 so the caller's pipeline advances; the
     // `accepted` count is 0 and the rejected list is empty.
-    if let Some(kind) = request.event_kind.as_deref() {
-        if let Some(routing) = classify_agent_event_kind(kind.trim()) {
-            match routing {
-                AgentEventRouting::DurableLifecycle => {
-                    tracing::info!(
-                        request_id = %request_id,
-                        event_kind = %kind,
-                        "answering 200 no-fanout ack: durable agent lifecycle \
-                         event silently consumed (capability cache invalidation \
-                         strands through consent_revoke)"
-                    );
-                }
-                AgentEventRouting::ActorPrivateDrop => {
-                    tracing::info!(
-                        request_id = %request_id,
-                        event_kind = %kind,
-                        "answering 200 no-fanout ack: actor_private agent event \
-                         dropped by default (no controller-private subscription \
-                         mechanism wired up yet)"
-                    );
-                }
+    if let Some(kind) = request.event_kind.as_deref()
+        && let Some(routing) = classify_agent_event_kind(kind.trim())
+    {
+        match routing {
+            AgentEventRouting::DurableLifecycle => {
+                tracing::info!(
+                    request_id = %request_id,
+                    event_kind = %kind,
+                    "answering 200 no-fanout ack: durable agent lifecycle \
+                     event silently consumed (capability cache invalidation \
+                     strands through consent_revoke)"
+                );
             }
-            let response = PushNotifyOutcome {
-                request_id: request_id.clone(),
-                accepted: 0,
-                rejected: Vec::new(),
-                provider_retries: Vec::new(),
-                delivery_receipts: Vec::new(),
-            };
-            finish_standard_notify_json(res, StatusCode::OK, &response, started);
-            return;
+            AgentEventRouting::ActorPrivateDrop => {
+                tracing::info!(
+                    request_id = %request_id,
+                    event_kind = %kind,
+                    "answering 200 no-fanout ack: actor_private agent event \
+                     dropped by default (no controller-private subscription \
+                     mechanism wired up yet)"
+                );
+            }
         }
-        // Any other `event_kind` string falls through â€” floria does not
-        // gate non-agent kinds at this layer.
+        let response = PushNotifyOutcome {
+            request_id: request_id.clone(),
+            accepted: 0,
+            rejected: Vec::new(),
+            provider_retries: Vec::new(),
+            delivery_receipts: Vec::new(),
+        };
+        finish_standard_notify_json(res, StatusCode::OK, &response, started);
+        return;
     }
+    // Any other `event_kind` string falls through â€” floria does not
+    // gate non-agent kinds at this layer.
     // Round 4 â€” route `ck.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's

@@ -35,7 +35,7 @@ impl Pushkin for NoopPushkin {
 
     async fn dispatch_notification(
         &self,
-        _notification: &crate::models::Notification,
+        _notification: &crate::models::PushNotification,
         _device: &crate::models::Device,
         _context: &crate::models::NotificationContext,
     ) -> Result<Vec<String>, crate::error::DispatchError> {

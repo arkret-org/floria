@@ -18,7 +18,7 @@ use super::reqwest_support::{build_reqwest_client, parse_retry_after};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, Notification, NotificationContext};
+use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
 
 static JPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -189,7 +189,7 @@ impl JpushPushkin {
 
     fn build_request_body(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         payload: AndroidNotificationPayload,
     ) -> Map<String, Value> {
@@ -291,7 +291,7 @@ impl JpushPushkin {
         hmos
     }
 
-    fn options(&self, payload: &Notification) -> Map<String, Value> {
+    fn options(&self, payload: &PushNotification) -> Map<String, Value> {
         let mut options = self.config.options.clone();
         if let Some(time_to_live) = self.config.time_to_live {
             options.insert(
@@ -317,7 +317,7 @@ impl JpushPushkin {
 
     async fn send_once(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         payload: AndroidNotificationPayload,
     ) -> Result<Vec<String>, DispatchError> {
@@ -410,7 +410,7 @@ impl Pushkin for JpushPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &Notification,
+        notification: &PushNotification,
         device: &Device,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
@@ -578,7 +578,7 @@ struct JpushErrorBody {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Counts, Device, Notification, RouteTokens};
+    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn device() -> Device {
         Device {
@@ -592,8 +592,8 @@ mod tests {
         }
     }
 
-    fn notification() -> Notification {
-        Notification {
+    fn notification() -> PushNotification {
+        PushNotification {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
