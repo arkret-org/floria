@@ -10,12 +10,20 @@ fn e2ee_late_recovery_access_kind_matches_sdk_wire_repr() {
 }
 
 #[test]
-fn productivity_wakeup_kinds_match_sdk_allow_list() {
-    for kind in ["reminder", "scheduled_send", "expiry_invalidation"] {
+fn targeted_and_productivity_wakeup_kinds_match_sdk_allow_list() {
+    for kind in [
+        "assignment",
+        "schedule",
+        "reminder",
+        "scheduled_send",
+        "expiry_invalidation",
+    ] {
         validate_wakeup_kind(Some(&json!(kind))).unwrap();
     }
 
     let err = validate_wakeup_kind(Some(&json!("custom_kind"))).unwrap_err();
+    assert!(err.contains("assignment"));
+    assert!(err.contains("schedule"));
     assert!(err.contains("reminder"));
     assert!(err.contains("scheduled_send"));
     assert!(err.contains("expiry_invalidation"));
