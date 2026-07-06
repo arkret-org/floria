@@ -187,7 +187,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     );
     let _entered = span.enter();
 
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(

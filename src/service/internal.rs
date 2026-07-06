@@ -27,7 +27,7 @@ pub(super) async fn require_internal_auth(
     ctrl: &mut FlowCtrl,
 ) {
     let started = Instant::now();
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(
@@ -107,7 +107,7 @@ pub(super) async fn require_internal_auth(
 #[handler]
 pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(
@@ -175,7 +175,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
 #[handler]
 pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(
@@ -272,7 +272,7 @@ pub(super) async fn account_deactivate_fanout(
     res: &mut Response,
 ) {
     let started = Instant::now();
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(
@@ -382,7 +382,7 @@ pub(super) async fn account_deactivate_fanout(
 #[handler]
 pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();
-    let state = match depot.obtain::<Arc<AppState>>() {
+    let state = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => state.clone(),
         Err(_) => {
             finish_error(

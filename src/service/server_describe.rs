@@ -44,7 +44,7 @@ fn floria_service_did(auth: &NotifyAuthConfig) -> cokret::Did {
 
 #[handler]
 pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
-    let Ok(state) = depot.obtain::<Arc<AppState>>() else {
+    let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Json(ErrorEnvelope {
             ok: false,

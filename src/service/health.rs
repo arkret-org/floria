@@ -11,7 +11,7 @@ pub(super) async fn health(depot: &mut Depot, res: &mut Response) {
     // T8.3 — surface a non-sensitive production hardening checklist
     // snapshot. Older clients that only check the HTTP status code
     // still see 200 OK; the JSON body is additive.
-    let hardening = match depot.obtain::<Arc<AppState>>() {
+    let hardening = match depot.get_typed::<Arc<AppState>>() {
         Ok(state) => floria_hardening_status(state.as_ref()),
         Err(_) => default_hardening_status(),
     };
@@ -115,7 +115,7 @@ fn default_hardening_status() -> serde_json::Value {
 
 #[handler]
 pub(super) async fn ready(depot: &mut Depot, res: &mut Response) {
-    let Ok(state) = depot.obtain::<Arc<AppState>>() else {
+    let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Text::Plain("application state missing"));
         return;
@@ -142,7 +142,7 @@ pub(super) async fn ready(depot: &mut Depot, res: &mut Response) {
 
 #[handler]
 pub(super) async fn readyz(depot: &mut Depot, res: &mut Response) {
-    let Ok(state) = depot.obtain::<Arc<AppState>>() else {
+    let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Json(json!({
             "ok": false,
