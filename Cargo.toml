@@ -97,7 +97,7 @@ rand_core_06 = {package = "rand_core",version = "0.6.4",features = ["getrandom"]
 redis = "1.2.2"
 reqwest = {version = "0.13.4",default-features = false}
 rustls = {version = "0.23.40",default-features = false,features = ["ring", "std"]}
-salvo = "0.93.0"
+salvo = {git = "https://github.com/salvo-rs/salvo.git",branch = "main"}
 sentry = {version = "0.48.2",default-features = false}
 sentry-tracing = "0.48.2"
 serde = "1.0.228"
