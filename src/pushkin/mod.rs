@@ -2,6 +2,7 @@ mod android;
 mod apns;
 mod custom;
 mod fcm;
+mod hms_family;
 mod honor;
 mod huawei;
 mod jpush;
@@ -147,7 +148,7 @@ pub trait Pushkin: Send + Sync {
 /// cotest matrices can plan payload shape, TTL caps, and credential
 /// rotation without per-provider knowledge.
 ///
-/// Values describe the *kind* (apns, fcm, ...) â€” per-app overrides
+/// Values describe the *kind* (apns, fcm, ...) — per-app overrides
 /// (e.g. tighter admin TTL caps) are intentionally not included here.
 ///
 /// Contract version is exposed as `PROVIDER_CAPABILITIES_VERSION`;
@@ -511,14 +512,14 @@ pub fn truncate_str(input: &str, max_bytes: usize) -> (String, bool) {
 }
 
 // ---------------------------------------------------------------------------
-// T4.3 â€” provider-side sanitization
+// T4.3 — provider-side sanitization
 //
 // Final builder for the blind-wakeup payload that goes on the wire to a
 // downstream push provider (APNS, FCM, WebPush, Chinese OEM, custom).
 // Adapters must call [`sanitized_provider_payload`] *just before* they
 // hand the JSON off to the provider so that any forbidden key that
 // slipped past the notify ingress validators (stale call sites, future
-// builder bugs, â€¦) is stripped before fan-out.
+// builder bugs, …) is stripped before fan-out.
 //
 // `sanitize_blind_payload_strict` from the SDK is the last line of
 // defence; if it rejects, the dispatcher must drop the device rather
@@ -578,7 +579,7 @@ impl std::fmt::Display for ProviderPayloadRejection {
 fn strip_forbidden_recursive(map: &mut Map<String, serde_json::Value>) {
     // Drop forbidden top-level keys. We do *not* touch keys that are
     // provider-defined wrappers like `aps`, `android`, `notification`,
-    // `payload` â€” those are themselves on the SDK forbidden list when
+    // `payload` — those are themselves on the SDK forbidden list when
     // they appear in the blind-wakeup contract, so anything that gets
     // here with one of those keys gets stripped.
     //
@@ -607,7 +608,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 /// Build a base data map from a [`PushNotification`] using only the
 /// SDK-allowed blind-wakeup fields. Adapters that want a blind-only
 /// payload (FCM, WebPush blind path, Chinese OEM blind path) can start
-/// from this and append their own provider-specific wrappers â€” they
+/// from this and append their own provider-specific wrappers — they
 /// still MUST run [`sanitized_provider_payload`] before sending.
 ///
 /// This intentionally drops every potentially-correlating identifier
@@ -617,7 +618,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_target_id` (opaque pseudonym)
 ///   * `wakeup_kind` (closed enum)
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
-///   * `badge` as a boolean unread indicator, plus bounded `unread_count` delta
+///   * `badge` as a boolean unread indicator, plus bucketed `unread_count`
 pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
     use cokret::blind_payload_sanitizer as sdk;
 
@@ -671,7 +672,7 @@ pub fn notification_unread_increment(notification: &PushNotification) -> Option<
         .counts
         .as_ref()
         .and_then(|counts| counts.unread_increment)
-        .map(|value| value.min(cokret::blind_payload_sanitizer::MAX_COUNT_VALUE))
+        .map(crate::sanitize::bucket_count)
 }
 
 pub fn notification_badge_count(notification: &PushNotification) -> Option<u64> {
@@ -692,7 +693,8 @@ fn badge_value_to_count(value: &Value) -> Option<u64> {
         Value::Bool(true) => Some(1),
         Value::String(bucket) if bucket == "1" => Some(1),
         Value::String(bucket) if bucket == "2-5" => Some(1),
-        Value::String(bucket) if bucket == "6+" => Some(1),
+        Value::String(bucket) if bucket == "6-20" => Some(1),
+        Value::String(bucket) if bucket == "21+" => Some(1),
         _ => value.as_u64().map(boolean_count),
     }
 }
@@ -701,12 +703,14 @@ fn boolean_count(value: u64) -> u64 {
     u64::from(value > 0)
 }
 
-/// Generate a fresh random base64url collapse_key. Used by WebPush /
-/// any provider that previously derived its collapse / topic from a
-/// stable `realm_id` / `strand_id`. The blake2-of-scope-id form was
-/// non-reversible but still acted as a stable per-conversation tag
-/// that an observer could correlate across pushes; a per-message
-/// random key removes that.
+/// Generate a fresh random base64url collapse key for future provider
+/// collapse/dedup support.
+///
+/// No current adapter emits provider-side collapse keys. Keep this as
+/// the single reference implementation for future APNS `apns-collapse-id`,
+/// FCM `collapse_key`, WebPush topic, or OEM equivalent wiring: never
+/// derive those values from `realm_id`, `strand_id`, route tokens, or
+/// any other stable scope identifier.
 pub fn random_collapse_key() -> String {
     use base64::Engine;
     let bytes: [u8; 16] = uuid::Uuid::new_v4().into_bytes();
@@ -767,7 +771,7 @@ mod sanitize_tests {
         assert_eq!(out.get("wakeup_kind"), Some(&json!("mention")));
     }
 
-    /// Round R2/R3 (T07/T10/T06) â€” the appeal / attestation / audit /
+    /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
     /// policy-frontier-hash / trust-domain / reset-event-id field names
     /// added by rounds 2+3 MUST be stripped from any provider payload
     /// before it leaves floria. They are all stable correlators that
@@ -815,7 +819,7 @@ mod sanitize_tests {
         assert_eq!(out.get("wakeup_kind"), Some(&json!("message")));
     }
 
-    /// Round R2/R3 â€” the same field names buried inside a nested object
+    /// Round R2/R3 — the same field names buried inside a nested object
     /// are also stripped by the recursive sweep.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields_when_nested() {
@@ -911,7 +915,8 @@ mod sanitize_tests {
         for (badge, missed_call, expected) in [
             (Some(json!("1")), None, Some(1_u64)),
             (Some(json!("2-5")), None, Some(1_u64)),
-            (Some(json!("6+")), None, Some(1_u64)),
+            (Some(json!("6-20")), None, Some(1_u64)),
+            (Some(json!("21+")), None, Some(1_u64)),
             (Some(json!(42)), None, Some(1_u64)),
             (Some(json!(0)), None, Some(0_u64)),
             (Some(json!(false)), Some(7), Some(0_u64)),

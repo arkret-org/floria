@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::{Result, bail};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -108,7 +110,7 @@ impl HttpConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct InternalAuthConfig {
     #[serde(default, deserialize_with = "string_or_vec")]
@@ -117,6 +119,17 @@ pub struct InternalAuthConfig {
     pub bearer_token_hashes: Vec<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
+}
+
+impl fmt::Debug for InternalAuthConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bearer_tokens = format!("<redacted:{}>", self.bearer_tokens.len());
+        f.debug_struct("InternalAuthConfig")
+            .field("bearer_tokens", &bearer_tokens)
+            .field("bearer_token_hashes", &self.bearer_token_hashes.len())
+            .field("extra_keys", &self.extra.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl InternalAuthConfig {

@@ -323,17 +323,17 @@ impl FcmPushkin {
         &self,
         notification: &PushNotification,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
-        // T4.3 â€” the FCM data dictionary used to auto-copy event_id /
+        // T4.3 — the FCM data dictionary used to auto-copy event_id /
         // message_id / strand_id / realm_id / sender / names / push_hint
         // / content_*. None of those survive on the wire any more:
         //
-        //   * The client decrypts a server-side e2ee envelope to learn event/space/sender/body â€”
+        //   * The client decrypts a server-side e2ee envelope to learn event/space/sender/body —
         //     the provider wire format only needs to carry the opaque push_target_id + wakeup_kind
         //     so the client knows it has work to pick up.
         //   * `push_hint` survives ONLY when it's one of the SDK's allow-listed literals (no
         //     l10n_key:* form that could embed a stable token).
-        //   * Counts are bucketed (0 / 1 / 2-5 / 6+) per Â§5.1 so the absolute figure can't ride
-        //     the wire as a per-`push_target_id` activity correlator.
+        //   * Counts are bucketed (0 / 1 / 2-5 / 6-20 / 21+) per §5.1 so the absolute figure can't
+        //     ride the wire as a per-`push_target_id` activity correlator.
         //
         let mut data = Map::new();
 
@@ -370,7 +370,7 @@ impl FcmPushkin {
         // We still want to drop the dispatch entirely when the caller
         // gave us nothing routable: no push_target_id + wakeup_kind,
         // no counts. The old "has_routable_context" check used
-        // strand_id/realm_id/event_id/message_id â€” none of those are
+        // strand_id/realm_id/event_id/message_id — none of those are
         // emitted any more, so the check is on the blind fields.
         let has_routable_context = data.contains_key("push_target_id")
             || data.contains_key("wakeup_kind")
@@ -668,7 +668,7 @@ mod tests {
     fn builds_v1_data_payload() {
         let payload = pushkin().build_data(&notification()).unwrap().unwrap();
 
-        // T4.3 â€” provider payload now carries only allowed blind
+        // T4.3 — provider payload now carries only allowed blind
         // fields. event_id / message_id / strand_id / realm_id /
         // sender / strand_title / sender_actor_display_name / content_* are
         // all stripped at the gateway.
@@ -690,7 +690,7 @@ mod tests {
         // to a boolean unread indicator.
         assert_eq!(
             payload.get("unread_count"),
-            Some(&Value::String("2".to_owned()))
+            Some(&Value::String("5".to_owned()))
         );
         assert_eq!(payload.get("badge"), Some(&Value::String("1".to_owned())));
 
@@ -703,7 +703,7 @@ mod tests {
             // security id (`realm_id`) AND the renamed container id
             // (`space_id`).
             "space_id",
-            // CKP-0007 â€” Circle routing identifiers MUST NOT reach
+            // CKP-0007 — Circle routing identifiers MUST NOT reach
             // the provider plaintext payload.
             "circle_id",
             "effective_scope",
@@ -750,7 +750,7 @@ mod tests {
 
     #[test]
     fn zero_badge_counts_are_dropped() {
-        // T4.3 â€” "no routable context" now means none of the
+        // T4.3 — "no routable context" now means none of the
         // SDK-allowed blind fields (push_target_id, wakeup_kind,
         // push_hint) AND no nonzero counts. Without push_target_id the
         // dispatch is dropped entirely.

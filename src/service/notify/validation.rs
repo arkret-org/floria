@@ -43,10 +43,10 @@ pub(super) fn validate_origin_service_did(
 /// SPEC-CR-016: the destination service DID rides the
 /// `Destination-Service-DID` transport header only (the body field is
 /// removed). The recipient-service-did scope binding reuses the same
-/// header value â€” `push_target_id` is a per-`(recipient_service_did, ...)`
+/// header value — `push_target_id` is a per-`(recipient_service_did, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
 /// destination equals its own `gateway_service_did` (spec
-/// push-notifications.md Â§3.1, commit 0a5ab85) rather than treat it as
+/// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
 /// decorative.
 pub(super) fn validate_destination_service_did(
     req: &Request,
@@ -76,14 +76,14 @@ pub(super) fn validate_destination_service_did(
     Ok(())
 }
 
-// T4.3 â€” visible profile / blind profile gate.
+// T4.3 — visible profile / blind profile gate.
 //
 // floria exposes two push-gateway capability profiles:
 //
-//   * `ck.profile.push_gateway.blind_wakeup.v1`  (default) â€” opaque `push_target_id` +
+//   * `ck.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
 //     `wakeup_kind`, no plaintext metadata. Maps to `caller.allow_plaintext_metadata = false`.
-//   * `ck.profile.push_gateway.visible_notification.v1` â€” the caller has been explicitly gated as
-//     a plaintext-eligible service kind (sync / principal) AND the per-principal
+//   * `ck.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
+//     plaintext-eligible service kind (sync / principal) AND the per-principal
 //     `allow_plaintext_metadata` flag is set. Maps to `caller.allow_plaintext_metadata = true`.
 //
 // A caller on the blind profile that submits plaintext metadata is
@@ -113,7 +113,7 @@ pub(super) fn validate_notification_contract(
         ));
     }
 
-    // CKP-0007 â€” `effective_scope` must agree with the routing fields
+    // CKP-0007 — `effective_scope` must agree with the routing fields
     // when set. This catches operator misconfigurations (caller
     // updated `realm_id` but forgot `circle_id`, or stamped a Circle
     // scope on the envelope but kept `circle_id` blank in the push
@@ -293,10 +293,10 @@ fn has_visible_identity_value(value: &Value) -> bool {
 }
 
 fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), String> {
-    // Round 4 (spec a77b995) â€” DID regex sweep: the SDK has tightened
+    // Round 4 (spec a77b995) — DID regex sweep: the SDK has tightened
     // its validator to `^did:[a-z0-9]+:[^\s]+$`, but floria treats DID
     // literals as an opaque correlation leak regardless of method-name
-    // shape. The substring check here therefore stays â€” it rejects any
+    // shape. The substring check here therefore stays — it rejects any
     // `did:` prefix, including round-4 strict forms AND any pre-round-4
     // dotted-method form a misconfigured client might still emit. The
     // canonical regex validator lives in the SDK; floria's job at this
@@ -311,7 +311,7 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
     }
 }
 
-// T1.1 â€” thin wrapper over the SDK's shared `is_valid_push_hint` so the
+// T1.1 — thin wrapper over the SDK's shared `is_valid_push_hint` so the
 // allowed `push_hint` vocabulary cannot drift between chime / floria.
 // The blind-wakeup profile only permits coarse hints; actual reaction
 // emoji or other message content must never appear in `push_hint`.

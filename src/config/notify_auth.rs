@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -6,7 +7,7 @@ use serde_json::{Map, Value};
 
 use super::{string_or_vec, validate_bearer_token_hashes, warn_unknown_fields};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyAuthConfig {
     #[serde(default, deserialize_with = "string_or_vec")]
@@ -45,6 +46,48 @@ pub struct NotifyAuthConfig {
     pub replay_window_seconds: u64,
     #[serde(flatten)]
     extra: Map<String, Value>,
+}
+
+impl fmt::Debug for NotifyAuthConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bearer_tokens = format!("<redacted:{}>", self.bearer_tokens.len());
+        let service_principals = self
+            .service_principals
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        f.debug_struct("NotifyAuthConfig")
+            .field("bearer_tokens", &bearer_tokens)
+            .field("bearer_token_hashes", &self.bearer_token_hashes.len())
+            .field("trusted_service_dids", &self.trusted_service_dids)
+            .field(
+                "plaintext_metadata_service_dids",
+                &self.plaintext_metadata_service_dids,
+            )
+            .field("gateway_service_did", &self.gateway_service_did)
+            .field(
+                "require_message_signatures",
+                &self.require_message_signatures,
+            )
+            .field(
+                "signature_max_skew_seconds",
+                &self.signature_max_skew_seconds,
+            )
+            .field("mtls_verified_header", &self.mtls_verified_header)
+            .field("mtls_fingerprint_header", &self.mtls_fingerprint_header)
+            .field("mtls_subject_dn_header", &self.mtls_subject_dn_header)
+            .field(
+                "mtls_subject_alt_names_header",
+                &self.mtls_subject_alt_names_header,
+            )
+            .field("production_mode", &self.production_mode)
+            .field("bind_bearer_to_origin_did", &self.bind_bearer_to_origin_did)
+            .field("service_principals", &service_principals)
+            .field("nonce_store", &self.nonce_store)
+            .field("replay_window_seconds", &self.replay_window_seconds)
+            .field("extra_keys", &self.extra.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl NotifyAuthConfig {
@@ -320,7 +363,7 @@ impl NotifyNonceStoreConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyServicePrincipalConfig {
     pub service_type: Option<String>,
@@ -350,6 +393,26 @@ pub struct NotifyServicePrincipalConfig {
     pub service_endpoint: Option<String>,
     #[serde(flatten)]
     pub(super) extra: Map<String, Value>,
+}
+
+impl fmt::Debug for NotifyServicePrincipalConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bearer_tokens = format!("<redacted:{}>", self.bearer_tokens.len());
+        f.debug_struct("NotifyServicePrincipalConfig")
+            .field("service_type", &self.service_type)
+            .field("allow_plaintext_metadata", &self.allow_plaintext_metadata)
+            .field("bearer_tokens", &bearer_tokens)
+            .field("bearer_token_hashes", &self.bearer_token_hashes.len())
+            .field("signature_key_id", &self.signature_key_id)
+            .field("signature_public_key_hex", &self.signature_public_key_hex)
+            .field("require_mtls", &self.require_mtls)
+            .field("mtls_cert_fingerprints", &self.mtls_cert_fingerprints)
+            .field("mtls_subject_dn", &self.mtls_subject_dn)
+            .field("mtls_subject_alt_names", &self.mtls_subject_alt_names)
+            .field("service_endpoint", &self.service_endpoint)
+            .field("extra_keys", &self.extra.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl Default for NotifyServicePrincipalConfig {

@@ -1,8 +1,8 @@
 //! Shared helpers for floria's blind-wakeup provider egress payload
 //! hygiene.
 //!
-//!   * [`STRIP_ONLY_KEYS`] â€” names accepted at ingress but never sent to an external provider.
-//!     Some are consumed by floria for routing/audit, others are protocol payload names that remain
+//!   * [`STRIP_ONLY_KEYS`] — names accepted at ingress but never sent to an external provider. Some
+//!     are consumed by floria for routing/audit, others are protocol payload names that remain
 //!     outside the blind provider surface.
 //!   * Egress also strips everything the SDK's own `is_forbidden_payload_key` covers.
 //!
@@ -20,11 +20,11 @@ use cokret::blind_payload_sanitizer as sdk;
 /// Names accepted inbound but silently stripped before a provider sees
 /// them. Matched case-insensitively.
 ///
-///   * CKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) â€” drives
+///   * CKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) — drives
 ///     gateway-internal routing & dedup normalization; leaking it would disclose the encryption
 ///     sub-boundary / realm binding.
 ///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,
-///     cross-signing reset, policy-frontier hash) â€” meaningful to the audit pipeline, a stable
+///     cross-signing reset, policy-frontier hash) — meaningful to the audit pipeline, a stable
 ///     correlator on the provider wire.
 pub const STRIP_ONLY_KEYS: &[&str] = &[
     // --- SPEC-CR-016 gateway-internal routing fragment ---
@@ -90,19 +90,19 @@ pub fn is_forbidden_egress_key(key: &str) -> bool {
 pub const BLIND_FORBIDDEN_CONTENT_TEXT_KEYS: &[&str] =
     &["title", "body", "subtitle", "alert", "preview", "summary"];
 
-/// Maximum representative value emitted by [`bucket_count`]. The open
-/// `6+` bucket collapses to this floor so the absolute count never
-/// reaches the wire.
-pub const BUCKET_SIX_PLUS: u64 = 6;
+/// Representative value for the closed `6-20` count bucket.
+pub const BUCKET_SIX_TO_TWENTY: u64 = 20;
+/// Representative value for the open `21+` count bucket.
+pub const BUCKET_TWENTY_ONE_PLUS: u64 = 21;
 
 /// Bucket an absolute count for the `blind_wakeup` profile per
-/// push-notifications.md Â§5.1.
+/// push-notifications.md §5.1.
 ///
 /// The absolute unread / missed-call count is an activity side channel:
 /// shipping `unread = 37` lets the provider build a cumulative
-/// per-`push_target_id` activity profile. Â§5.1 requires that, if an
-/// absolute count is carried at all under `blind_wakeup`, it MUST be
-/// bucketed to the policy-declared granularity (`1` / `2-5` / `6+`).
+/// per-`push_target_id` activity profile. §5.1 requires that, if an
+/// absolute count is carried at all under `blind_wakeup`, it MUST use
+/// the closed default grid (`1` / `2-5` / `6-20` / `21+`).
 ///
 /// This maps a raw count to the *representative* value of its bucket so
 /// ordering is preserved while the exact figure is destroyed:
@@ -112,7 +112,8 @@ pub const BUCKET_SIX_PLUS: u64 = 6;
 /// | `0`    | none   | `0`     |
 /// | `1`    | `1`    | `1`     |
 /// | `2..=5`| `2-5`  | `5`     |
-/// | `6..`  | `6+`   | `6`     |
+/// | `6..=20`| `6-20`| `20`    |
+/// | `21..` | `21+`  | `21`    |
 ///
 /// The result is always `<= MAX_COUNT_VALUE`, so it doubles as the
 /// upper-bound clamp the egress paths previously did by hand.
@@ -121,7 +122,8 @@ pub fn bucket_count(raw: u64) -> u64 {
         0 => 0,
         1 => 1,
         2..=5 => 5,
-        _ => BUCKET_SIX_PLUS,
+        6..=20 => BUCKET_SIX_TO_TWENTY,
+        _ => BUCKET_TWENTY_ONE_PLUS,
     }
 }
 
@@ -135,10 +137,12 @@ mod tests {
         assert_eq!(bucket_count(1), 1);
         assert_eq!(bucket_count(2), 5);
         assert_eq!(bucket_count(5), 5);
-        assert_eq!(bucket_count(6), 6);
+        assert_eq!(bucket_count(6), 20);
+        assert_eq!(bucket_count(20), 20);
+        assert_eq!(bucket_count(21), 21);
         // The headline leak case: 37 must NOT reach the wire verbatim.
-        assert_eq!(bucket_count(37), 6);
-        assert_eq!(bucket_count(9_999), 6);
+        assert_eq!(bucket_count(37), 21);
+        assert_eq!(bucket_count(9_999), 21);
         assert!(bucket_count(u64::MAX) <= sdk::MAX_COUNT_VALUE);
     }
 

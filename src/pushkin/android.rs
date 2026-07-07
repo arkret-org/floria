@@ -11,8 +11,8 @@ const BODY_MAX_BYTES: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AndroidNotificationPayload {
-    pub title: String,
-    pub body: String,
+    pub title: Option<String>,
+    pub body: Option<String>,
     pub data: Map<String, Value>,
     pub priority: AndroidPriority,
 }
@@ -26,6 +26,7 @@ pub(super) enum AndroidPriority {
 pub(super) fn build_android_notification_payload(
     notification: &PushNotification,
     mut provider_payload: Map<String, Value>,
+    allow_visible_notification: bool,
     send_badge_counts: bool,
 ) -> Option<AndroidNotificationPayload> {
     merge_notification_data(&mut provider_payload, notification, send_badge_counts);
@@ -44,7 +45,12 @@ pub(super) fn build_android_notification_payload(
         }
     };
 
-    let (title, body) = derive_alert(notification)?;
+    let (title, body) = if allow_visible_notification {
+        let (title, body) = derive_alert(notification)?;
+        (Some(title), Some(body))
+    } else {
+        (None, None)
+    };
     Some(AndroidNotificationPayload {
         title,
         body,
@@ -129,13 +135,7 @@ fn derive_alert(notification: &PushNotification) -> Option<(String, String)> {
                 None => format!("{sender} invited you"),
             }
         }
-        Some(event_type) => {
-            if let Some(body) = content_body(notification) {
-                maybe_prefix_sender(scope_title.is_some(), &sender, body)
-            } else {
-                format!("{sender} sent {event_type}")
-            }
-        }
+        Some(event_type) => format!("{sender} sent {event_type}"),
         None => fallback_summary(notification, &sender),
     };
 
@@ -154,11 +154,11 @@ fn message_summary(notification: &PushNotification, sender: &str) -> String {
 
 fn fallback_summary(notification: &PushNotification, sender: &str) -> String {
     match notification_unread_increment(notification) {
-        Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_SIX_PLUS => {
-            format!(
-                "You have {}+ unread messages",
-                crate::sanitize::BUCKET_SIX_PLUS
-            )
+        Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_TWENTY_ONE_PLUS => {
+            "You have 21+ unread messages".to_owned()
+        }
+        Some(unread_increment) if unread_increment >= 6 => {
+            "You have 6-20 unread messages".to_owned()
         }
         Some(unread_increment) if unread_increment > 1 => {
             "You have several unread messages".to_owned()
@@ -166,19 +166,6 @@ fn fallback_summary(notification: &PushNotification, sender: &str) -> String {
         Some(1) => "You have a new message".to_owned(),
         _ => format!("{sender} sent an update"),
     }
-}
-
-fn maybe_prefix_sender(has_scope: bool, sender: &str, body: String) -> String {
-    if has_scope && sender != "New activity" {
-        format!("{sender}: {body}")
-    } else {
-        body
-    }
-}
-
-fn content_body(notification: &PushNotification) -> Option<String> {
-    let _ = notification;
-    None
 }
 
 #[cfg(test)]
@@ -235,16 +222,17 @@ mod tests {
     #[test]
     fn builds_android_notification_payload() {
         let payload =
-            build_android_notification_payload(&message_notification(), Map::new(), true).unwrap();
+            build_android_notification_payload(&message_notification(), Map::new(), true, true)
+                .unwrap();
 
         // Title/body are derived from the (visible-profile) caller's
         // metadata. They go into the provider's notification block,
-        // not the freeform `data` dict â€” so they're rendered here.
-        assert_eq!(payload.title, "Mission Control");
-        assert_eq!(payload.body, "Major Tom sent a message");
+        // not the freeform `data` dict — so they're rendered here.
+        assert_eq!(payload.title.as_deref(), Some("Mission Control"));
+        assert_eq!(payload.body.as_deref(), Some("Major Tom sent a message"));
         assert_eq!(payload.priority, AndroidPriority::High);
 
-        // T4.3 â€” the freeform `data` dict MUST NOT carry stable
+        // T4.3 — the freeform `data` dict MUST NOT carry stable
         // correlation identifiers any more. The client now derives
         // those from the e2ee wakeup material it pulls server-side.
         assert!(payload.data.get("strand_id").is_none());
@@ -252,7 +240,7 @@ mod tests {
         // id (`realm_id`) AND the renamed container id (`space_id`).
         assert!(payload.data.get("space_id").is_none());
         assert!(payload.data.get("realm_id").is_none());
-        // CKP-0007 â€” Circle routing identifiers never appear in the
+        // CKP-0007 — Circle routing identifiers never appear in the
         // android freeform `data` dict.
         assert!(payload.data.get("circle_id").is_none());
         assert!(payload.data.get("effective_scope").is_none());
@@ -276,11 +264,11 @@ mod tests {
             payload.data.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge is reduced
+        // unread_increment travels as a bucketed count; badge is reduced
         // to a boolean unread indicator.
         assert_eq!(
             payload.data.get("unread_count"),
-            Some(&Value::Number(2.into()))
+            Some(&Value::Number(5.into()))
         );
         assert_eq!(payload.data.get("badge"), Some(&Value::Number(1.into())));
     }
@@ -290,7 +278,8 @@ mod tests {
         let mut notification = message_notification();
         notification.priority = Some("low".to_owned());
 
-        let payload = build_android_notification_payload(&notification, Map::new(), true).unwrap();
+        let payload =
+            build_android_notification_payload(&notification, Map::new(), true, true).unwrap();
         assert_eq!(payload.priority, AndroidPriority::Normal);
         assert_eq!(
             payload.data.get("priority"),
@@ -325,10 +314,34 @@ mod tests {
             },
             Map::new(),
             true,
+            true,
         )
         .unwrap();
 
-        assert_eq!(payload.title, "Nebula");
-        assert_eq!(payload.body, "Major Tom invited you to Nebula");
+        assert_eq!(payload.title.as_deref(), Some("Nebula"));
+        assert_eq!(
+            payload.body.as_deref(),
+            Some("Major Tom invited you to Nebula")
+        );
+    }
+
+    #[test]
+    fn blind_payload_is_data_only() {
+        let payload =
+            build_android_notification_payload(&message_notification(), Map::new(), false, true)
+                .unwrap();
+
+        assert_eq!(payload.title, None);
+        assert_eq!(payload.body, None);
+        assert_eq!(
+            payload.data.get("push_target_id"),
+            Some(&Value::String(
+                "ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()
+            ))
+        );
+        assert_eq!(
+            payload.data.get("wakeup_kind"),
+            Some(&Value::String("message".to_owned()))
+        );
     }
 }

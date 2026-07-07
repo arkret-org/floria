@@ -155,10 +155,12 @@ impl XiaomiPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
+        allow_visible_notification: bool,
     ) -> Result<Vec<(String, String)>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
             notification,
             Map::new(),
+            allow_visible_notification,
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -182,9 +184,14 @@ impl XiaomiPushkin {
                 if self.config.pass_through { "1" } else { "0" }.to_owned(),
             ),
             ("payload".to_owned(), payload_data),
-            ("title".to_owned(), payload.title),
-            ("description".to_owned(), payload.body),
         ];
+
+        if let Some(title) = payload.title {
+            form.push(("title".to_owned(), title));
+        }
+        if let Some(body) = payload.body {
+            form.push(("description".to_owned(), body));
+        }
 
         if let Some(notify_type) = self.config.notify_type {
             form.push(("notify_type".to_owned(), notify_type.to_string()));
@@ -230,8 +237,9 @@ impl XiaomiPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
+        allow_visible_notification: bool,
     ) -> Result<Vec<String>, DispatchError> {
-        let form = self.build_form(notification, device)?;
+        let form = self.build_form(notification, device, allow_visible_notification)?;
         if form.is_empty() {
             return Ok(vec![]);
         }
@@ -337,7 +345,7 @@ impl Pushkin for XiaomiPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
@@ -347,7 +355,14 @@ impl Pushkin for XiaomiPushkin {
         }
 
         for attempt in 0..XIAOMI_MAX_TRIES {
-            match self.send_once(notification, device).await {
+            match self
+                .send_once(
+                    notification,
+                    device,
+                    context.allow_plaintext_metadata && device.visible_notification_opt_in(),
+                )
+                .await
+            {
                 Ok(result) => return Ok(result),
                 Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < XIAOMI_MAX_TRIES => {
                     let retry_after = error.retry_after().unwrap_or_else(|| {
@@ -502,7 +517,9 @@ mod tests {
 
     #[test]
     fn builds_form_with_expected_fields() {
-        let form = pushkin().build_form(&notification(), &device()).unwrap();
+        let form = pushkin()
+            .build_form(&notification(), &device(), true)
+            .unwrap();
         let map = form
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>();
@@ -516,7 +533,7 @@ mod tests {
         assert_eq!(map.get("title"), Some(&"Mission Control".to_owned()));
         assert_eq!(map.get("notify_type"), Some(&"2".to_owned()));
         assert_eq!(map.get("extra.channel_id"), Some(&"messages".to_owned()));
-        // T4.3 â€” payload blob no longer carries strand_id / event_id /
+        // T4.3 — payload blob no longer carries strand_id / event_id /
         // sender. Only push_target_id (opaque) survives as the routing
         // hook the client uses to fetch the e2ee envelope.
         let payload_blob = map.get("payload").cloned().unwrap_or_default();

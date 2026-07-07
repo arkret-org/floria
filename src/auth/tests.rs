@@ -309,7 +309,7 @@ async fn rejects_tampered_body() {
         }
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
-    // Sign one body, send a *different* body â€” content-digest
+    // Sign one body, send a *different* body — content-digest
     // recomputation must reject this.
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
@@ -365,7 +365,7 @@ async fn rejects_signature_missing_required_components() {
         base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
     );
     let now = unix_now_secs();
-    // Intentionally omit `@authority` from the covered components â€”
+    // Intentionally omit `@authority` from the covered components —
     // floria's required-component policy must still trip this.
     let signature_input = format!(
         "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",

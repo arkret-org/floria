@@ -300,10 +300,12 @@ impl VivoPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
+        allow_visible_notification: bool,
     ) -> Result<Map<String, Value>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
             notification,
             Map::new(),
+            allow_visible_notification,
             self.config.send_badge_counts,
         ) else {
             return Ok(Map::new());
@@ -319,8 +321,12 @@ impl VivoPushkin {
             "notifyType".to_owned(),
             Value::Number(self.config.notify_type.into()),
         );
-        body.insert("title".to_owned(), Value::String(payload.title));
-        body.insert("content".to_owned(), Value::String(payload.body));
+        if let Some(title) = payload.title {
+            body.insert("title".to_owned(), Value::String(title));
+        }
+        if let Some(content) = payload.body {
+            body.insert("content".to_owned(), Value::String(content));
+        }
         body.insert(
             "skipType".to_owned(),
             Value::Number(self.config.skip_type.into()),
@@ -393,9 +399,10 @@ impl VivoPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
+        allow_visible_notification: bool,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.access_token().await?;
-        let body = self.build_request_body(notification, device)?;
+        let body = self.build_request_body(notification, device, allow_visible_notification)?;
         if body.is_empty() {
             return Ok(vec![]);
         }
@@ -514,7 +521,7 @@ impl Pushkin for VivoPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
@@ -524,7 +531,14 @@ impl Pushkin for VivoPushkin {
         }
 
         for attempt in 0..VIVO_MAX_TRIES {
-            match self.send_once(notification, device).await {
+            match self
+                .send_once(
+                    notification,
+                    device,
+                    context.allow_plaintext_metadata && device.visible_notification_opt_in(),
+                )
+                .await
+            {
                 Ok(result) => return Ok(result),
                 Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < VIVO_MAX_TRIES => {
                     let retry_after = error.retry_after().unwrap_or_else(|| {
@@ -813,7 +827,7 @@ mod tests {
     fn builds_request_body_with_expected_fields() {
         let body = Value::Object(
             pushkin()
-                .build_request_body(&notification(), &device())
+                .build_request_body(&notification(), &device(), true)
                 .unwrap(),
         );
 

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::{Result, bail};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -226,7 +228,7 @@ impl OpentracingConfig {
 
 /// Sentry error-capture configuration. Hooks into the tracing
 /// subscriber so any `tracing::error!` (and panics) are forwarded.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct SentryConfig {
     pub enabled: bool,
@@ -239,6 +241,25 @@ pub struct SentryConfig {
     pub traces_sample_rate: f64,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+impl fmt::Debug for SentryConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dsn = if self.dsn.is_some() {
+            "<redacted>"
+        } else {
+            "<none>"
+        };
+        f.debug_struct("SentryConfig")
+            .field("enabled", &self.enabled)
+            .field("dsn", &dsn)
+            .field("environment", &self.environment)
+            .field("release", &self.release)
+            .field("sample_rate", &self.sample_rate)
+            .field("traces_sample_rate", &self.traces_sample_rate)
+            .field("extra_keys", &self.extra.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl Default for SentryConfig {

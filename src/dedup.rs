@@ -227,6 +227,31 @@ impl NotifyDeduplicator {
         }
     }
 
+    pub async fn insert_success_async(
+        self: &Arc<Self>,
+        key: &str,
+        request_fingerprint: &str,
+        response: PushNotifyOutcome,
+    ) {
+        match &self.backend {
+            NotifyDedupBackend::Memory(_) => {
+                self.insert_success(key, request_fingerprint, response)
+            }
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let key = key.to_owned();
+                let fingerprint = request_fingerprint.to_owned();
+                let _ = tokio::task::spawn_blocking(move || {
+                    this.insert_success(&key, &fingerprint, response)
+                })
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "notify dedup insert_success task failed");
+                });
+            }
+        }
+    }
+
     pub fn contains_delivered_device(
         &self,
         notification_key: &str,
@@ -254,6 +279,32 @@ impl NotifyDeduplicator {
             }
             NotifyDedupBackend::Redis(backend) => {
                 backend.mark_delivered_device(self.ttl, notification_key, app_id, push_key)
+            }
+        }
+    }
+
+    pub async fn mark_delivered_device_async(
+        self: &Arc<Self>,
+        notification_key: &str,
+        app_id: &str,
+        push_key: &str,
+    ) {
+        match &self.backend {
+            NotifyDedupBackend::Memory(_) => {
+                self.mark_delivered_device(notification_key, app_id, push_key)
+            }
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let notification_key = notification_key.to_owned();
+                let app_id = app_id.to_owned();
+                let push_key = push_key.to_owned();
+                let _ = tokio::task::spawn_blocking(move || {
+                    this.mark_delivered_device(&notification_key, &app_id, &push_key)
+                })
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "notify dedup mark_delivered_device task failed");
+                });
             }
         }
     }

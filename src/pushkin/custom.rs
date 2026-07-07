@@ -159,16 +159,16 @@ impl CustomPushkin {
         notification: &PushNotification,
         device: &Device,
     ) -> Result<Map<String, Value>, DispatchError> {
-        // T4.3 â€” the custom-URL pushkin used to forward `event_id` /
+        // T4.3 — the custom-URL pushkin used to forward `event_id` /
         // `message_id` to the operator's webhook. Both are stable
         // correlation identifiers and must not leave the gateway.
         // What survives:
-        //   * `delivered_at`     â€” wall-clock for the operator's logs
-        //   * `app_id`           â€” routing key the webhook keys on
-        //   * `push_key_hash`    â€” already a blake2 truncation
-        //   * `wakeup_kind`      â€” closed enum, validated by the SDK
-        //   * `push_hint`        â€” only when SDK-validated literal
-        //   * `push_target_id`   â€” opaque pseudonym
+        //   * `delivered_at`     — wall-clock for the operator's logs
+        //   * `app_id`           — routing key the webhook keys on
+        //   * `push_key_hash`    — already a blake2 truncation
+        //   * `wakeup_kind`      — closed enum, validated by the SDK
+        //   * `push_hint`        — only when SDK-validated literal
+        //   * `push_target_id`   — opaque pseudonym
         let mut payload = Map::new();
         payload.insert(
             "delivered_at".to_owned(),

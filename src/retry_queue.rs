@@ -112,7 +112,7 @@ impl RetryQueueCipher {
 /// Optional PostgreSQL dead-letter overlay. Every envelope that drops
 /// into the dead-letter ring is ALSO written to the configured PG
 /// table so it survives a process restart. The overlay is fire-and-
-/// forget â€” a connection failure is logged and dropped; the in-memory
+/// forget — a connection failure is logged and dropped; the in-memory
 /// ring stays authoritative for the live `dead_letter_snapshot()` API
 /// and operator-facing dashboards.
 ///
@@ -135,7 +135,7 @@ pub struct DeadLetterPgOverlay {
 }
 
 impl DeadLetterPgOverlay {
-    /// Build an overlay. The table is validated via [`SqlTableName`] â€”
+    /// Build an overlay. The table is validated via [`SqlTableName`] —
     /// the raw name is rejected if it contains anything other than
     /// `[A-Za-z0-9_]` plus an optional schema-qualifier dot.
     pub fn new(url: &str, table: &str) -> Result<Self> {
@@ -325,7 +325,7 @@ impl RetryQueue {
     }
 
     /// Attach a PostgreSQL dead-letter overlay. The overlay's schema is
-    /// bootstrapped synchronously here â€” if `CREATE TABLE` fails the
+    /// bootstrapped synchronously here — if `CREATE TABLE` fails the
     /// caller gets the error rather than discovering it on the first
     /// dead-letter event.
     pub fn with_deadletter_pg(mut self, overlay: DeadLetterPgOverlay) -> Result<Self> {
@@ -400,6 +400,10 @@ impl RetryQueue {
         }
     }
 
+    pub async fn enqueue_async(self: &std::sync::Arc<Self>, envelope: RetryEnvelope) {
+        let _ = queue_operation(self, move |queue| queue.enqueue(envelope)).await;
+    }
+
     pub fn dequeue_due(&self, limit: usize) -> Vec<RetryEnvelope> {
         if limit == 0 {
             return Vec::new();
@@ -412,7 +416,7 @@ impl RetryQueue {
 
     pub fn dead_letter(&self, envelope: RetryEnvelope) {
         // Persist to the PG overlay (if configured) FIRST. The overlay
-        // is fire-and-forget â€” a PG outage must not block the in-mem
+        // is fire-and-forget — a PG outage must not block the in-mem
         // ring update that the dispatch loop actually reads from.
         if let Some(overlay) = &self.deadletter_pg {
             overlay.record(&envelope);
@@ -443,11 +447,11 @@ impl RetryQueue {
         }
     }
 
-    /// P5 â€” best-effort per-(provider, app_id) breakdown of the
+    /// P5 — best-effort per-(provider, app_id) breakdown of the
     /// pending depth. Used to feed `floria_notify_retry_queue_depth`
     /// when the operator opts in to per-provider labels. Memory
     /// backend reports an exact snapshot; the Redis backend returns
-    /// an empty map â€” accurate per-provider depth would require
+    /// an empty map — accurate per-provider depth would require
     /// scanning every envelope in the sorted set, which we explicitly
     /// avoid on the dispatcher poll loop. Operators running Redis
     /// can read the aggregate `floria_retry_queue_depth` gauge AND
@@ -480,7 +484,7 @@ impl RetryQueue {
 
     /// Compute the next retry timestamp for an envelope that should
     /// be re-enqueued, applying exponential backoff capped by
-    /// `max_backoff` and adding Â±10% jitter so a stampede of clients
+    /// `max_backoff` and adding ±10% jitter so a stampede of clients
     /// hitting the same provider doesn't synchronise their retries.
     pub fn next_retry_at(&self, attempts: u32) -> Duration {
         let base = self.config.default_backoff;
@@ -720,7 +724,7 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
     }
 }
 
-/// Apply Â±10% jitter to a backoff duration. The implementation uses
+/// Apply ±10% jitter to a backoff duration. The implementation uses
 /// `rand::rng` so a fork-bombed process won't pin every retry
 /// to the same `Instant`.
 fn apply_jitter(backoff: Duration) -> Duration {
@@ -728,7 +732,7 @@ fn apply_jitter(backoff: Duration) -> Duration {
     if millis == 0 {
         return backoff;
     }
-    let jitter_span = millis / 10; // Â±10%
+    let jitter_span = millis / 10; // ±10%
     if jitter_span == 0 {
         return backoff;
     }
@@ -816,10 +820,10 @@ pub async fn run_worker(
         // rather than only the most recent enqueue. Cheap for memory
         // backends and a single ZCARD/EXISTS on Redis.
         crate::metrics::set_retry_queue_depth(pending_len_for_worker(&queue).await as i64);
-        // P5 â€” labelled breakdown. Memory backend reports exact
+        // P5 — labelled breakdown. Memory backend reports exact
         // per-provider counts; Redis backend returns an empty map
         // (and the labelled metric simply stops getting updated for
-        // that interval â€” operators read the aggregate gauge instead).
+        // that interval — operators read the aggregate gauge instead).
         // Scope label is always `realm` here because retry envelopes
         // do not currently carry circle_id; circle-keyed breakdown is
         // gated behind a future enhancement once that field strands
@@ -862,7 +866,7 @@ pub async fn run_worker(
 
             // Reconstruct a minimal PushNotification + Device shell. We
             // intentionally do not persist the original notification
-            // body â€” the retry exists to re-attempt the wakeup, not
+            // body — the retry exists to re-attempt the wakeup, not
             // to replay payload metadata. Provider implementations
             // accept blind-wakeup defaults.
             let device = Device {
@@ -886,6 +890,7 @@ pub async fn run_worker(
             let context = NotificationContext {
                 request_id: envelope.request_id.clone(),
                 start_time: Instant::now(),
+                allow_plaintext_metadata: false,
             };
             match pushkin
                 .dispatch_notification(&notification, &device, &context)
@@ -1005,7 +1010,7 @@ mod tests {
             max_backoff: Duration::from_secs(60),
             ..RetryQueueConfig::default()
         });
-        // Â±10% jitter around the 60s cap
+        // ±10% jitter around the 60s cap
         let backoff = queue.next_retry_at(20);
         assert!(
             backoff >= Duration::from_millis(54_000) && backoff <= Duration::from_millis(66_000),

@@ -210,34 +210,44 @@ impl JpushPushkin {
             json!({ "registration_id": [device.push_key().unwrap_or_default()] }),
         );
 
-        let mut notification_object = Map::new();
-        notification_object.insert("alert".to_owned(), Value::String(payload.body.clone()));
-        if self
-            .config
-            .platforms
-            .iter()
-            .any(|platform| platform == "android")
-        {
-            notification_object.insert(
-                "android".to_owned(),
-                Value::Object(self.android_notification(&payload)),
+        if let Some(alert) = payload.body.as_ref() {
+            let mut notification_object = Map::new();
+            notification_object.insert("alert".to_owned(), Value::String(alert.clone()));
+            if self
+                .config
+                .platforms
+                .iter()
+                .any(|platform| platform == "android")
+            {
+                notification_object.insert(
+                    "android".to_owned(),
+                    Value::Object(self.android_notification(&payload)),
+                );
+            }
+            if self
+                .config
+                .platforms
+                .iter()
+                .any(|platform| platform == "hmos")
+            {
+                notification_object.insert(
+                    "hmos".to_owned(),
+                    Value::Object(self.hmos_notification(&payload)),
+                );
+            }
+            body.insert(
+                "notification".to_owned(),
+                Value::Object(notification_object),
+            );
+        } else {
+            body.insert(
+                "message".to_owned(),
+                json!({
+                    "msg_content": "blind_wakeup",
+                    "extras": jpush_extras(&payload.data),
+                }),
             );
         }
-        if self
-            .config
-            .platforms
-            .iter()
-            .any(|platform| platform == "hmos")
-        {
-            notification_object.insert(
-                "hmos".to_owned(),
-                Value::Object(self.hmos_notification(&payload)),
-            );
-        }
-        body.insert(
-            "notification".to_owned(),
-            Value::Object(notification_object),
-        );
 
         let options = self.options(notification);
         if !options.is_empty() {
@@ -255,8 +265,12 @@ impl JpushPushkin {
 
     fn android_notification(&self, payload: &AndroidNotificationPayload) -> Map<String, Value> {
         let mut android = self.config.android_notification.clone();
-        android.insert("title".to_owned(), Value::String(payload.title.clone()));
-        android.insert("alert".to_owned(), Value::String(payload.body.clone()));
+        if let Some(title) = &payload.title {
+            android.insert("title".to_owned(), Value::String(title.clone()));
+        }
+        if let Some(body) = &payload.body {
+            android.insert("alert".to_owned(), Value::String(body.clone()));
+        }
         android.insert(
             "extras".to_owned(),
             Value::Object(jpush_extras(&payload.data)),
@@ -283,7 +297,9 @@ impl JpushPushkin {
 
     fn hmos_notification(&self, payload: &AndroidNotificationPayload) -> Map<String, Value> {
         let mut hmos = self.config.hmos_notification.clone();
-        hmos.insert("title".to_owned(), Value::String(payload.title.clone()));
+        if let Some(title) = &payload.title {
+            hmos.insert("title".to_owned(), Value::String(title.clone()));
+        }
         hmos.insert(
             "extras".to_owned(),
             Value::Object(jpush_extras(&payload.data)),
@@ -412,7 +428,7 @@ impl Pushkin for JpushPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
@@ -424,6 +440,7 @@ impl Pushkin for JpushPushkin {
         let Some(payload) = build_android_notification_payload(
             notification,
             Map::new(),
+            context.allow_plaintext_metadata && device.visible_notification_opt_in(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -670,7 +687,7 @@ mod tests {
     fn builds_request_body_with_extras_and_third_party_channel() {
         let device = device();
         let payload =
-            build_android_notification_payload(&notification(), Map::new(), true).unwrap();
+            build_android_notification_payload(&notification(), Map::new(), true, true).unwrap();
         let body = pushkin().build_request_body(&notification(), &device, payload);
         let body = Value::Object(body);
 

@@ -299,17 +299,25 @@ impl OppoPushkin {
             "target_value".to_owned(),
             Value::String(device.push_key().unwrap_or_default().to_owned()),
         );
-        body.insert(
-            "notification".to_owned(),
-            Value::Object(self.notification_payload(payload)),
-        );
+        if payload.title.is_some() && payload.body.is_some() {
+            body.insert(
+                "notification".to_owned(),
+                Value::Object(self.notification_payload(payload)),
+            );
+        } else if !payload.data.is_empty() {
+            body.insert("extra".to_owned(), Value::Object(payload.data));
+        }
         body
     }
 
     fn notification_payload(&self, payload: AndroidNotificationPayload) -> Map<String, Value> {
         let mut notification = self.config.notification.clone();
-        notification.insert("title".to_owned(), Value::String(payload.title));
-        notification.insert("content".to_owned(), Value::String(payload.body));
+        if let Some(title) = payload.title {
+            notification.insert("title".to_owned(), Value::String(title));
+        }
+        if let Some(body) = payload.body {
+            notification.insert("content".to_owned(), Value::String(body));
+        }
         if let Some(click_action_type) = self.config.click_action_type {
             notification.insert(
                 "click_action_type".to_owned(),
@@ -464,7 +472,7 @@ impl Pushkin for OppoPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
@@ -479,6 +487,7 @@ impl Pushkin for OppoPushkin {
         let Some(payload) = build_android_notification_payload(
             notification,
             Map::new(),
+            context.allow_plaintext_metadata && device.visible_notification_opt_in(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -731,7 +740,7 @@ mod tests {
     fn builds_request_body_with_notification_payload() {
         let device = device();
         let payload =
-            build_android_notification_payload(&notification(), Map::new(), true).unwrap();
+            build_android_notification_payload(&notification(), Map::new(), true, true).unwrap();
 
         let body = Value::Object(pushkin(OppoVendor::Oppo).build_request_body(&device, payload));
 

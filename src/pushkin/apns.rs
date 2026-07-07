@@ -246,7 +246,7 @@ impl ApnsPushkin {
         let notif_id = Uuid::new_v4().to_string();
 
         let mut headers = HeaderMap::new();
-        // `HeaderValue: From<u16>` is infallible â€” no hot-path unwrap.
+        // `HeaderValue: From<u16>` is infallible — no hot-path unwrap.
         headers.insert("apns-priority", HeaderValue::from(u16::from(priority)));
         headers.insert("content-type", HeaderValue::from_static("application/json"));
         headers.insert("apns-id", header_value(&notif_id)?);
@@ -329,14 +329,16 @@ impl ApnsPushkin {
         &self,
         notification: &PushNotification,
         provider_payload: Map<String, Value>,
+        allow_visible_notification: bool,
     ) -> Result<Option<Value>, DispatchError> {
-        Ok(self.payload_full(notification, provider_payload))
+        Ok(self.payload_full(notification, provider_payload, allow_visible_notification))
     }
 
     fn payload_full(
         &self,
         notification: &PushNotification,
         mut provider_payload: Map<String, Value>,
+        allow_visible_notification: bool,
     ) -> Option<Value> {
         let from_display = notification
             .sender_label()
@@ -347,51 +349,55 @@ impl ApnsPushkin {
         let mut loc_key = None;
         let mut loc_args: Vec<String> = Vec::new();
 
-        match notification.wakeup_kind.as_deref() {
-            Some("message") => {
-                let scope_display = notification
-                    .scope_title()
-                    .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
+        if allow_visible_notification {
+            match notification.wakeup_kind.as_deref() {
+                Some("message") => {
+                    let scope_display = notification
+                        .scope_title()
+                        .map(|value| trim_chars(value, APNS_MAX_FIELD_LENGTH));
 
-                if let Some(scope_display) = scope_display {
-                    loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                    loc_args = vec![from_display, scope_display];
-                } else {
-                    loc_key = Some("MSG_FROM_USER");
-                    loc_args = vec![from_display];
+                    if let Some(scope_display) = scope_display {
+                        loc_key = Some("MSG_FROM_USER_IN_ROOM");
+                        loc_args = vec![from_display, scope_display];
+                    } else {
+                        loc_key = Some("MSG_FROM_USER");
+                        loc_args = vec![from_display];
+                    }
                 }
-            }
-            Some("incoming_call") => {
-                if let Some(push_hint) = notification.push_hint_text() {
-                    loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
-                    loc_args = vec![from_display, trim_chars(push_hint, APNS_MAX_FIELD_LENGTH)];
-                } else {
-                    loc_key = Some("VOICE_CALL_FROM_USER");
-                    loc_args = vec![from_display];
+                Some("incoming_call") => {
+                    if let Some(push_hint) = notification.push_hint_text() {
+                        loc_key = Some("MSG_FROM_USER_WITH_CONTENT");
+                        loc_args = vec![from_display, trim_chars(push_hint, APNS_MAX_FIELD_LENGTH)];
+                    } else {
+                        loc_key = Some("VOICE_CALL_FROM_USER");
+                        loc_args = vec![from_display];
+                    }
                 }
-            }
-            Some("member")
-                if notification.user_is_target == Some(true)
-                    && notification.membership.as_deref() == Some("invite") =>
-            {
-                if let Some(scope_title) = notification.scope_title() {
-                    loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
-                    loc_args = vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
-                } else {
-                    loc_key = Some("USER_INVITE_TO_CHAT");
-                    loc_args = vec![from_display];
+                Some("member")
+                    if notification.user_is_target == Some(true)
+                        && notification.membership.as_deref() == Some("invite") =>
+                {
+                    if let Some(scope_title) = notification.scope_title() {
+                        loc_key = Some("USER_INVITE_TO_NAMED_ROOM");
+                        loc_args =
+                            vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
+                    } else {
+                        loc_key = Some("USER_INVITE_TO_CHAT");
+                        loc_args = vec![from_display];
+                    }
                 }
-            }
-            Some(_) => {
-                if let Some(scope_title) = notification.scope_title() {
-                    loc_key = Some("MSG_FROM_USER_IN_ROOM");
-                    loc_args = vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
-                } else {
-                    loc_key = Some("MSG_FROM_USER");
-                    loc_args = vec![from_display];
+                Some(_) => {
+                    if let Some(scope_title) = notification.scope_title() {
+                        loc_key = Some("MSG_FROM_USER_IN_ROOM");
+                        loc_args =
+                            vec![from_display, trim_chars(scope_title, APNS_MAX_FIELD_LENGTH)];
+                    } else {
+                        loc_key = Some("MSG_FROM_USER");
+                        loc_args = vec![from_display];
+                    }
                 }
+                None => {}
             }
-            None => {}
         }
 
         let badge = if self.send_badge_counts {
@@ -400,7 +406,7 @@ impl ApnsPushkin {
             None
         };
 
-        if loc_key.is_none() && badge.is_none() {
+        if allow_visible_notification && loc_key.is_none() && badge.is_none() {
             return None;
         }
 
@@ -409,6 +415,9 @@ impl ApnsPushkin {
             .or_insert_with(|| Value::Object(Map::new()));
         let aps_object = aps.as_object_mut()?;
 
+        if !allow_visible_notification {
+            aps_object.insert("content-available".to_owned(), Value::Number(1.into()));
+        }
         if let Some(loc_key) = loc_key {
             let alert = aps_object
                 .entry("alert")
@@ -426,7 +435,7 @@ impl ApnsPushkin {
             aps_object.insert("badge".to_owned(), Value::Number(badge.into()));
         }
 
-        // T4.3 â€” stable correlation identifiers must not be copied onto
+        // T4.3 — stable correlation identifiers must not be copied onto
         // the APNS payload alongside the `aps` notification block. The
         // client decrypts an e2ee envelope keyed on `push_target_id` to
         // recover them.
@@ -438,7 +447,7 @@ impl ApnsPushkin {
 
         // Final defence - strip anything forbidden that a future builder
         // bug tries to add. Note `aps` IS on the SDK forbidden list because it's a provider
-        // escape hatch â€” for APNS we explicitly extract it, run the
+        // escape hatch — for APNS we explicitly extract it, run the
         // sanitizer on the rest, then put `aps` back. This keeps the
         // allow-list strict for the freeform extension keys while
         // still letting the gateway emit a legitimate `aps` block.
@@ -481,11 +490,16 @@ impl Pushkin for ApnsPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        let Some(payload) = self.build_payload(notification, Map::new())? else {
+        let Some(payload) = self.build_payload(
+            notification,
+            Map::new(),
+            context.allow_plaintext_metadata && device.visible_notification_opt_in(),
+        )?
+        else {
             return Ok(vec![]);
         };
         let priority = if notification.is_low_priority() {
@@ -799,11 +813,11 @@ mod tests {
         };
 
         let payload = pushkin
-            .build_payload(&notification, Map::new())
+            .build_payload(&notification, Map::new(), true)
             .unwrap()
             .unwrap();
 
-        // T4.3 â€” stable correlation identifiers are stripped. The
+        // T4.3 — stable correlation identifiers are stripped. The
         // visible alert still renders from allowed labels in `aps.alert`,
         // but message content is ignored and the freeform extension keys
         // only carry the SDK-allowed blind fields.
@@ -863,9 +877,20 @@ mod tests {
             ..Default::default()
         };
 
-        let payload = pushkin.build_payload(&notification, Map::new()).unwrap();
+        let payload = pushkin
+            .build_payload(&notification, Map::new(), false)
+            .unwrap()
+            .unwrap();
 
-        assert!(payload.is_none());
+        assert_eq!(
+            payload,
+            json!({
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "aps": {
+                    "content-available": 1
+                }
+            })
+        );
     }
 
     #[test]

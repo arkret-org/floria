@@ -1,20 +1,20 @@
-//! T4.3 â€” end-to-end snapshot tests for the provider payload
+//! T4.3 — end-to-end snapshot tests for the provider payload
 //! sanitization layer.
 //!
 //! These tests assert that the provider-facing payload that floria
 //! emits NEVER carries the stable correlation identifiers
 //! (`event_id` / `realm_id` / `space_id` / `strand_id` / `message_id` / sender /
-//! space-name / strand-name / `target_did` / call-setup material â€¦) that
+//! space-name / strand-name / `target_did` / call-setup material …) that
 //! used to leak via the freeform data dictionary. Coverage is split
 //! across three layers:
 //!
-//!   1. **Builder snapshots** â€” drive `pushkin::sanitized_provider_payload` with payload trees
-//!      that include forbidden keys and assert that they are stripped (or the request is rejected).
-//!   2. **Profile gating** â€” drive the `/_cokret/edge/push/notify` HTTP handler with
-//!      blind-profile callers carrying plaintext metadata and assert that the response is
-//!      `failed_precondition` (412) with the `plaintext_in_blind_profile` reason;
-//!      `notification.content` is rejected earlier as an unknown product-private field.
-//!   3. **WebPush collapse key randomness** â€” drive `pushkin::random_collapse_key` to confirm two
+//!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
+//!      include forbidden keys and assert that they are stripped (or the request is rejected).
+//!   2. **Profile gating** — drive the `/_cokret/edge/push/notify` HTTP handler with blind-profile
+//!      callers carrying plaintext metadata and assert that the response is `failed_precondition`
+//!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
+//!      earlier as an unknown product-private field.
+//!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
 //!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
 //!      typed-id substring.
 
@@ -26,7 +26,7 @@ use floria::AppState;
 use floria::auth::ORIGIN_SERVICE_DID_HEADER;
 use floria::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use floria::error::DispatchError;
-use floria::models::{Device, Notification, NotificationContext};
+use floria::models::{Device, NotificationContext, PushNotification as Notification};
 use floria::pushkin::{
     Pushkin, PushkinRegistry, build_blind_provider_data, random_collapse_key,
     sanitized_provider_payload,
@@ -37,7 +37,7 @@ use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
-// (1) Provider payload sanitizer â€” per-provider snapshot assertions.
+// (1) Provider payload sanitizer — per-provider snapshot assertions.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -96,7 +96,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
     let sanitized = sanitized_provider_payload(payload).unwrap();
     assert!(sanitized.get("event_id").is_none());
     // content_body / content_msgtype are not in the forbidden allow-list
-    // *by name*, but they carry the same plaintext-correlation risk â€”
+    // *by name*, but they carry the same plaintext-correlation risk —
     // the gateway should not be emitting them in the first place. This
     // test pins that they survive a sanitizer call but the BUILDERS
     // never produce them. (See `notify_blind_profile_rejects_plaintext_content`.)
@@ -169,7 +169,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
-    assert_eq!(data.get("unread_count"), Some(&json!(3)));
+    assert_eq!(data.get("unread_count"), Some(&json!(5)));
     for forbidden in [
         "event_id",
         "message_id",
@@ -243,12 +243,12 @@ fn sanitizer_strips_private_notification_preferences() {
 }
 
 // ---------------------------------------------------------------------------
-// CKP-0007 Circle primitive â€” privacy invariants.
+// CKP-0007 Circle primitive — privacy invariants.
 //
 // Circle routing metadata (`circle_id`, `effective_scope`,
 // `scope_circle_id`) drives gateway-internal routing only. It MUST
 // NOT surface in any provider plaintext payload, regardless of which
-// profile (blind / visible) the caller is on â€” Circle identifiers
+// profile (blind / visible) the caller is on — Circle identifiers
 // reveal the encryption sub-boundary an observer is looking at and
 // the reducer-stamped realm/circle binding.
 // ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ fn sanitizer_strips_nested_route_token_metadata() {
 fn build_blind_provider_data_never_emits_route_tokens() {
     // Realm + Circle ids must be canonical lower-case UUIDv7 to satisfy
     // the SDK `EffectiveScope` deserializer (which is strict per
-    // `conformance/encoding.md` Â§4).
+    // `conformance/encoding.md` §4).
     let notification: Notification = serde_json::from_value(json!({
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
@@ -353,7 +353,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     }
     // The allow-listed blind fields still survive.
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
-    assert_eq!(data.get("unread_count"), Some(&json!(3)));
+    assert_eq!(data.get("unread_count"), Some(&json!(5)));
 }
 
 // ---------------------------------------------------------------------------

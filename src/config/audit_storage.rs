@@ -1,10 +1,12 @@
+use std::fmt;
+
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::warn_unknown_fields;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct AuditConfig {
     pub backend: String,
@@ -13,6 +15,23 @@ pub struct AuditConfig {
     pub bearer_token: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
+}
+
+impl fmt::Debug for AuditConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bearer_token = if self.bearer_token.is_some() {
+            "<redacted>"
+        } else {
+            "<none>"
+        };
+        f.debug_struct("AuditConfig")
+            .field("backend", &self.backend)
+            .field("file_path", &self.file_path)
+            .field("endpoint", &self.endpoint)
+            .field("bearer_token", &bearer_token)
+            .field("extra_keys", &self.extra.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 impl Default for AuditConfig {

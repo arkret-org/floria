@@ -280,25 +280,29 @@ fn standard_notify_outcome(response: &PushNotifyOutcome) -> cokret::PushNotifyOu
     }
 }
 
-pub(super) fn cache_success_response(
+pub(super) async fn cache_success_response(
     state: &Arc<AppState>,
     key: &str,
     request_fingerprint: &str,
     response: &PushNotifyOutcome,
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
-        deduplicator.insert_success(key, request_fingerprint, response.clone());
+        deduplicator
+            .insert_success_async(key, request_fingerprint, response.clone())
+            .await;
     }
 }
 
-pub(super) fn mark_delivered_devices<'a>(
+pub(super) async fn mark_delivered_devices(
     state: &Arc<AppState>,
     notification_key: &str,
-    targets: impl Iterator<Item = &'a crate::pushkin::DispatchTarget>,
+    targets: Vec<crate::pushkin::DispatchTarget>,
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         for target in targets {
-            deduplicator.mark_delivered_device(notification_key, &target.app_id, &target.push_key);
+            deduplicator
+                .mark_delivered_device_async(notification_key, &target.app_id, &target.push_key)
+                .await;
         }
     }
 }
@@ -379,7 +383,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // CKP-0007 â€” `circle_id` and `effective_scope` are routing-affecting
+    // CKP-0007 — `circle_id` and `effective_scope` are routing-affecting
     // (two pushes for the same Strand in different Circles must not
     // collide in the dedup cache).
     if let Some(value) = notification.realm_route_token() {
@@ -412,7 +416,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
     }
-    // Round 4 (spec a77b995) â€” `mention_redirect_target_route_tokens` is
+    // Round 4 (spec a77b995) — `mention_redirect_target_route_tokens` is
     // routing-affecting (two requests with different allow-lists must
     // not collide in the dedup cache). Sort canonically so the
     // fingerprint is order-independent.
@@ -451,7 +455,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
                 "push_key".to_owned(),
                 Value::String(device.push_key().unwrap_or_default().to_owned()),
             );
-            // Round 4 â€” `target_route_token` participates in the routing
+            // Round 4 — `target_route_token` participates in the routing
             // decision, so it must be part of the canonical fingerprint.
             if let Some(route_token) = device.target_route_token() {
                 normalized.insert(
@@ -479,7 +483,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
         .map(|bytes| request_hash(&bytes))
 }
 
-pub(super) fn enqueue_retry(
+pub(super) async fn enqueue_retry(
     state: &Arc<AppState>,
     request_id: &str,
     pushkin: &str,
@@ -500,6 +504,6 @@ pub(super) fn enqueue_retry(
         backoff,
         error.to_string(),
     );
-    queue.enqueue(envelope);
+    queue.enqueue_async(envelope).await;
     app_metrics::notify_retry_enqueued(pushkin);
 }

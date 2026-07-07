@@ -8,17 +8,14 @@ use prometheus::{
 };
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, StatusCode};
-use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use super::android::{
-    AndroidNotificationPayload, AndroidPriority, build_android_notification_payload,
-};
+use super::android::{AndroidNotificationPayload, build_android_notification_payload};
+use super::hms_family::{self, HmsAndroidConfig};
 use super::reqwest_support::{
-    ClientCredentialsGrant, bearer, build_reqwest_client, looks_like_invalid_token,
-    parse_retry_after,
+    ClientCredentialsGrant, bearer, build_reqwest_client, parse_retry_after,
 };
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
@@ -78,17 +75,7 @@ pub struct HonorPushkin {
     client: Client,
     token_grant: ClientCredentialsGrant,
     endpoint: String,
-    config: HonorConfig,
-}
-
-#[derive(Debug, Clone)]
-struct HonorConfig {
-    channel_id: Option<String>,
-    ttl_seconds: Option<u64>,
-    android_config: Map<String, Value>,
-    android_notification: Map<String, Value>,
-    click_action: Option<Map<String, Value>>,
-    send_badge_counts: bool,
+    config: HmsAndroidConfig,
 }
 
 impl HonorPushkin {
@@ -142,14 +129,7 @@ impl HonorPushkin {
             client: build_reqwest_client(config, "floria")?,
             token_grant: ClientCredentialsGrant::new(app_id.clone(), app_secret, token_url),
             endpoint,
-            config: HonorConfig {
-                channel_id: app.get_string("channel_id")?,
-                ttl_seconds: app.get_u64("ttl_seconds")?,
-                android_config: app.get_object("android_config")?.unwrap_or_default(),
-                android_notification: app.get_object("android_notification")?.unwrap_or_default(),
-                click_action: app.get_object("click_action")?,
-                send_badge_counts: app.get_bool("send_badge_counts")?.unwrap_or(true),
-            },
+            config: HmsAndroidConfig::from_app(app)?,
         })
     }
 
@@ -158,79 +138,7 @@ impl HonorPushkin {
         device: &Device,
         payload: AndroidNotificationPayload,
     ) -> Result<Map<String, Value>, DispatchError> {
-        let data = serde_json::to_string(&payload.data).map_err(|error| {
-            DispatchError::internal(format!("failed to encode HONOR Push data payload: {error}"))
-        })?;
-
-        let mut message = Map::new();
-        message.insert(
-            "token".to_owned(),
-            Value::Array(vec![Value::String(
-                device.push_key().unwrap_or_default().to_owned(),
-            )]),
-        );
-        message.insert(
-            "notification".to_owned(),
-            json!({
-                "title": payload.title,
-                "body": payload.body,
-            }),
-        );
-        message.insert("data".to_owned(), Value::String(data));
-        message.insert(
-            "android".to_owned(),
-            Value::Object(self.android_config(payload)),
-        );
-
-        Ok(json!({
-            "validate_only": false,
-            "message": Value::Object(message),
-        })
-        .as_object()
-        .unwrap()
-        .clone()
-        .into_iter()
-        .collect())
-    }
-
-    fn android_config(&self, payload: AndroidNotificationPayload) -> Map<String, Value> {
-        let mut android = self.config.android_config.clone();
-        android.insert(
-            "urgency".to_owned(),
-            Value::String(
-                match payload.priority {
-                    AndroidPriority::Normal => "NORMAL",
-                    AndroidPriority::High => "HIGH",
-                }
-                .to_owned(),
-            ),
-        );
-        if let Some(ttl_seconds) = self.config.ttl_seconds {
-            android.insert("ttl".to_owned(), Value::String(format!("{ttl_seconds}s")));
-        }
-
-        let mut android_notification = android
-            .remove("notification")
-            .and_then(|value| value.as_object().cloned())
-            .unwrap_or_default();
-        android_notification.extend(self.config.android_notification.clone());
-        android_notification.insert("title".to_owned(), Value::String(payload.title));
-        android_notification.insert("body".to_owned(), Value::String(payload.body));
-        if let Some(channel_id) = &self.config.channel_id {
-            android_notification.insert("channel_id".to_owned(), Value::String(channel_id.clone()));
-        }
-        if let Some(click_action) = &self.config.click_action {
-            android_notification.insert(
-                "click_action".to_owned(),
-                Value::Object(click_action.clone()),
-            );
-        }
-        android.insert(
-            "notification".to_owned(),
-            Value::Object(android_notification),
-        );
-
-        android
+        hms_family::build_request_body("HONOR Push", &self.config, device, payload)
     }
 
     async fn send_once(
@@ -297,37 +205,14 @@ impl HonorPushkin {
         body: &str,
         device: &Device,
     ) -> Result<Vec<String>, DispatchError> {
-        match status.as_u16() {
-            429 => Err(DispatchError::temporary(
-                honor_error_message(body, status),
-                retry_after.or(Some(Duration::from_secs(HONOR_RETRY_DELAY_BASE_SECS))),
-            )),
-            500..=599 => Err(DispatchError::temporary(
-                honor_error_message(body, status),
-                retry_after,
-            )),
-            200..=299 => match serde_json::from_str::<HonorSendResponse>(body) {
-                Ok(response) if response.code.as_deref().is_none_or(is_honor_success_code) => {
-                    Ok(vec![])
-                }
-                Ok(response) if response.is_invalid_token() => {
-                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
-                }
-                Ok(response) => Err(DispatchError::remote(format!(
-                    "HONOR Push rejected request: {} {}",
-                    response.code.unwrap_or_else(|| status.as_u16().to_string()),
-                    response.msg.unwrap_or_else(|| body.to_owned())
-                ))),
-                Err(_) if looks_like_invalid_token(body) => {
-                    Ok(vec![device.push_key().unwrap_or_default().to_owned()])
-                }
-                Err(_) => Ok(vec![]),
-            },
-            _ if looks_like_invalid_token(body) => {
-                Ok(vec![device.push_key().unwrap_or_default().to_owned()])
-            }
-            _ => Err(DispatchError::remote(honor_error_message(body, status))),
-        }
+        hms_family::handle_response(
+            "HONOR Push",
+            HONOR_RETRY_DELAY_BASE_SECS,
+            status,
+            retry_after,
+            body,
+            device,
+        )
     }
 }
 
@@ -349,7 +234,7 @@ impl Pushkin for HonorPushkin {
         &self,
         notification: &PushNotification,
         device: &Device,
-        _context: &NotificationContext,
+        context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
@@ -361,6 +246,7 @@ impl Pushkin for HonorPushkin {
         let Some(payload) = build_android_notification_payload(
             notification,
             Map::new(),
+            context.allow_plaintext_metadata && device.visible_notification_opt_in(),
             self.config.send_badge_counts,
         ) else {
             return Ok(vec![]);
@@ -394,39 +280,10 @@ fn value_to_string(value: &Value) -> Result<String> {
     }
 }
 
-fn is_honor_success_code(code: &str) -> bool {
-    matches!(code, "80000000" | "0" | "")
-}
-
-fn honor_error_message(body: &str, status: StatusCode) -> String {
-    serde_json::from_str::<HonorSendResponse>(body)
-        .ok()
-        .map(|response| {
-            format!(
-                "HONOR Push rejected request: {} {}",
-                response.code.unwrap_or_else(|| status.as_u16().to_string()),
-                response.msg.unwrap_or_else(|| body.to_owned())
-            )
-        })
-        .unwrap_or_else(|| format!("HONOR Push rejected request: {status} {body}"))
-}
-
-#[derive(Debug, Deserialize)]
-struct HonorSendResponse {
-    #[serde(default)]
-    code: Option<String>,
-    #[serde(default)]
-    msg: Option<String>,
-}
-
-impl HonorSendResponse {
-    fn is_invalid_token(&self) -> bool {
-        self.msg.as_deref().is_some_and(looks_like_invalid_token)
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
@@ -488,7 +345,7 @@ mod tests {
                 HONOR_TOKEN_URL.to_owned(),
             ),
             endpoint: format!("{HONOR_API_BASE_URL}/12345/messages:send"),
-            config: HonorConfig {
+            config: HmsAndroidConfig {
                 channel_id: Some("messages".to_owned()),
                 ttl_seconds: Some(3600),
                 android_config: Map::new(),
@@ -513,7 +370,7 @@ mod tests {
     fn builds_request_body() {
         let device = device();
         let payload =
-            build_android_notification_payload(&notification(), Map::new(), true).unwrap();
+            build_android_notification_payload(&notification(), Map::new(), true, true).unwrap();
         let body = Value::Object(pushkin().build_request_body(&device, payload).unwrap());
 
         assert_eq!(

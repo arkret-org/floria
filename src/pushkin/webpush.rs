@@ -319,7 +319,7 @@ impl WebpushPushkin {
         })
     }
 
-    /// Stable label for the active VAPID key â€” surfaced via
+    /// Stable label for the active VAPID key — surfaced via
     /// `bridge/describe` and the `floria_webpush_vapid_active_key`
     /// gauge so operators can track rotation cadence.
     pub fn vapid_key_id(&self) -> &str {
@@ -919,7 +919,7 @@ mod tests {
         );
 
         assert!(payload.get("client").is_none());
-        // T4.3 â€” allowed blind-wakeup fields survive.
+        // T4.3 — allowed blind-wakeup fields survive.
         assert_eq!(
             payload.get("push_target_id"),
             Some(&Value::String(
@@ -932,18 +932,18 @@ mod tests {
         );
         // unread_increment travels as a bounded delta; badge is reduced
         // to a boolean unread indicator.
-        assert_eq!(payload.get("unread_count"), Some(&Value::Number(2.into())));
+        assert_eq!(payload.get("unread_count"), Some(&Value::Number(5.into())));
         assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
 
-        // T4.3 â€” stable correlation identifiers are stripped.
+        // T4.3 — stable correlation identifiers are stripped.
         for forbidden in [
             "strand_id",
             "realm_id",
             // Both the renamed security id (`realm_id`) AND the
-            // renamed container id (`space_id`) are off-wire â€” SDK
+            // renamed container id (`space_id`) are off-wire — SDK
             // sanitizer covers both since spec 59ac1d4.
             "space_id",
-            // CKP-0007 â€” Circle routing identifiers MUST NOT surface
+            // CKP-0007 — Circle routing identifiers MUST NOT surface
             // on the webpush plaintext envelope.
             "circle_id",
             "effective_scope",
@@ -970,9 +970,9 @@ mod tests {
     fn random_collapse_key_does_not_leak_scope_id() {
         let a = super::super::random_collapse_key();
         let b = super::super::random_collapse_key();
-        // Per-message randomness â€” two adjacent calls must differ.
+        // Per-message randomness — two adjacent calls must differ.
         assert_ne!(a, b);
-        // base64url alphabet only â€” no `ck:` or other typed-id substrings.
+        // base64url alphabet only — no `ck:` or other typed-id substrings.
         assert!(!a.contains(':'));
         assert!(
             a.chars()
@@ -1032,6 +1032,7 @@ mod tests {
                 &NotificationContext {
                     request_id: "test".to_owned(),
                     start_time: Instant::now(),
+                    allow_plaintext_metadata: false,
                 },
             )
             .await

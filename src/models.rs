@@ -109,7 +109,6 @@ pub trait NotificationExt {
     fn sender_label(&self) -> Option<&str>;
     fn wakeup_kind(&self) -> Option<&str>;
     fn push_hint_text(&self) -> Option<&str>;
-    fn content_body(&self) -> Option<&str>;
     fn is_low_priority(&self) -> bool;
 }
 
@@ -193,10 +192,6 @@ impl NotificationExt for PushNotification {
         self.push_hint.as_deref().and_then(non_empty)
     }
 
-    fn content_body(&self) -> Option<&str> {
-        None
-    }
-
     fn is_low_priority(&self) -> bool {
         self.priority.as_deref() == Some("low")
     }
@@ -236,6 +231,7 @@ impl DeviceExt for Device {
 pub struct NotificationContext {
     pub request_id: String,
     pub start_time: Instant,
+    pub allow_plaintext_metadata: bool,
 }
 
 fn non_empty(value: &str) -> Option<&str> {

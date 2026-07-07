@@ -41,13 +41,13 @@ use validation::{
     validate_plaintext_identity_metadata,
 };
 
-/// Round 4 â€” `reason_code=historical_only` short-circuits soland's
+/// Round 4 — `reason_code=historical_only` short-circuits soland's
 /// diagnostic replay. floria MUST NOT fan the request out a second
 /// time; it answers 200 with an empty rejected list and no provider
 /// retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
 
-/// Round 4 â€” wire reason floria attaches to a RejectedDevice when the
+/// Round 4 — wire reason floria attaches to a RejectedDevice when the
 /// device's `target_route_token` is not present in the
 /// `mention_redirect_target_route_tokens` allow-list. Used by both the
 /// device-loop reject path and the per-device dedup test that the
@@ -86,32 +86,16 @@ fn provider_timing_bucket_for_notification(notification: &PushNotification) -> D
 }
 
 fn notification_uses_high_privacy_timing(notification: &PushNotification) -> bool {
+    // The v1 notify wire format has no explicit Realm privacy-profile
+    // field. Only use signals that can actually pass ingress validation;
+    // hardened Realm cadence must be enforced by the caller until the
+    // protocol grows a closed timing/profile hint.
     notification.evaluation_locus_unresolved.unwrap_or(false)
         || notification.push_hint.as_deref() == Some("l10n_key")
         || notification
             .push_hint_l10n_key
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty())
-        || has_high_privacy_timing_hint(notification.push_hint.as_deref())
-        || has_high_privacy_timing_hint(notification.wakeup_kind.as_deref())
-        || has_high_privacy_timing_hint(notification.priority.as_deref())
-        || has_high_privacy_timing_hint(notification.membership.as_deref())
-}
-
-fn has_high_privacy_timing_hint(value: Option<&str>) -> bool {
-    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return false;
-    };
-    let value = value.to_ascii_lowercase();
-    [
-        "traffic_metadata_hardened",
-        "minimal_metadata",
-        "high_privacy",
-        "batch_wakeup",
-        "no_notification",
-    ]
-    .iter()
-    .any(|needle| value.contains(needle))
 }
 
 fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
@@ -321,12 +305,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    // Round 4 (spec a77b995) â€” short-circuit the push pipeline when
+    // Round 4 (spec a77b995) — short-circuit the push pipeline when
     // soland tells us this is a diagnostic replay
     // (`reason_code=historical_only`). We answer 200 with an empty
     // fanout body so soland's idempotency cache stays consistent but
     // no provider call is issued and no per-device dedup state is
-    // touched. Any other `reason_code` value is rejected â€” floria
+    // touched. Any other `reason_code` value is rejected — floria
     // only honors the well-known no-op shape on the request side.
     match request.reason_code.as_deref() {
         None => {}
@@ -358,16 +342,16 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     }
-    // Phase P2 (CKP-0008 / CKP-0009) â€” route Personal Agent event kinds.
+    // Phase P2 (CKP-0008 / CKP-0009) — route Personal Agent event kinds.
     //
     // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `ck.agent.{pause, resume, deactivate}` â€” durable lifecycle. Silently consumed: 200 OK +
+    //   * `ck.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
     //     zero fanout. The authoritative capability-cache invalidation path for these state changes
     //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
     //     a push.
-    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` â€”
+    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` —
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.
@@ -407,9 +391,9 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
-    // Any other `event_kind` string falls through â€” floria does not
+    // Any other `event_kind` string falls through — floria does not
     // gate non-agent kinds at this layer.
-    // Round 4 â€” route `ck.audit.policy_access{access_kind=
+    // Round 4 — route `ck.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's
     // pipeline advances. It does not do push fanout for this shape.
@@ -558,7 +542,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     match validate_notification_contract(&notification, &caller) {
         Ok(()) => {}
-        // T4.3 â€” blind profile + plaintext metadata is a precondition
+        // T4.3 — blind profile + plaintext metadata is a precondition
         // violation, not an authorization failure: the caller could
         // still have the right credentials, the request just can't
         // be carried by the blind profile they're scoped to.
@@ -604,7 +588,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
 
     if let Err(message) = validate_plaintext_identity_metadata(&notification, &caller) {
-        // T4.3 â€” same reasoning: surface `failed_precondition` when
+        // T4.3 — same reasoning: surface `failed_precondition` when
         // the failure is "wrong profile", and `capability_denied`
         // when the caller lacks the credential entirely.
         let (status, code) = if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) {
@@ -716,6 +700,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let context = NotificationContext {
         request_id: request_id.clone(),
         start_time: Instant::now(),
+        allow_plaintext_metadata: caller.allow_plaintext_metadata,
     };
 
     let mut rejected = Vec::new();
@@ -760,7 +745,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             continue;
         }
 
-        // Round 4 (spec a77b995) â€” `mention_redirect_target_route_tokens`
+        // Round 4 (spec a77b995) — `mention_redirect_target_route_tokens`
         // plaintext routing gate. When soland set a non-empty allow-list
         // the device's `target_route_token` MUST appear in it, otherwise
         // the device is fail-closed: no provider dispatch, no body
@@ -768,7 +753,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         // the wire-safe `mention_redirect_not_targeted` reason so the
         // operator can tell why the device was skipped. Devices with
         // no `target_route_token` cannot prove their inclusion in the
-        // allow-list â€” same outcome (fail-closed).
+        // allow-list — same outcome (fail-closed).
         if !notification
             .mention_redirect_target_route_tokens()
             .is_empty()
@@ -951,6 +936,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         let delivered_targets = dispatch_targets
                             .iter()
                             .filter(|target| !rejected_set.contains(&target.push_key))
+                            .cloned()
                             .collect::<Vec<_>>();
                         if !delivered_targets.is_empty() {
                             delivered_now += delivered_targets.len();
@@ -963,11 +949,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                     &context.request_id,
                                 ));
                             }
-                            mark_delivered_devices(
-                                &state,
-                                &dedup_key,
-                                delivered_targets.iter().copied(),
-                            );
+                            mark_delivered_devices(&state, &dedup_key, delivered_targets).await;
                         }
                         rejected.extend(pushkin_rejected.drain(..).map(|push_key| {
                             delivery_receipts.push(delivery_receipt(
@@ -1006,7 +988,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                 &target.push_key,
                                 retry_after,
                                 &error,
-                            );
+                            )
+                            .await;
                         }
                         first_temporary_error
                             .get_or_insert_with(|| (error.to_string(), retry_after));
@@ -1137,7 +1120,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
         if fully_settled {
-            cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
+            cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
         }
         record_notify_delivery_outcomes(&response);
         record_notify_delivery_by_scope(
@@ -1282,7 +1265,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
     if fully_settled {
-        cache_success_response(&state, &dedup_key, &request_fingerprint, &response);
+        cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
     }
     record_notify_delivery_outcomes(&response);
     record_notify_delivery_by_scope(
