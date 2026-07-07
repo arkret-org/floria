@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use cokret::{AgentEventRouting, classify_agent_event_kind, validate_push_notify_contract_shape};
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
 use salvo::prelude::*;
@@ -35,9 +36,8 @@ use helpers::{
     request_destination_service_did, resolve_idempotency_key,
 };
 use validation::{
-    AgentEventRouting, BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON,
-    classify_agent_event_kind, validate_destination_service_did, validate_notification_contract,
-    validate_notify_contract_shape, validate_origin_service_did,
+    BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_did,
+    validate_notification_contract, validate_origin_service_did,
     validate_plaintext_identity_metadata,
 };
 
@@ -280,22 +280,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     };
-    let request_value = match serde_json::to_value(&request) {
-        Ok(value) => value,
-        Err(error) => {
-            tracing::error!(error = %error, "failed to build typed request validation view");
-            finish_error(
-                res,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                cokret::error::ERROR_CODE_INTERNAL_ERROR,
-                "failed to validate typed request",
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-    };
     // SPEC-CR-016: `operation_id` is determined by the URL path
     // (operationId `ck.edge.push.command.notify`) and is no longer a body
     // field, so there is nothing to validate here.
@@ -325,7 +309,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
-    if let Err(message) = validate_notify_contract_shape(&request_value) {
+    if let Err(message) = validate_push_notify_contract_shape(&request) {
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
@@ -570,10 +554,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
 
-    let notification_object = request_value
-        .get("notification")
-        .and_then(Value::as_object)
-        .cloned();
     let notification = request.notification;
 
     match validate_notification_contract(&notification, &caller) {
@@ -623,9 +603,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     }
 
-    if let Some(notification) = notification_object.as_ref()
-        && let Err(message) = validate_plaintext_identity_metadata(notification, &caller)
-    {
+    if let Err(message) = validate_plaintext_identity_metadata(&notification, &caller) {
         // T4.3 â€” same reasoning: surface `failed_precondition` when
         // the failure is "wrong profile", and `capability_denied`
         // when the caller lacks the credential entirely.

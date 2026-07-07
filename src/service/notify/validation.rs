@@ -1,116 +1,10 @@
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use super::super::{
-    ACTIVE_EVENT_ID_PREFIX, ACTIVE_MESSAGE_ID_PREFIX, ACTIVE_REALM_ID_PREFIX,
-    ACTIVE_STRAND_ID_PREFIX,
-};
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER};
 use crate::config::NotifyAuthConfig;
 use crate::models::{DeviceExt, PushNotification};
-
-/// Parent key + leaf key pairs that are forbidden. The SDK already
-/// rejects any standalone `signature` field reaching the wire, but
-/// round-4 specifically calls out the `binding_proof.signature` and
-/// `subject_proof.signature` combinations so we add an explicit
-/// path-shaped check for them â€” both for clearer error messages and so
-/// a future sanitizer relaxation cannot accidentally re-open the
-/// proof-signature leak.
-const FORBIDDEN_PLAINTEXT_PARENT_LEAF: &[(&str, &str)] = &[
-    ("binding_proof", "signature"),
-    ("subject_proof", "signature"),
-];
-
-/// Phase P2 (CKP-0008 / CKP-0009) â€” durable Personal Agent lifecycle
-/// event kinds. When the inbound `/notify` request carries a top-level
-/// `event_kind` matching one of these, floria silently consumes the
-/// request: it answers 200 with an empty fanout body so the caller's
-/// pipeline advances, but it does not dispatch any provider push. The
-/// event is treated as an internal cache-invalidation signal only â€”
-/// the `consent_revoke` fanout (with `reason=agent_paused` /
-/// `agent_deactivated`) is the authoritative way to invalidate the
-/// per-principal capability cache. Pushing these lifecycle kinds to
-/// user devices would leak agent state into the operator surface.
-const AGENT_LIFECYCLE_SILENT_KINDS: &[&str] = &[
-    "ck.self.agent.pause",
-    "ck.self.agent.resume",
-    "ck.self.agent.deactivate",
-];
-
-/// Phase P2 â€” actor-private Personal Agent event kinds. These never
-/// reach user-device push: they're controller-private state transitions
-/// between the controller and its native agent runtime. Floria drops
-/// them with a 200 + zero-fanout ack â€” there is no partial routing
-/// implementation behind this; drop is the complete behaviour.
-const AGENT_ACTOR_PRIVATE_KINDS: &[&str] = &[
-    "ck.agent.draft.propose",
-    "ck.agent.action_request",
-    "ck.agent.action_approve",
-    "ck.agent.action_reject",
-];
-
-/// Phase P2 â€” classification of an inbound `event_kind` field. `None`
-/// means the request carries no event_kind, OR a kind that floria
-/// does not route specially (the historical default â€” fall through to
-/// the normal push fanout path).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum AgentEventRouting {
-    /// Durable agent lifecycle (`ck.agent.{pause,resume,deactivate}`):
-    /// silently consumed â€” 200 OK, no provider dispatch.
-    DurableLifecycle,
-    /// Actor-private agent kind
-    /// (`ck.agent.{draft.propose,action_request,action_approve,
-    /// action_reject}`): dropped â€” 200 OK, no provider dispatch.
-    ActorPrivateDrop,
-}
-
-/// Classify a top-level `event_kind` string against the Phase P2
-/// agent-routing table. Unknown kinds (including non-`ck.agent.*`
-/// strings and `ck.agent.*` kinds we don't yet recognize) return
-/// `None` and continue down the normal push pipeline.
-pub(super) fn classify_agent_event_kind(event_kind: &str) -> Option<AgentEventRouting> {
-    if AGENT_LIFECYCLE_SILENT_KINDS.contains(&event_kind) {
-        return Some(AgentEventRouting::DurableLifecycle);
-    }
-    if AGENT_ACTOR_PRIVATE_KINDS.contains(&event_kind) {
-        return Some(AgentEventRouting::ActorPrivateDrop);
-    }
-    None
-}
-
-/// Phase P2 â€” the seven SDK typed-id prefixes
-/// (`agent_session`, `agent_key`, `agent_draft`,
-/// `accountability_grant`, `sidecar_circle`, `backup_series`,
-/// `recovery_session`). `agent_principal_id` is a DID-as-id, not a
-/// `ck:*` typed id. Floria does not route on these today â€” none
-/// of them appear in the push-wire reference fields â€” but we keep the
-/// list here so the prefix validator is aware of them when a future
-/// notify field starts to carry one. Any caller that smuggles one of
-/// these into an `event_id` / `message_id` / `strand_id` / `realm_id` /
-/// `circle_id` slot still fails closed against the existing
-/// `validate_active_ref` gates because those slots are pinned to
-/// their own typed-id prefix (`ck:event:`, etc.).
-const PHASE_P2_AGENT_TYPED_ID_PREFIXES: &[&str] = &[
-    "ck:agent_session:",
-    "ck:agent_key:",
-    "ck:agent_draft:",
-    "ck:accountability_grant:",
-    "ck:sidecar_circle:",
-    "ck:backup_series:",
-    "ck:recovery_session:",
-];
-
-/// Phase P2 â€” returns `true` if `value` starts with one of the seven
-/// new SDK typed-id prefixes. Used by the typed-id prefix recognizer
-/// so any future routing code can ask "is this one of the new agent /
-/// sidecar / backup / recovery typed IDs?" without having to thread
-/// the SDK identifier crate into the wire-validation layer.
-pub(in crate::service) fn is_phase_p2_agent_typed_id(value: &str) -> bool {
-    PHASE_P2_AGENT_TYPED_ID_PREFIXES
-        .iter()
-        .any(|prefix| value.starts_with(prefix))
-}
 
 /// SPEC-CR-016: the originating service DID rides the `Source-Service-DID`
 /// transport header (`ORIGIN_SERVICE_DID_HEADER`), which the auth layer
@@ -179,236 +73,6 @@ pub(super) fn validate_destination_service_did(
         });
     }
 
-    Ok(())
-}
-
-pub(super) fn validate_notify_contract_shape(raw: &Value) -> Result<(), String> {
-    // Walk the inbound request for path-shaped proof-signature pairs
-    // before other contract checks so they fail with a stable schema
-    // violation.
-    reject_forbidden_plaintext_fields("", raw)?;
-
-    let Some(notification) = raw.get("notification") else {
-        return Ok(());
-    };
-    let Some(notification) = notification.as_object() else {
-        return Ok(());
-    };
-
-    // SPEC-CR-016: gateway-internal routing ids (realm_id / circle_id /
-    // mention_redirect_target_route_tokens) now live under
-    // `notification.route_tokens`. The walker reads them from there.
-    let route_tokens = notification.get("route_tokens").and_then(Value::as_object);
-
-    validate_active_notification_refs(notification)?;
-    if let Some(route_tokens) = route_tokens {
-        validate_route_tokens(route_tokens)?;
-    }
-    validate_push_target_id(notification.get("push_target_id"))?;
-    validate_wakeup_kind(notification.get("wakeup_kind"))?;
-
-    Ok(())
-}
-
-fn validate_route_tokens(route_tokens: &Map<String, Value>) -> Result<(), String> {
-    for key in [
-        "realm_route_token",
-        "scope_route_token",
-        "delivery_binding_frontier_token",
-    ] {
-        validate_push_route_token(
-            route_tokens.get(key),
-            &format!("notification.route_tokens.{key}"),
-        )?;
-    }
-
-    let Some(value) = route_tokens.get("mention_redirect_target_route_tokens") else {
-        return Ok(());
-    };
-    let Some(items) = value.as_array() else {
-        return Err(
-            "notification.route_tokens.mention_redirect_target_route_tokens must be an array of route-token strings"
-                .to_owned(),
-        );
-    };
-    for (index, item) in items.iter().enumerate() {
-        validate_push_route_token(
-            Some(item),
-            &format!("notification.route_tokens.mention_redirect_target_route_tokens[{index}]"),
-        )?;
-    }
-    Ok(())
-}
-
-/// Recursive walker that rejects any round-4-forbidden plaintext
-/// field anywhere in the JSON tree. `path` is the dotted JSON path to
-/// the current value used for error messages.
-fn reject_forbidden_plaintext_fields(path: &str, value: &Value) -> Result<(), String> {
-    match value {
-        Value::Object(map) => {
-            for (key, nested) in map {
-                let leaf = key.to_ascii_lowercase();
-                let next_path = if path.is_empty() {
-                    key.clone()
-                } else {
-                    format!("{path}.{key}")
-                };
-                if let Some(parent_key) = path.rsplit('.').next() {
-                    let parent_lower = parent_key.to_ascii_lowercase();
-                    if FORBIDDEN_PLAINTEXT_PARENT_LEAF
-                        .iter()
-                        .any(|(parent, leaf_name)| {
-                            parent.eq_ignore_ascii_case(&parent_lower)
-                                && leaf_name.eq_ignore_ascii_case(&leaf)
-                        })
-                    {
-                        return Err(format!(
-                            "field `{next_path}` is forbidden on the push wire model \
-                             (round-4 proof signature must not appear in plaintext)"
-                        ));
-                    }
-                }
-                reject_forbidden_plaintext_fields(&next_path, nested)?;
-            }
-            Ok(())
-        }
-        Value::Array(values) => {
-            for (index, nested) in values.iter().enumerate() {
-                reject_forbidden_plaintext_fields(&format!("{path}[{index}]"), nested)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-fn validate_active_notification_refs(notification: &Map<String, Value>) -> Result<(), String> {
-    validate_active_ref(
-        notification.get("event_id"),
-        "notification.event_id",
-        ACTIVE_EVENT_ID_PREFIX,
-    )?;
-    validate_active_ref(
-        notification.get("message_id"),
-        "notification.message_id",
-        ACTIVE_MESSAGE_ID_PREFIX,
-    )?;
-    validate_active_ref(
-        notification.get("strand_id"),
-        "notification.strand_id",
-        ACTIVE_STRAND_ID_PREFIX,
-    )?;
-    validate_active_ref(
-        notification.get("realm_id"),
-        "notification.realm_id",
-        ACTIVE_REALM_ID_PREFIX,
-    )?;
-    if notification.get("space_id").is_some() {
-        return Err("notification.space_id is forbidden on the push wire model".to_owned());
-    }
-
-    Ok(())
-}
-
-fn validate_push_target_id(value: Option<&Value>) -> Result<(), String> {
-    const PREFIX: &str = "ck:pseudonym:push:";
-    let Some(value) = value else {
-        return Err("notification.push_target_id is required".to_owned());
-    };
-    let Value::String(value) = value else {
-        return Err("notification.push_target_id must be a string".to_owned());
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return Err("notification.push_target_id must not be empty".to_owned());
-    }
-    let Some(token) = value.strip_prefix(PREFIX) else {
-        return Err(format!(
-            "notification.push_target_id must use `{PREFIX}*` typed IDs"
-        ));
-    };
-    if !(22..=128).contains(&token.len())
-        || !token
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
-    {
-        return Err("notification.push_target_id must be an opaque base64url token".to_owned());
-    }
-    Ok(())
-}
-
-fn validate_push_route_token(value: Option<&Value>, path: &str) -> Result<(), String> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let Value::String(value) = value else {
-        return Err(format!("{path} must be a string"));
-    };
-    let value = value.trim();
-    if value.len() < 22
-        || value.len() > 512
-        || !value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '~' | '-'))
-    {
-        return Err(format!("{path} must be an opaque route token"));
-    }
-    Ok(())
-}
-
-pub(super) fn validate_wakeup_kind(value: Option<&Value>) -> Result<(), String> {
-    let Some(value) = value else {
-        return Err("notification.wakeup_kind is required".to_owned());
-    };
-    let Value::String(value) = value else {
-        return Err("notification.wakeup_kind must be a string".to_owned());
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return Err("notification.wakeup_kind must not be empty".to_owned());
-    }
-    if !cokret::blind_payload_sanitizer::is_valid_wakeup_kind(value) {
-        return Err(format!(
-            "notification.wakeup_kind must be one of {}",
-            cokret::blind_payload_sanitizer::ALLOWED_WAKEUP_KINDS.join(", ")
-        ));
-    }
-    Ok(())
-}
-
-fn validate_active_ref(
-    value: Option<&Value>,
-    path: &str,
-    required_prefix: &str,
-) -> Result<(), String> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let Value::String(value) = value else {
-        return Err(format!("{path} must be a string"));
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(format!("{path} must not be empty"));
-    }
-    if !value.starts_with(required_prefix) {
-        // Phase P2 â€” if the value carries one of the seven
-        // agent / sidecar / backup / recovery typed-id prefixes, fail
-        // closed with a clearer error so the caller can see they're
-        // routing the wrong typed id into a push-wire slot. Floria's
-        // notify model has dedicated slots only for event / message /
-        // strand / realm / circle ids â€” the Phase-P2 typed ids never
-        // belong here.
-        if is_phase_p2_agent_typed_id(value) {
-            return Err(format!(
-                "{path} must use active `{required_prefix}*` typed IDs; got a Phase-P2 \
-                 agent / sidecar / backup / recovery typed id which has no push-wire slot"
-            ));
-        }
-        return Err(format!(
-            "{path} must use active `{required_prefix}*` typed IDs"
-        ));
-    }
     Ok(())
 }
 
@@ -501,42 +165,86 @@ fn notification_has_visible_metadata(notification: &PushNotification) -> bool {
 }
 
 pub(super) fn validate_plaintext_identity_metadata(
-    notification: &Map<String, Value>,
+    notification: &PushNotification,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if caller.allow_plaintext_metadata {
         return Ok(());
     }
 
-    for (key, value) in notification {
-        let path = format!("notification.{key}");
-        if key.eq_ignore_ascii_case("devices") {
-            continue;
-        }
-        // SPEC-CR-016 â€” `route_tokens` is the gateway-internal routing
-        // fragment (realm_id / circle_id / effective_scope /
-        // mention_redirect_target_route_tokens / delivery_binding_frontier).
-        // It legitimately carries typed routing ids and DID entries (the
-        // mention-redirect allow-list, which receivers verify WITHOUT
-        // decrypting the body), and is stripped before any provider call.
-        // The visible-identity scan (and the SDK `did:` literal block)
-        // would otherwise reject the very routing fields we're honoring,
-        // so the whole sub-object is skipped here. Its shape / DID-regex
-        // is already enforced by `validate_active_notification_refs` and
-        // `validate_mention_redirect_routing`.
-        if key.eq_ignore_ascii_case("route_tokens") {
-            continue;
-        }
-        if is_identity_metadata_key(key) && has_visible_identity_value(value) {
-            return Err(format!(
-                "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-                 plaintext identity metadata in `{path}` under the default \
-                 `ck.profile.push_gateway.blind_wakeup.v1` profile"
-            ));
-        }
-        validate_plaintext_identity_tree(&path, value)?;
+    validate_optional_plaintext_identity_string(
+        "notification.push_target_id",
+        notification.push_target_id.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.wakeup_kind",
+        notification.wakeup_kind.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.push_hint",
+        notification.push_hint.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.push_hint_l10n_key",
+        notification.push_hint_l10n_key.as_deref(),
+    )?;
+    if let Some(event_id) = notification.event_id.as_ref() {
+        validate_plaintext_identity_string("notification.event_id", event_id.as_str())?;
+    }
+    if let Some(realm_id) = notification.realm_id.as_ref() {
+        validate_plaintext_identity_string("notification.realm_id", realm_id.as_str())?;
+    }
+    if let Some(sender_actor_id) = notification.sender_actor_id.as_ref() {
+        validate_plaintext_identity_string(
+            "notification.sender_actor_id",
+            sender_actor_id.as_str(),
+        )?;
+    }
+    validate_optional_plaintext_identity_string(
+        "notification.sender_actor_display_name",
+        notification.sender_actor_display_name.as_deref(),
+    )?;
+    if let Some(strand_id) = notification.strand_id.as_ref() {
+        validate_plaintext_identity_string("notification.strand_id", strand_id.as_str())?;
+    }
+    if let Some(message_id) = notification.message_id.as_ref() {
+        validate_plaintext_identity_string("notification.message_id", message_id.as_str())?;
+    }
+    validate_optional_plaintext_identity_string(
+        "notification.strand_title",
+        notification.strand_title.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.realm_title",
+        notification.realm_title.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.priority",
+        notification.priority.as_deref(),
+    )?;
+    validate_optional_plaintext_identity_string(
+        "notification.membership",
+        notification.membership.as_deref(),
+    )?;
+
+    if let Some(badge) = notification
+        .counts
+        .as_ref()
+        .and_then(|counts| counts.badge.as_ref())
+    {
+        validate_plaintext_identity_tree("notification.counts.badge", badge)?;
     }
 
+    Ok(())
+}
+
+fn validate_optional_plaintext_identity_string(
+    path: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_plaintext_identity_string(path, value)?;
+    }
     Ok(())
 }
 

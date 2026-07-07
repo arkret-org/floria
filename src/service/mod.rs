@@ -19,28 +19,6 @@ mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
 const NOTIFY_OPERATION_ID: &str = "ck.edge.push.command.notify";
-const ACTIVE_EVENT_ID_PREFIX: &str = "ck:event:";
-const ACTIVE_MESSAGE_ID_PREFIX: &str = "ck:message:";
-const ACTIVE_STRAND_ID_PREFIX: &str = "ck:strand:";
-// Push routing is Realm-scoped with typed prefix `ck:realm:`. The push
-// wire model carries `realm_id`, never container-level `space_id`.
-const ACTIVE_REALM_ID_PREFIX: &str = "ck:realm:";
-// Round R2/R3 (2026-05-20, spec 8b7978d) — ephemeral kinds bypass
-// floria entirely. The four broadcast ephemeral signal kinds
-// (`ck.presence`, `ck.typing`, `ck.receipt.read`, `ck.call.signal`)
-// travel on dedicated `ephemeral_envelope` / device-message channels
-// in the Sync Service, are dropped at TTL, and MUST NOT enter floria's
-// durable Event-kind path. There is intentionally no code here that
-// branches on those kind strings — `wakeup_kind` on a `ck.edge.push.command.notify`
-// is a closed enum (`message` / `mention` / `reaction` / `call_invite` /
-// `reminder` / `scheduled_send` / `expiry_invalidation`),
-// so an
-// ephemeral kind cannot smuggle in via the wakeup_kind slot. If a
-// future caller ever pipes an ephemeral as a durable Event, the
-// `validate_active_notification_refs` ID-prefix gate (`ck:event:` /
-// `ck:message:` / `ck:strand:` / `ck:realm:`) is the second line of
-// defence — there is no `ck:presence:` or `ck:typing:` typed-id, so
-// the prefix check rejects it.
 
 fn notify_route(path: &'static str) -> Router {
     Router::with_path(path)
