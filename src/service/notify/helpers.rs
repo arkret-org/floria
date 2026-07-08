@@ -475,7 +475,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
 
     // Canonicalize the whole fingerprint tree via the SDK so the
     // blind-wakeup digest is byte-identical to every other cokret
-    // service (soland/yougen/chime). `canonical_json_bytes` recursively
+    // service (soland/inkson/chime). `canonical_json_bytes` recursively
     // sorts object keys and emits the v1 canonical encoding, replacing
     // floria's former local `canonical_json_value` helper.
     cokret::canonical::canonical_json_bytes(&Value::Object(normalized))

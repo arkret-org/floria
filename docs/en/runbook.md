@@ -91,7 +91,7 @@ floria can issue two profiles of notifications to a device:
 
 - **Blind wakeup** — silent / data-only notification; the device wakes
   the app, the app pulls the actual payload from the protocol layer
-  (soland / yougen), no user-visible notification is rendered by the OS.
+  (soland / inkson), no user-visible notification is rendered by the OS.
 - **Visible notification** — OS-rendered banner / sound / badge; the
   payload itself carries the displayable content.
 
