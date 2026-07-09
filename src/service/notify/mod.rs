@@ -86,11 +86,10 @@ fn provider_timing_bucket_for_notification(notification: &PushNotification) -> D
 }
 
 fn notification_uses_high_privacy_timing(notification: &PushNotification) -> bool {
-    // The v1 notify wire format has no explicit Realm privacy-profile
-    // field. Only use signals that can actually pass ingress validation;
-    // hardened Realm cadence must be enforced by the caller until the
-    // protocol grows a closed timing/profile hint.
-    notification.evaluation_locus_unresolved.unwrap_or(false)
+    notification
+        .timing_profile_hint
+        .is_some_and(cokret::PushTimingProfileHint::is_traffic_metadata_hardened)
+        || notification.evaluation_locus_unresolved.unwrap_or(false)
         || notification.push_hint.as_deref() == Some("l10n_key")
         || notification
             .push_hint_l10n_key

@@ -413,6 +413,12 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
     if let Some(value) = notification.wakeup_kind() {
         normalized.insert("wakeup_kind".to_owned(), Value::String(value.to_owned()));
     }
+    if let Some(value) = notification.timing_profile_hint {
+        normalized.insert(
+            "timing_profile_hint".to_owned(),
+            Value::String(value.as_str().to_owned()),
+        );
+    }
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
     }

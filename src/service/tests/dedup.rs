@@ -119,6 +119,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 },
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
+                "timing_profile_hint": "default",
                 "push_hint": "new_message",
                 "devices": [
                     {"device_id": "ck:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"},
@@ -133,6 +134,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 ],
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
+                "timing_profile_hint": "default",
                 "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"

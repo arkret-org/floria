@@ -265,6 +265,7 @@ fn sanitizer_strips_route_token_identifiers() {
         },
         "target_route_token": "device_route_token_000000001",
         "wakeup_kind": "message",
+        "timing_profile_hint": "traffic_metadata_hardened",
     })
     .as_object()
     .unwrap()
@@ -277,6 +278,7 @@ fn sanitizer_strips_route_token_identifiers() {
         "mention_redirect_target_route_tokens",
         "delivery_binding_frontier_token",
         "target_route_token",
+        "timing_profile_hint",
     ] {
         assert!(
             sanitized.get(forbidden).is_none(),
@@ -328,6 +330,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     let notification: Notification = serde_json::from_value(json!({
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
+        "timing_profile_hint": "default",
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
@@ -474,6 +477,7 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
         },
         "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
+        "timing_profile_hint": "default",
         "devices": [{
             "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
             "app_id": "com.example.app",

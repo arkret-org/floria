@@ -4,6 +4,7 @@
     "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",
+    "timing_profile_hint": "default",
     "push_hint": "new_message",
     "counts": {
       "unread": 1

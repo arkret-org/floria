@@ -12,6 +12,7 @@ fn notify_request_with_wakeup_kind(kind: &str) -> cokret::PushNotifyRequestBody 
         notification: cokret::PushNotificationEnvelope {
             push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some(kind.to_owned()),
+            timing_profile_hint: Some(cokret::PushTimingProfileHint::Default),
             ..cokret::PushNotificationEnvelope::default()
         },
         event_kind: None,
@@ -42,4 +43,42 @@ fn targeted_and_productivity_wakeup_kinds_match_sdk_allow_list() {
     assert!(err.contains("reminder"));
     assert!(err.contains("scheduled_send"));
     assert!(err.contains("expiry_invalidation"));
+}
+
+#[test]
+fn notify_ingress_accepts_hardened_timing_profile_hint() {
+    let request = serde_json::from_value::<cokret::PushNotifyRequestBody>(json!({
+            "notification": {
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
+                "timing_profile_hint": "traffic_metadata_hardened",
+                "devices": []
+            }
+    }))
+    .unwrap();
+    cokret::validate_push_notify_contract_shape(&request).unwrap();
+
+    assert_eq!(
+        request.notification.timing_profile_hint,
+        Some(cokret::PushTimingProfileHint::TrafficMetadataHardened)
+    );
+    assert_eq!(
+        request.notification.push_target_id.as_deref(),
+        Some("ck:pseudonym:push:01HYZ8Z000000000000000")
+    );
+}
+
+#[test]
+fn notify_ingress_rejects_unknown_timing_profile_hint() {
+    let err = serde_json::from_value::<cokret::PushNotifyRequestBody>(json!({
+            "notification": {
+                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "wakeup_kind": "message",
+                "timing_profile_hint": "minimal_metadata",
+                "devices": []
+            }
+    }))
+    .unwrap_err();
+
+    assert!(err.to_string().contains("traffic_metadata_hardened"));
 }

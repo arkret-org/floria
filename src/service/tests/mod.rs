@@ -274,6 +274,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": devices
         }

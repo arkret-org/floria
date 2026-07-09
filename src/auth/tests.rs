@@ -123,6 +123,7 @@ async fn http_message_signature_authenticates_notify_request() {
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
                 "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
@@ -178,6 +179,7 @@ async fn mtls_profile_authenticates_notify_request() {
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
                 "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
@@ -234,6 +236,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
                 "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
@@ -300,6 +303,7 @@ async fn rejects_tampered_body() {
             },
             "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
                 "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",

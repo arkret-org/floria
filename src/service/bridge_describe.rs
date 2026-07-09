@@ -99,6 +99,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             active_reference_fields: vec![
                 "notification.push_target_id".to_owned(),
                 "notification.wakeup_kind".to_owned(),
+                "notification.timing_profile_hint".to_owned(),
             ],
         },
         provider_capabilities_version: Some(PROVIDER_CAPABILITIES_VERSION.to_owned()),
@@ -208,6 +209,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "notification": {
                     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
+                    "timing_profile_hint": "default",
                     "push_hint": "new_message",
                     "counts": {"badge": "2-5"}
                 }
@@ -220,6 +222,9 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                     "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
                     "strand_id": "ck:strand:01964000-0000-7000-8000-000000000000",
                     "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
+                    "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                    "wakeup_kind": "message",
+                    "timing_profile_hint": "default",
                     "push_hint": "new_message",
                     "counts": {"unread_increment": 1},
                     "devices": [{

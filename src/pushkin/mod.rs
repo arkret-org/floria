@@ -546,6 +546,7 @@ pub fn sanitized_provider_payload(
         "notification": {
             "push_target_id": "ck:pseudonym:push:0000000000000000000000",
             "wakeup_kind": "message",
+            "timing_profile_hint": "default",
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
@@ -785,6 +786,7 @@ mod sanitize_tests {
         let payload = json!({
             "client": "android",
             "wakeup_kind": "message",
+            "timing_profile_hint": "traffic_metadata_hardened",
             "appeal_id": "01904100-0000-7000-8000-000000000001",
             "attestation_evidence": "evidence-blob-ref",
             "audit_purpose": "compliance_lawful_access",
@@ -809,6 +811,7 @@ mod sanitize_tests {
             "policy_frontier_digest",
             "trust_domain",
             "reset_event_id",
+            "timing_profile_hint",
         ] {
             assert!(
                 out.get(forbidden).is_none(),

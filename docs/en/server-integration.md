@@ -53,6 +53,7 @@ The caller should set:
     "realm_id": "ck:realm:01JS0SP000000000000000000",
     "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",
+    "timing_profile_hint": "default",
     "push_hint": "new_message",
     "devices": [
       {
