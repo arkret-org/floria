@@ -146,7 +146,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         "x_floria_privacy_derivation".to_owned(),
         json!({
             "push_target_id": {
-                "derivation_profile": "ck.push_target_id.hmac_sha256.v1",
+                "derivation_profile": "ak.push_target_id.hmac_sha256.v1",
                 "secret_scope": "per_service"
             }
         }),
@@ -249,16 +249,16 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
 }
 
 /// Base push-gateway profile id.
-pub(super) const PROFILE_PUSH_GATEWAY: &str = "ck.profile.push_gateway.v1";
+pub(super) const PROFILE_PUSH_GATEWAY: &str = "ak.profile.push_gateway.v1";
 /// Mandatory default-interop privacy baseline. Spec (push-notifications.md
 /// §0, conformance-profiles.json) — any implementation claiming
 /// `ck.profile.push_gateway.v1` MUST also claim this profile.
-pub(super) const PROFILE_BLIND_WAKEUP: &str = "ck.profile.push_gateway.blind_wakeup.v1";
+pub(super) const PROFILE_BLIND_WAKEUP: &str = "ak.profile.push_gateway.blind_wakeup.v1";
 /// Opt-in visible-payload profile. Only advertised when the gateway is
 /// configured with a plaintext-eligible service surface
 /// (`describe_plaintext_visibility == "service-gated"`).
 pub(super) const PROFILE_VISIBLE_NOTIFICATION: &str =
-    "ck.profile.push_gateway.visible_notification.v1";
+    "ak.profile.push_gateway.visible_notification.v1";
 
 /// Profiles the gateway actually supports and gates on, in claim order.
 /// The base profile and its mandatory blind-wakeup baseline are always

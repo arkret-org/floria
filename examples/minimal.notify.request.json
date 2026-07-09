@@ -1,5 +1,5 @@
 {
-  "operation_id": "ck.edge.push.command.notify",
+  "operation_id": "ak.edge.push.command.notify",
   "notification": {
     "realm_id": "ak:realm:01964000-0000-7000-8000-000000000000",
     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",

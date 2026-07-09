@@ -18,7 +18,7 @@ mod notify;
 mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
-const NOTIFY_OPERATION_ID: &str = "ck.edge.push.command.notify";
+const NOTIFY_OPERATION_ID: &str = "ak.edge.push.command.notify";
 
 fn notify_route(path: &'static str) -> Router {
     Router::with_path(path)

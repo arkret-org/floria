@@ -64,8 +64,8 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(
         body["supported_profiles"],
         json!([
-            "ck.profile.push_gateway.v1",
-            "ck.profile.push_gateway.blind_wakeup.v1"
+            "ak.profile.push_gateway.v1",
+            "ak.profile.push_gateway.blind_wakeup.v1"
         ])
     );
     assert_eq!(
@@ -278,7 +278,7 @@ async fn integration_describe_lists_operational_surfaces() {
     );
     assert_eq!(
         push_notify_surface["contract"],
-        json!("ck.edge.push.command.notify")
+        json!("ak.edge.push.command.notify")
     );
 
     let metrics_surface = surfaces
@@ -423,7 +423,7 @@ async fn notify_rejects_operation_id_in_body() {
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "ck.edge.push.command.notify",
+            "ak.edge.push.command.notify",
         ))
         .send(&service)
         .await;

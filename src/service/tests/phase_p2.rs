@@ -27,7 +27,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.self.agent.pause");
+    body["event_kind"] = json!("ak.self.agent.pause");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)
@@ -53,7 +53,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.self.agent.resume");
+    body["event_kind"] = json!("ak.self.agent.resume");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)
@@ -76,7 +76,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
-    body["event_kind"] = json!("ck.self.agent.deactivate");
+    body["event_kind"] = json!("ak.self.agent.deactivate");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)
@@ -95,10 +95,10 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
 #[tokio::test]
 async fn agent_actor_private_kinds_are_dropped_without_fanout() {
     for kind in [
-        "ck.agent.draft.propose",
-        "ck.agent.action_request",
-        "ck.agent.action_approve",
-        "ck.agent.action_reject",
+        "ak.agent.draft.propose",
+        "ak.agent.action_request",
+        "ak.agent.action_approve",
+        "ak.agent.action_reject",
     ] {
         let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
         let calls = pushkin.calls.clone();
@@ -143,7 +143,7 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["event_kind"] = json!("ck.message");
+    body["event_kind"] = json!("ak.message");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)

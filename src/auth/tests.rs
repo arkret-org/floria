@@ -355,7 +355,7 @@ async fn rejects_signature_missing_required_components() {
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     let service = test_service_with_principal(principal);
-    let body = json!({"operation_id": "ck.edge.push.command.notify"});
+    let body = json!({"operation_id": "ak.edge.push.command.notify"});
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
     let seed = hex::decode(seed_hex).unwrap();

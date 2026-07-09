@@ -42,7 +42,7 @@ The caller should set:
 
 ```json
 {
-  "operation_id": "ck.edge.push.command.notify",
+  "operation_id": "ak.edge.push.command.notify",
   "idempotency_key": "notify-01J...",
   "origin_service_did": "did:web:sync.example.com",
   "destination_service_did": "did:web:push.example.com",

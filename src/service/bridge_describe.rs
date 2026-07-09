@@ -57,7 +57,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         .unwrap_or_default();
 
     let body = PushBridgeDescribeOutcome {
-        contract: "ck.push.bridge.describe".to_owned(),
+        contract: "ak.push.bridge.describe".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the
         // arkret-spec revision the SDK is compiled against) and from the

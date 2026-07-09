@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
         let request: arkret::PushNotifyRequestBody = serde_json::from_value(json!({
-            "event_kind": "ck.message",
+            "event_kind": "ak.message",
             "notification": {
                 "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
@@ -323,7 +323,7 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(request.event_kind.as_deref(), Some("ck.message"));
+        assert_eq!(request.event_kind.as_deref(), Some("ak.message"));
         assert_eq!(
             request.notification.realm_id(),
             Some("ak:realm:0196419b-0000-7000-8000-000000000003")
