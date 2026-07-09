@@ -9,7 +9,7 @@ use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
-/// FLORIA-01 — `GET /_cokret/describe` MUST emit the canonical
+/// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
 /// `ServiceDescribe` (`arkret::ServiceDescribe` = `ServerDescription`)
 /// defined by `service-describe.schema.json`, not a push-gateway-private
 /// shape. The push-private matrix (provider list, auth modes, dedup,

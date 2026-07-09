@@ -91,7 +91,7 @@ http {
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
-    //     service_endpoint "https://push.example.com/_cokret/edge/push/notify"
+    //     service_endpoint "https://push.example.com/_arkret/edge/push/notify"
     //     require_mtls true
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
@@ -167,7 +167,7 @@ http {
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
-        service_endpoint "https://push.example.com/_cokret/edge/push/notify"
+        service_endpoint "https://push.example.com/_arkret/edge/push/notify"
         require_mtls true
         mtls_cert_fingerprints "aa:bb:cc"
       }
@@ -184,7 +184,7 @@ http {
 }
 ```
 
-生产部署时，应让 `/_cokret/edge/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
+生产部署时，应让 `/_arkret/edge/push/notify` 始终处于 service-to-service 鉴权之后，定期轮换 bearer 回退 secret，对命名 service principal 启用 HTTP Message Signature，并结合 `/ready` 健康检查和 Redis 去重支撑多实例部署。
 
 > **生产模式要求（P5）**：生产环境不要配置明文
 > `bearer_tokens`。开启 `production_mode=true` 后，floria 会在配置校验阶段拒绝

@@ -28,7 +28,7 @@
 # `ssl_verify_client optional_no_ca` lets unauthenticated `/health`
 # probes skip the cert check; `optional` would force a chain check
 # even on health probes. floria's mTLS profile only matters on
-# `/_cokret/edge/push/notify`, so we hand the verification result through
+# `/_arkret/edge/push/notify`, so we hand the verification result through
 # explicitly with `$ssl_client_verify` and let the gateway enforce.
 
 http {
@@ -89,7 +89,7 @@ http {
         proxy_set_header X-Client-Certificate-SHA256     $client_cert_sha256;
         proxy_set_header X-Client-Certificate-Subject    $ssl_client_s_dn;
 
-        location /_cokret/edge/push/notify {
+        location /_arkret/edge/push/notify {
             proxy_pass http://floria-upstream;
         }
 

@@ -11,7 +11,7 @@
     }
   ],
   "paths": {
-    "/_cokret/edge/push/notify": {
+    "/_arkret/edge/push/notify": {
       "post": {
         "operationId": "notify",
         "summary": "Submit a minimized push wakeup request",

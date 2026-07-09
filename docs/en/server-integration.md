@@ -11,7 +11,7 @@ Use these unauthenticated discovery endpoints during rollout:
 |----------|---------|
 | `GET /_floria/integration/describe` | Lists supported integration surfaces and readiness checks |
 | `GET /_floria/push/bridge/describe` | Lists provider capability metadata for configured bridge clients |
-| `GET /_cokret/describe` | Gateway profile and operational feature snapshot at the root meta position |
+| `GET /_arkret/describe` | Gateway profile and operational feature snapshot at the root meta position |
 | `GET /ready` | Lightweight process readiness |
 | `GET /readyz` | Strict readiness, including provider registry and reachable Redis-backed dependencies |
 
@@ -38,7 +38,7 @@ The caller should set:
 
 ## Notify Request
 
-`POST /_cokret/edge/push/notify` accepts `ck.edge.push.command.notify` envelopes:
+`POST /_arkret/edge/push/notify` accepts `ck.edge.push.command.notify` envelopes:
 
 ```json
 {

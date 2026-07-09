@@ -110,7 +110,7 @@ http {
     //     bearer_token_hashes "sha256:<hex-digest>"
     //     signature_key_id "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
-    //     service_endpoint "https://push.example.com/_cokret/edge/push/notify"
+    //     service_endpoint "https://push.example.com/_arkret/edge/push/notify"
     //     require_mtls true
     //     mtls_cert_fingerprints "aa:bb:cc"
     //   }
@@ -186,7 +186,7 @@ http {
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
-        service_endpoint "https://push.example.com/_cokret/edge/push/notify"
+        service_endpoint "https://push.example.com/_arkret/edge/push/notify"
         require_mtls true
         mtls_cert_fingerprints "aa:bb:cc"
       }
@@ -203,7 +203,7 @@ http {
 }
 ```
 
-In production, keep `/_cokret/edge/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
+In production, keep `/_arkret/edge/push/notify` behind service-to-service auth, rotate bearer fallback secrets, use HTTP Message Signatures for named service principals, and pair the gateway DID with `/ready` health checks plus Redis-backed dedup for multi-instance deployments.
 
 > **Production-mode requirement (P5)**: do not configure plaintext
 > `bearer_tokens` in production. With `production_mode=true`, floria

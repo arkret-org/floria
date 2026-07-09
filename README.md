@@ -82,8 +82,8 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 
 ## Supported features
 
-- `POST /_cokret/edge/push/notify` as the canonical Arkret notify endpoint
-- `GET /_cokret/describe` gateway profile discovery at the root meta position
+- `POST /_arkret/edge/push/notify` as the canonical Arkret notify endpoint
+- `GET /_arkret/describe` gateway profile discovery at the root meta position
 - `GET /health`
 - `GET /ready`
 - `GET /readyz`
@@ -138,7 +138,7 @@ Quick notes:
 
 ## Arkret notify semantics
 
-- `/_cokret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
+- `/_arkret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
 - `ck.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected

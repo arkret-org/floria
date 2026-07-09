@@ -3,7 +3,7 @@
 //! These routes are intended for the soland-broadcast channel (or an
 //! equivalent in-process message bus). They are exposed under
 //! `/_floria/internal/...` and intentionally do NOT share the public
-//! `/_cokret/edge/push/notify` request shape. They are protected by the
+//! `/_arkret/edge/push/notify` request shape. They are protected by the
 //! `http.internal_auth` bearer/shared-secret profile and fail closed
 //! when no internal credential is configured.
 

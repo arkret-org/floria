@@ -15,7 +15,7 @@ async fn notify_accepts_authenticated_allowlisted_service() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -41,7 +41,7 @@ async fn notify_requires_bearer_token_when_auth_enabled() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -64,7 +64,7 @@ async fn notify_rejects_invalid_bearer_token() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer wrong-token", true)
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
@@ -91,7 +91,7 @@ async fn notify_accepts_hashed_bearer_token() {
         config,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -118,7 +118,7 @@ async fn notify_rejects_query_string_auth_material() {
     );
 
     let mut response =
-        TestClient::post("http://127.0.0.1/_cokret/edge/push/notify?access_token=secret-token")
+        TestClient::post("http://127.0.0.1/_arkret/edge/push/notify?access_token=secret-token")
             .add_header("authorization", "Bearer secret-token", true)
             .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
             .add_header(
@@ -148,7 +148,7 @@ async fn notify_rejects_bearer_without_origin_service_did() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
@@ -172,7 +172,7 @@ async fn notify_rejects_non_allowlisted_origin_service_did() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
@@ -202,7 +202,7 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
         restricted_notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -240,7 +240,7 @@ async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&visible_payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -275,7 +275,7 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
     // earlier rejection than the old blind-profile plaintext gate.
     request_body["notification"]["sender"] = json!("@alice:example.com");
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -308,7 +308,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         "target_did": "did:web:bob.example.com"
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -350,7 +350,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         }
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -389,7 +389,7 @@ async fn notify_rejects_mismatched_destination_service_did() {
         notify_auth_config(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -433,7 +433,7 @@ async fn production_mode_rejects_anonymous_requests() {
         config,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -463,7 +463,7 @@ async fn production_mode_rejects_bearer_only_principal() {
         config,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -495,7 +495,7 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
         config,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer gateway-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
@@ -537,7 +537,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
         config,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(

@@ -12,7 +12,7 @@ async fn accepted_devices_are_not_rejected() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -28,7 +28,7 @@ async fn notify_endpoint_accepts_active_payload_shape() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -44,7 +44,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .send(&service)
         .await;
 
@@ -96,7 +96,7 @@ async fn describe_separates_claim_levels() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -163,7 +163,7 @@ async fn describe_does_not_advertise_media_token_self_issue() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -199,7 +199,7 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
         auth,
     );
 
-    let mut response = TestClient::get("http://127.0.0.1/_cokret/describe")
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -216,15 +216,15 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
 #[tokio::test]
 async fn gateway_describe_lives_at_root_meta_position() {
     // The gateway profile advertisement lives only at the root meta
-    // position GET /_cokret/describe (openapi: "advertisement lives at
-    // the root meta position /_cokret/describe"). There is no
+    // position GET /_arkret/describe (openapi: "advertisement lives at
+    // the root meta position /_arkret/describe"). There is no
     // protocol-surface push-specific describe operation.
     let service = test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut server_response = TestClient::get("http://127.0.0.1/_cokret/describe")
+    let mut server_response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .send(&service)
         .await;
     assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
@@ -235,9 +235,9 @@ async fn gateway_describe_lives_at_root_meta_position() {
         json!(NOTIFY_OPERATION_ID)
     );
 
-    // The self-made /_cokret/edge/push/describe path MUST NOT exist;
+    // The self-made /_arkret/edge/push/describe path MUST NOT exist;
     // ck.edge.push.* registers only register/unregister/notify.
-    let push_describe = TestClient::get("http://127.0.0.1/_cokret/edge/push/describe")
+    let push_describe = TestClient::get("http://127.0.0.1/_arkret/edge/push/describe")
         .send(&service)
         .await;
     assert_eq!(push_describe.status_code.unwrap(), StatusCode::NOT_FOUND);
@@ -274,7 +274,7 @@ async fn integration_describe_lists_operational_surfaces() {
         .expect("push_notify surface");
     assert_eq!(
         push_notify_surface["path"],
-        json!("/_cokret/edge/push/notify")
+        json!("/_arkret/edge/push/notify")
     );
     assert_eq!(
         push_notify_surface["contract"],
@@ -397,7 +397,7 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -420,7 +420,7 @@ async fn notify_rejects_operation_id_in_body() {
     // rejected as an unknown field (deny_unknown_fields), not validated.
     let service = test_service(vec![]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
             "ck.edge.push.command.notify",
@@ -436,7 +436,7 @@ async fn notify_rejects_operation_id_in_body() {
 async fn notify_method_not_allowed_returns_standard_error_envelope() {
     let service = test_service(vec![]);
 
-    let mut get_response = TestClient::get("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut get_response = TestClient::get("http://127.0.0.1/_arkret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(
@@ -452,7 +452,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
     );
     assert_notify_error(&mut get_response, "method_not_allowed", false).await;
 
-    let mut put_response = TestClient::put("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut put_response = TestClient::put("http://127.0.0.1/_arkret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(
@@ -461,7 +461,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
     );
     assert_notify_error(&mut put_response, "method_not_allowed", false).await;
 
-    let mut delete_response = TestClient::delete("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut delete_response = TestClient::delete("http://127.0.0.1/_arkret/edge/push/notify")
         .send(&service)
         .await;
     assert_eq!(

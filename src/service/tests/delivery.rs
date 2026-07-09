@@ -13,7 +13,7 @@ async fn rejected_devices_are_reported() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Reject)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "reject")]))
         .send(&service)
         .await;
@@ -41,7 +41,7 @@ async fn ambiguous_app_ids_are_rejected() {
         ),
     ]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "spqr")]))
         .send(&service)
         .await;
@@ -66,7 +66,7 @@ async fn remote_errors_map_to_502() {
         )),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "remote")]))
         .send(&service)
         .await;
@@ -84,7 +84,7 @@ async fn internal_errors_map_to_500() {
         )),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "boom")]))
         .send(&service)
         .await;
@@ -105,7 +105,7 @@ async fn temporary_errors_map_to_503_with_retry_after() {
         )),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "retry")]))
         .send(&service)
         .await;
@@ -130,7 +130,7 @@ async fn oversized_requests_are_rejected() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .text("x".repeat(MAX_REQUEST_SIZE + 1))
         .send(&service)
         .await;
@@ -149,10 +149,10 @@ async fn per_pushkin_concurrency_limit_returns_502() {
         )),
     )]);
 
-    let request_a = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let request_a = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service);
-    let request_b = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let request_b = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service);
 
@@ -173,7 +173,7 @@ async fn duplicate_devices_are_dispatched_only_once() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Reject)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![
             device("com.example.app", "dup"),
             device("com.example.app", "dup"),
@@ -198,7 +198,7 @@ async fn blank_device_fields_are_rejected_without_dispatch() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![
             device("   ", "blank-app"),
             device("com.example.app", "   "),
@@ -235,7 +235,7 @@ async fn mixed_success_and_temporary_failure_returns_200() {
         ),
     ]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![
             device("com.example.ok", "ok"),
             device("com.example.retry", "retry"),
@@ -257,7 +257,7 @@ async fn all_temporary_failures_still_return_503() {
         )),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&payload(vec![device("com.example.retry", "retry")]))
         .send(&service)
         .await;
@@ -296,13 +296,13 @@ async fn partial_success_retries_only_failed_devices() {
         device("com.example.retry", "retry"),
     ]);
 
-    let first = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&request_body)
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let second = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&request_body)
         .send(&service)
         .await;

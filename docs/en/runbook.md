@@ -177,5 +177,5 @@ re-signing, or mutating tokens. See
 the Chinese summary of this decision and the rationale.
 
 There is no local media-token signing module in floria. If you see floria
-attempting to mint a token locally, or `/_cokret/describe` advertising an
+attempting to mint a token locally, or `/_arkret/describe` advertising an
 RTC/media token self-issue feature, that is a bug.

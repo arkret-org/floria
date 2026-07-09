@@ -23,7 +23,7 @@ async fn sanitizer_rejects_binding_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;
@@ -45,7 +45,7 @@ async fn sanitizer_rejects_subject_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .json(&body)
         .send(&service)
         .await;

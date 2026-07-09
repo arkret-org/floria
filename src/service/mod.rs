@@ -30,7 +30,7 @@ fn notify_route(path: &'static str) -> Router {
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
-        .push(notify_route("_cokret/edge/push/notify"))
+        .push(notify_route("_arkret/edge/push/notify"))
         .push(
             Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),
@@ -39,7 +39,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("_cokret/describe").get(server_describe::describe))
+        .push(Router::with_path("_arkret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
             Router::with_path("_floria/internal/account_deactivate_fanout")
@@ -71,7 +71,7 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
     let use_forwarded_for = access_log.x_forwarded_for;
     Router::with_hoop(affix_state::inject(state))
         .hoop(AccessLogger { use_forwarded_for })
-        .push(notify_route("_cokret/edge/push/notify"))
+        .push(notify_route("_arkret/edge/push/notify"))
         .push(
             Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),
@@ -80,7 +80,7 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
             Router::with_path("_floria/push/bridge/describe")
                 .get(bridge_describe::bridge_describe),
         )
-        .push(Router::with_path("_cokret/describe").get(server_describe::describe))
+        .push(Router::with_path("_arkret/describe").get(server_describe::describe))
         // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
         .push(
             Router::with_path("_floria/internal/account_deactivate_fanout")

@@ -42,7 +42,7 @@ http:
     #       - sha256:<hex-digest>
     #     signature_key_id: did:web:sync.example.com#push
     #     signature_public_key_hex: replace-with-ed25519-public-key-hex
-    #     service_endpoint: https://push.example.com/_cokret/edge/push/notify
+    #     service_endpoint: https://push.example.com/_arkret/edge/push/notify
     #     require_mtls: true
     #     mtls_cert_fingerprints:
     #       - aa:bb:cc

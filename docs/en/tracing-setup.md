@@ -90,7 +90,7 @@ floria attaches these to every `/notify` span:
 | Attribute | Value |
 |-----------|-------|
 | `http.method` | `POST` |
-| `http.target` | `/_cokret/edge/push/notify` |
+| `http.target` | `/_arkret/edge/push/notify` |
 | `floria.request_id` | per-request UUID |
 | `floria.origin_service_did` | resolved origin DID |
 | `floria.app_id` | target app id |

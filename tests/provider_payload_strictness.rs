@@ -10,7 +10,7 @@
 //!
 //!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
 //!      include forbidden keys and assert that they are stripped (or the request is rejected).
-//!   2. **Profile gating** — drive the `/_cokret/edge/push/notify` HTTP handler with blind-profile
+//!   2. **Profile gating** — drive the `/_arkret/edge/push/notify` HTTP handler with blind-profile
 //!      callers carrying plaintext metadata and assert that the response is `failed_precondition`
 //!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
 //!      earlier as an unknown product-private field.
@@ -503,7 +503,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
             .clone(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -541,7 +541,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
             .clone(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -579,7 +579,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
     );
     body["notification"]["devices"][0]["visible_notification_opt_in"] = json!(true);
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -613,7 +613,7 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
         .clone(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -651,7 +651,7 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
         .clone(),
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -680,7 +680,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
     let service = blind_profile_service();
     let body = blind_payload(serde_json::Map::new());
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(

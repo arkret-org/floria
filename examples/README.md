@@ -7,7 +7,7 @@ request.
 Files:
 
 - `minimal.kdl`: minimal KDL config with one FCM HTTP v1 pushkin entry
-- `minimal.notify.request.json`: canonical `/_cokret/edge/push/notify` request body
+- `minimal.notify.request.json`: canonical `/_arkret/edge/push/notify` request body
 - `compose.yml`: Docker Compose example for a fuller local deployment
 - `reverse-proxy/`: nginx and Caddy samples for TLS termination + mTLS trust root chain (see [`docs/en/reverse-proxy.md`](../docs/en/reverse-proxy.md))
 
@@ -20,7 +20,7 @@ FLORIA_CONF=examples/minimal.kdl cargo run
 Send the example request from another shell:
 
 ```sh
-curl -X POST http://127.0.0.1:5000/_cokret/edge/push/notify \
+curl -X POST http://127.0.0.1:5000/_arkret/edge/push/notify \
   -H "content-type: application/json" \
   --data @examples/minimal.notify.request.json
 ```

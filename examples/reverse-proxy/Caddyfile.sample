@@ -39,7 +39,7 @@ push.example.com {
         }
     }
 
-    handle /_cokret/edge/push/notify* {
+    handle /_arkret/edge/push/notify* {
         reverse_proxy floria:5000 {
             # Strip any client-supplied copies first so an upstream
             # caller cannot forge their own mTLS context.

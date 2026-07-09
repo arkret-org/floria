@@ -2,7 +2,7 @@
 
 floria exposes a small set of routes under `/_floria/internal/*` that
 are intended for in-cluster service-to-service traffic only. They are
-NOT the public `/_cokret/edge/push/notify` surface and they have a
+NOT the public `/_arkret/edge/push/notify` surface and they have a
 different auth and rate-limit posture.
 
 ## Routes
@@ -26,7 +26,7 @@ closed with `503 service_unavailable`; missing or invalid credentials
 return `401 unauthenticated`.
 
 Prefer `bearer_token_hashes` in production configs and rotate the
-shared secret independently from `/_cokret/edge/push/notify` caller
+shared secret independently from `/_arkret/edge/push/notify` caller
 credentials. Network isolation and service-mesh mTLS are still
 recommended defense-in-depth controls, but the handlers no longer rely
 on ingress topology for their only authorization boundary.

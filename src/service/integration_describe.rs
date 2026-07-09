@@ -73,18 +73,18 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationSurfaceDescriptor {
                 name: "push_notify",
                 method: "POST",
-                path: "/_cokret/edge/push/notify",
+                path: "/_arkret/edge/push/notify",
                 contract: "ck.edge.push.command.notify",
                 stability: "active",
-                description: "POST /_cokret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
+                description: "POST /_arkret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
             },
             IntegrationSurfaceDescriptor {
                 name: "gateway_describe",
                 method: "GET",
-                path: "/_cokret/describe",
+                path: "/_arkret/describe",
                 contract: "ck.profile.push_gateway.v1",
                 stability: "active",
-                description: "GET /_cokret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
+                description: "GET /_arkret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
             },
             IntegrationSurfaceDescriptor {
                 name: "health",
@@ -133,7 +133,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 },
                 "step_3": {
                     "service": "floria",
-                    "path": "/_cokret/edge/push/notify",
+                    "path": "/_arkret/edge/push/notify",
                     "method": "POST"
                 }
             }

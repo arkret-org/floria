@@ -136,12 +136,12 @@ async fn http_message_signature_authenticates_notify_request() {
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
         "POST",
-        "http://127.0.0.1/_cokret/edge/push/notify",
+        "http://127.0.0.1/_arkret/edge/push/notify",
         "127.0.0.1",
         &body_bytes,
     );
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -192,12 +192,12 @@ async fn mtls_profile_authenticates_notify_request() {
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
         "POST",
-        "http://127.0.0.1/_cokret/edge/push/notify",
+        "http://127.0.0.1/_arkret/edge/push/notify",
         "127.0.0.1",
         &body_bytes,
     );
 
-    let response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -249,12 +249,12 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
         "POST",
-        "http://127.0.0.1/_cokret/edge/push/notify",
+        "http://127.0.0.1/_arkret/edge/push/notify",
         "127.0.0.1",
         &body_bytes,
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -318,13 +318,13 @@ async fn rejects_tampered_body() {
     let (content_digest, signature_input, signature) = sign_request(
         seed_hex,
         "POST",
-        "http://127.0.0.1/_cokret/edge/push/notify",
+        "http://127.0.0.1/_arkret/edge/push/notify",
         "127.0.0.1",
         &body_bytes,
     );
     let tampered_body = json!({"hello": "world"});
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -378,7 +378,7 @@ async fn rejects_signature_missing_required_components() {
     );
     let signing_string = [
         "\"@method\": post".to_owned(),
-        "\"@target-uri\": http://127.0.0.1/_cokret/edge/push/notify".to_owned(),
+        "\"@target-uri\": http://127.0.0.1/_arkret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
         "\"x-arkret-origin-service-did\": did:web:sync.example.com".to_owned(),
         "\"x-arkret-destination-service-did\": did:web:push.example.com".to_owned(),
@@ -395,7 +395,7 @@ async fn rejects_signature_missing_required_components() {
         base64::engine::general_purpose::STANDARD.encode(signature.to_bytes())
     );
 
-    let mut response = TestClient::post("http://127.0.0.1/_cokret/edge/push/notify")
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", digest, true)
         .add_header("signature-input", signature_input, true)

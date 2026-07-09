@@ -7,7 +7,7 @@ audit report; it records what must be ready before scheduling review.
 
 Review focus:
 
-1. `/_cokret/edge/push/notify` authentication, including HTTP Message Signatures,
+1. `/_arkret/edge/push/notify` authentication, including HTTP Message Signatures,
    bearer fallback, mTLS header binding, and production-mode constraints.
 2. Replay protection: nonce store, idempotency keys, Redis failure behavior,
    and dedup collision handling.
@@ -113,7 +113,7 @@ implemented:
    tokens only.
 2. **MEDIA-FLO-1..3 self-issue** — floria v1 does not self-sign media
    tokens. The media token code path was removed from floria;
-   `/_cokret/describe` does not advertise an RTC/media token
+   `/_arkret/describe` does not advertise an RTC/media token
    self-issue feature, and the production router does not expose a
    public `/rtc/token` minting route. The canonical issuer remains
    soland unless a future release wires a real media-service keystore.
