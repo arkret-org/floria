@@ -50,7 +50,7 @@
 #
 # Ports
 # -----
-#   5000 – HTTP API  (cokret push gateway endpoint)
+#   5000 – HTTP API  (arkret push gateway endpoint)
 #   8000 – Prometheus metrics (enable in config under metrics > prometheus)
 
 services:

@@ -295,7 +295,7 @@ proxy "http://user:pass@proxy.example.com:8080"
 
 ## `apps` — 推送通道
 
-`apps` 下的每个子节点以 cokret `app_id` 为键。`app_id` 可以是精确字符串或 glob 通配符模式（如 `com.example.*`）。
+`apps` 下的每个子节点以 arkret `app_id` 为键。`app_id` 可以是精确字符串或 glob 通配符模式（如 `com.example.*`）。
 
 所有 provider 均接受以下公共字段：
 

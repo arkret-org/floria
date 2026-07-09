@@ -19,7 +19,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
-use cokret::push_gateway_api::ProviderCapabilityDescriptor;
+use arkret::push_gateway_api::ProviderCapabilityDescriptor;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;
@@ -544,13 +544,13 @@ pub fn sanitized_provider_payload(
     strip_forbidden_recursive(&mut payload);
     let envelope = serde_json::json!({
         "notification": {
-            "push_target_id": "ck:pseudonym:push:0000000000000000000000",
+            "push_target_id": "ak:pseudonym:push:0000000000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
-    if let Err(err) = cokret::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
+    if let Err(err) = arkret::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
         return Err(ProviderPayloadRejection {
             field_path: err.field_path,
             reason_code: err.reason_code.as_str().to_owned(),
@@ -621,7 +621,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` as a boolean unread indicator, plus bucketed `unread_count`
 pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
-    use cokret::blind_payload_sanitizer as sdk;
+    use arkret::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
     if let Some(push_target_id) = notification.push_target_id.as_deref()
@@ -729,7 +729,7 @@ mod sanitize_tests {
     fn sanitized_provider_payload_strips_event_id() {
         let payload = json!({
             "client": "android",
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
             "wakeup_kind": "message",
         })
         .as_object()
@@ -877,20 +877,20 @@ mod sanitize_tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
             ),
             strand_id: Some(
-                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: None,
-            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
@@ -945,6 +945,6 @@ mod sanitize_tests {
         let a = random_collapse_key();
         let b = random_collapse_key();
         assert_ne!(a, b);
-        assert!(!a.contains("ck:"));
+        assert!(!a.contains("ak:"));
     }
 }

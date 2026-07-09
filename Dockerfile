@@ -12,7 +12,7 @@ FROM rust:1.92-bookworm AS deps
 
 WORKDIR /app
 
-COPY --from=cokret-rust-sdk . /cokret-rust-sdk
+COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 
 RUN mkdir -p src \
@@ -36,7 +36,7 @@ FROM rust:1.92-bookworm AS builder
 WORKDIR /app
 
 COPY --from=deps /usr/local/cargo /usr/local/cargo
-COPY --from=cokret-rust-sdk . /cokret-rust-sdk
+COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 

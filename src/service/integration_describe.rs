@@ -39,7 +39,7 @@ struct IntegrationSurfaceDescriptor {
 pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response) {
     res.status_code(StatusCode::OK);
     res.render(Json(IntegrationDescribeOutcome {
-        contract: "cokret.rest.integration_manifest.v1",
+        contract: "arkret.rest.integration_manifest.v1",
         version: "2026-05-07",
         service: "floria",
         service_kind: "push_gateway",
@@ -49,7 +49,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationDependencyDescriptor {
                 service: "soland",
                 purpose: "principal_outbound_push_delivery",
-                required_contract: "cokret.rest.outbound_push_bridge.v1",
+                required_contract: "arkret.rest.outbound_push_bridge.v1",
                 discovery_path: "/_soland/edge/push/outbound/bridge/describe",
                 mode: "remote_principal_contract",
             },

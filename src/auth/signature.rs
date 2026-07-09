@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cokret::http_signature::{
+use arkret::http_signature::{
     self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
 };
 use salvo::http::StatusCode;
@@ -34,7 +34,7 @@ pub(super) fn verify_message_signature(
         );
         AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "service principal is missing signature key configuration".to_owned(),
         }
     })?;
@@ -49,7 +49,7 @@ pub(super) fn verify_message_signature(
             );
             AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+                code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
                 message: "service principal is missing signature key configuration".to_owned(),
             }
         })?;
@@ -59,7 +59,7 @@ pub(super) fn verify_message_signature(
         .header::<String>(SIGNATURE_INPUT_HEADER)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
+            code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
             message: "missing Signature-Input header".to_owned(),
         })?;
     let signature_input =
@@ -69,7 +69,7 @@ pub(super) fn verify_message_signature(
         req.header::<String>(SIGNATURE_HEADER)
             .ok_or_else(|| AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: cokret::error::ERROR_CODE_UNAUTHENTICATED,
+                code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
                 message: "missing Signature header".to_owned(),
             })?;
     // We parse the raw signature header solely to fail fast on a missing
@@ -82,7 +82,7 @@ pub(super) fn verify_message_signature(
     if signature_bytes.len() != 64 {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Signature header is not a valid Ed25519 signature".to_owned(),
         });
     }
@@ -94,14 +94,14 @@ pub(super) fn verify_message_signature(
     if signature_input.key_id != key_id {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Signature key_id does not match configured service principal".to_owned(),
         });
     }
     if signature_input.algorithm != "ed25519" {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "unsupported HTTP Message Signature algorithm".to_owned(),
         });
     }
@@ -117,7 +117,7 @@ pub(super) fn verify_message_signature(
     if !signature_input.covers_all(&required_components) {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "HTTP Message Signature is missing required covered components".to_owned(),
         });
     }
@@ -168,29 +168,29 @@ pub(super) fn verify_message_signature(
 
     let public_key_bytes = hex::decode(public_key_hex).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+        code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
         message: "configured signature public key is not valid hex".to_owned(),
     })?;
     let public_key =
         sdk_sig::public_key_from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "configured signature public key is invalid".to_owned(),
         })?;
     sdk_sig::verify_signature(&message, &signature_b64, &public_key).map_err(|err| match err {
         SignatureError::InvalidSignatureBase64 => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Signature header is not valid base64".to_owned(),
         },
         SignatureError::InvalidSignatureLength => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Signature header is not a valid Ed25519 signature".to_owned(),
         },
         _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "HTTP Message Signature verification failed".to_owned(),
         },
     })
@@ -255,18 +255,18 @@ pub(super) fn verified_content_digest(req: &Request, body: &[u8]) -> Result<Stri
         .header::<String>(CONTENT_DIGEST_HEADER)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "missing Content-Digest header".to_owned(),
         })?;
     let parsed = ContentDigest::parse(value.trim()).map_err(|err| match err {
         SignatureError::MalformedContentDigest => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Content-Digest must use sha-256 or sha-512".to_owned(),
         },
         _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Content-Digest header is invalid".to_owned(),
         },
     })?;
@@ -276,13 +276,13 @@ pub(super) fn verified_content_digest(req: &Request, body: &[u8]) -> Result<Stri
     if parsed.algorithm != sdk_sig::ContentDigestAlgorithm::Sha256 {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+            code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
             message: "Content-Digest must use sha-256".to_owned(),
         });
     }
     sdk_sig::verify_content_digest(&parsed, body).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+        code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
         message: "Content-Digest does not match request body".to_owned(),
     })?;
     Ok(parsed.wire_value)
@@ -318,7 +318,7 @@ fn map_signature_input_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+        code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
         message,
     }
 }
@@ -333,7 +333,7 @@ fn map_signature_header_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+        code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
         message,
     }
 }
@@ -347,7 +347,7 @@ fn map_canonical_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+        code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
         message,
     }
 }
@@ -376,7 +376,7 @@ pub(super) async fn verify_nonce_freshness(
         );
         return Err(AuthFailure {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            code: cokret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+            code: arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
             message: "replay protection is not configured".to_owned(),
         });
     };
@@ -411,7 +411,7 @@ pub(super) async fn verify_nonce_freshness(
             );
             Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: cokret::error::ERROR_CODE_INVALID_SIGNATURE,
+                code: arkret::error::ERROR_CODE_INVALID_SIGNATURE,
                 message: "HTTP Message Signature has already been observed (replay)".to_owned(),
             })
         }
@@ -423,7 +423,7 @@ pub(super) async fn verify_nonce_freshness(
             );
             Err(AuthFailure {
                 status: StatusCode::SERVICE_UNAVAILABLE,
-                code: cokret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+                code: arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
                 message: "replay protection backend is unavailable".to_owned(),
             })
         }

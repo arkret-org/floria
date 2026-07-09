@@ -1,6 +1,6 @@
 ﻿# floria
 
-> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [arkret-spec @ c2848a4](../arkret-spec) (R3.4 sync 2026-05-31)
 
 Push gateway service in Rust.
 
@@ -15,7 +15,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
+[`arkret-rust-sdk`](https://github.com/arkret/arkret-rust-sdk) and
 adapt to your local toolchain.
 
 ## Realm vs Space
@@ -33,7 +33,7 @@ Strand, Event, Message and actor identifiers before dispatch.
 
 ## Round R4 (protocol review closures)
 
-Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds
+Spec round 4 (`arkret-spec` range `2a4d39b..a77b995`, 8 commits) adds
 three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 `[Unreleased]` and [`../_todos.md`](../_todos.md) for the canonical
 wire-breaking list.
@@ -61,7 +61,7 @@ new internal broadcast endpoints `POST /_floria/internal/
 account_deactivate_fanout` (T07) and `POST /_floria/internal/
 consent_revoke` (T17) consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
-[`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md) for the
+[`../arkret-spec/CHANGELOG.md`](../arkret-spec/CHANGELOG.md) for the
 normative source. Ephemeral kinds (`ck.presence`, `ck.typing`,
 `ck.receipt.read`, `ck.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
@@ -82,7 +82,7 @@ PostgreSQL is optional and used only for deactivation queue draining and the pus
 
 ## Supported features
 
-- `POST /_cokret/edge/push/notify` as the canonical Cokret notify endpoint
+- `POST /_cokret/edge/push/notify` as the canonical Arkret notify endpoint
 - `GET /_cokret/describe` gateway profile discovery at the root meta position
 - `GET /health`
 - `GET /ready`
@@ -136,7 +136,7 @@ Quick notes:
 - `push_hint` is a body-free wakeup hint and must not contain plaintext message content
 - the push gateway is a derived wakeup surface, not canonical truth for events or unread state
 
-## Cokret notify semantics
+## Arkret notify semantics
 
 - `/_cokret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
 - `ck.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
@@ -230,5 +230,5 @@ Licensed under Apache 2.0. See `LICENSE`.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_floria_todos.md` in the parent `cokret/` directory for the
+> `_floria_todos.md` in the parent `arkret/` directory for the
 > circle-rollout (CKP-0007) work item list and per-stage checkpoints.

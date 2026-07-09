@@ -326,7 +326,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();
     assert!(
-        msg.contains("expected Cokret push notify request body"),
+        msg.contains("expected Arkret push notify request body"),
         "expected notify schema rejection, got: {msg}"
     );
 }
@@ -368,7 +368,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();
     assert!(
-        msg.contains("expected Cokret push notify request body"),
+        msg.contains("expected Arkret push notify request body"),
         "expected notify schema rejection, got: {msg}"
     );
 }

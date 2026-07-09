@@ -36,7 +36,7 @@ pub struct NotifyAuthConfig {
     /// if that DID has a configured `service_principal` entry whose
     /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
     /// stolen gateway-wide bearer token from being used to impersonate
-    /// an arbitrary tenant via the X-Cokret-Origin-Service-DID header.
+    /// an arbitrary tenant via the X-Arkret-Origin-Service-DID header.
     /// Has no effect in `production_mode` (which already disables the
     /// gateway-wide bearer fallback).
     pub bind_bearer_to_origin_did: bool,

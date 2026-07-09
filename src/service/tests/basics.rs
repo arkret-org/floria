@@ -404,7 +404,7 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<cokret::PushNotifyOutcome>()
+        .take_json::<arkret::PushNotifyOutcome>()
         .await
         .unwrap();
     assert!(body.rejected.is_empty());

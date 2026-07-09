@@ -190,7 +190,7 @@ proptest! {
     #[test]
     fn did_or_cx_literal_in_extra_field_is_rejected(
         suffix in "[a-z0-9]{1,12}",
-        prefix in prop_oneof![Just("did:web:"), Just("ck:event:"), Just("ck:strand:")],
+        prefix in prop_oneof![Just("did:web:"), Just("ak:event:"), Just("ak:strand:")],
     ) {
         // Use a key that is NOT in the forbidden list, so the only
         // rejection path is the sensitive-literal check.

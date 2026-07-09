@@ -298,7 +298,7 @@ mod cardinality_guard_tests {
         reset_cardinality_guard_for_tests();
         for i in 0..10 {
             assert!(
-                record_circle_and_check_guard(&format!("ck:circle:{i}")),
+                record_circle_and_check_guard(&format!("ak:circle:{i}")),
                 "well under threshold must keep returning true"
             );
         }
@@ -311,13 +311,13 @@ mod cardinality_guard_tests {
         reset_cardinality_guard_for_tests();
         // Fill the set up to the threshold.
         for i in 0..DETAILED_CIRCLE_LABEL_THRESHOLD {
-            assert!(record_circle_and_check_guard(&format!("ck:circle:{i}")));
+            assert!(record_circle_and_check_guard(&format!("ak:circle:{i}")));
         }
         assert!(!detailed_circle_labels_downgraded());
         // The (threshold+1)th NEW id trips the guard.
-        assert!(!record_circle_and_check_guard("ck:circle:trip"));
+        assert!(!record_circle_and_check_guard("ak:circle:trip"));
         assert!(detailed_circle_labels_downgraded());
         // Subsequent calls keep returning false without re-touching the set.
-        assert!(!record_circle_and_check_guard("ck:circle:after"));
+        assert!(!record_circle_and_check_guard("ak:circle:after"));
     }
 }

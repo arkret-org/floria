@@ -44,10 +44,10 @@ use serde_json::{Value, json};
 fn sanitizer_strips_apns_correlation_identifiers() {
     let payload = json!({
         "client": "ios",
-        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-        "space_id": "ck:space:0196419b-0000-7000-8000-000000000004",
-        "strand_id":  "ck:strand:019640f9-8000-7000-8000-000000000000",
-        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
+        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+        "space_id": "ak:space:0196419b-0000-7000-8000-000000000004",
+        "strand_id":  "ak:strand:019640f9-8000-7000-8000-000000000000",
+        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
         "sender": "@alice:example.com",
         "sender_actor_display_name": "Alice",
         "strand_name": "Project Apollo",
@@ -86,8 +86,8 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
         "client": "android",
         "content_body": "I'm floating in a most peculiar way.",
         "content_msgtype": "m.text",
-        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
     })
     .as_object()
@@ -107,9 +107,9 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
 fn sanitizer_strips_webpush_correlation_identifiers() {
     let payload = json!({
         "client": "web",
-        "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-        "space_id": "ck:space:0196419b-0000-7000-8000-000000000004",
-        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
+        "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+        "space_id": "ak:space:0196419b-0000-7000-8000-000000000004",
+        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
         "content": {"body": "secret message"},
         "wakeup_kind": "message",
     })
@@ -148,14 +148,14 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         // Security-boundary label.
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
-        "event_id":   "ck:event:0196419b-0000-7000-8000-000000000001",
-        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-        "strand_id":    "ck:strand:019640f9-8000-7000-8000-000000000000",
+        "event_id":   "ak:event:0196419b-0000-7000-8000-000000000001",
+        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+        "strand_id":    "ak:strand:019640f9-8000-7000-8000-000000000000",
         // SPEC-CR-016: gateway-internal routing ids live under route_tokens.
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },
-        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "push_hint": "new_message",
         "counts": { "unread_increment": 3 },
@@ -165,7 +165,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     let data = build_blind_provider_data(&notification);
     assert_eq!(
         data.get("push_target_id"),
-        Some(&json!("ck:pseudonym:push:01HYZ8Z000000000000000"))
+        Some(&json!("ak:pseudonym:push:01HYZ8Z000000000000000"))
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
@@ -328,7 +328,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     // the SDK `EffectiveScope` deserializer (which is strict per
     // `conformance/encoding.md` §4).
     let notification: Notification = serde_json::from_value(json!({
-        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "timing_profile_hint": "default",
         "route_tokens": {
@@ -378,7 +378,7 @@ fn webpush_collapse_key_is_random_and_opaque() {
             "collapse key must not contain `:` (would embed typed id): {key}"
         );
         assert!(
-            !key.to_ascii_lowercase().contains("ck:"),
+            !key.to_ascii_lowercase().contains("ak:"),
             "collapse key must not contain `ck:` substring: {key}"
         );
         assert!(
@@ -469,17 +469,17 @@ fn visible_profile_service() -> salvo::Service {
 
 fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> Value {
     let mut notification = json!({
-        "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-        "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-        "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+        "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },
-        "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "timing_profile_hint": "default",
         "devices": [{
-            "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+            "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
             "app_id": "com.example.app",
             "push_key": "device-token"
         }]
@@ -507,7 +507,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -545,7 +545,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -583,7 +583,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -617,7 +617,7 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -655,7 +655,7 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )
@@ -684,7 +684,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-cokret-destination-service-did",
+            "x-arkret-destination-service-did",
             "did:web:push.example.com",
             true,
         )

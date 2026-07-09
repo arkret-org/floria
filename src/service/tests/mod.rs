@@ -266,13 +266,13 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
     // under notification.route_tokens.
     json!({
         "notification": {
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
@@ -300,7 +300,7 @@ pub(super) fn with_operation_id(mut request_body: Value, operation_id: &str) -> 
 
 pub(super) fn device(app_id: &str, push_key: &str) -> Value {
     json!({
-        "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "app_id": app_id,
         "push_key": push_key,
         "visible_notification_opt_in": true
@@ -336,7 +336,7 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     _provider_retries: usize,
 ) {
     let body = response
-        .take_json::<cokret::PushNotifyOutcome>()
+        .take_json::<arkret::PushNotifyOutcome>()
         .await
         .unwrap();
     let expected = rejected_devices

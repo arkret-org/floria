@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cokret::push_gateway_api::{
+use arkret::push_gateway_api::{
     PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
     PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
@@ -30,7 +30,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             ok: false,
             request_id: None,
             error: ErrorBody {
-                code: cokret::error::ERROR_CODE_INTERNAL_ERROR,
+                code: arkret::error::ERROR_CODE_INTERNAL_ERROR,
                 message: "application state missing",
                 retry_after_ms: None,
             },
@@ -60,16 +60,16 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         contract: "ck.push.bridge.describe".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the
-        // cokret-spec revision the SDK is compiled against) and from the
+        // arkret-spec revision the SDK is compiled against) and from the
         // config-file `SCHEMA_VERSION`. Pinned to the SDK provider-matrix
         // version so it moves in lockstep with the capability snapshot
         // rather than drifting as a hand-edited date.
         version: PROVIDER_CAPABILITIES_VERSION.to_owned(),
         api_base_path: "/_floria/push".to_owned(),
-        // `spec_version` = the cokret-spec revision the SDK was built
+        // `spec_version` = the arkret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.
-        spec_version: Some(cokret::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
+        spec_version: Some(arkret::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
             service_did: state.notify_auth.gateway_service_did.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)
@@ -82,7 +82,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         notify: PushBridgeDescribeNotifyDescriptor {
             notify_path: "/_cokret/edge/push/notify".to_owned(),
             operation_id: NOTIFY_OPERATION_ID.to_owned(),
-            request_id_header: "X-Cokret-Request-Id".to_owned(),
+            request_id_header: "X-Arkret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
             origin_service_did_header: ORIGIN_SERVICE_DID_HEADER.to_owned(),
             destination_service_did_header: DESTINATION_SERVICE_DID_HEADER.to_owned(),
@@ -106,49 +106,49 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         provider_capabilities: state.registry.provider_capabilities(),
         failure_codes: vec![
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+                arkret::error::ERROR_CODE_CAPABILITY_DENIED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The caller is authenticated but not allowed to send this notify shape or destination.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                arkret::error::ERROR_CODE_DUPLICATE_CONFLICT,
                 StatusCode::CONFLICT.as_u16(),
                 false,
                 "The same idempotency key was replayed with a different canonical request body.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_METHOD_NOT_ALLOWED,
+                arkret::error::ERROR_CODE_METHOD_NOT_ALLOWED,
                 StatusCode::METHOD_NOT_ALLOWED.as_u16(),
                 false,
                 "The notify surface only accepts POST.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_PAYLOAD_TOO_LARGE,
+                arkret::error::ERROR_CODE_PAYLOAD_TOO_LARGE,
                 StatusCode::PAYLOAD_TOO_LARGE.as_u16(),
                 false,
                 "The notify request body exceeded the configured maximum size.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_RATE_LIMITED,
+                arkret::error::ERROR_CODE_RATE_LIMITED,
                 StatusCode::TOO_MANY_REQUESTS.as_u16(),
                 true,
                 "A rate-limit scope rejected the request; callers should respect Retry-After.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
                 "The request body or headers did not match the active ck.edge.push.command.notify contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
+                arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
                 StatusCode::SERVICE_UNAVAILABLE.as_u16(),
                 true,
                 "All dispatch attempts failed with retryable provider or gateway conditions.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::ERROR_CODE_UNSUPPORTED_FEATURE,
+                arkret::error::ERROR_CODE_UNSUPPORTED_FEATURE,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
                 "The caller requested a non-canonical notify operation or unsupported contract feature.",
@@ -181,18 +181,18 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                cokret::error::REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                arkret::error::REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
-                "A media-service token-exchange or recording artifact reference would route through a destination outside the Cokret blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
+                "A media-service token-exchange or recording artifact reference would route through a destination outside the Arkret blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",
             ),
         ],
         examples: PushBridgeDescribeExamples {
             notify_headers: serde_json::json!({
-                "X-Cokret-Request-Id": "req_01js0000000000000000000000",
+                "X-Arkret-Request-Id": "req_01js0000000000000000000000",
                 "Idempotency-Key": "notify-01js0000000000000000000000",
-                "X-Cokret-Origin-Service-Did": "did:web:soland.example",
-                "X-Cokret-Destination-Service-Did": state.notify_auth.gateway_service_did,
+                "X-Arkret-Origin-Service-Did": "did:web:soland.example",
+                "X-Arkret-Destination-Service-Did": state.notify_auth.gateway_service_did,
             }),
             // Default interop privacy baseline
             // (`ck.profile.push_gateway.blind_wakeup.v1`): identifying
@@ -207,7 +207,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // defined by push-operations.schema.json#/$defs/counts.
             blind_wakeup_request: serde_json::json!({
                 "notification": {
-                    "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "push_hint": "new_message",
@@ -219,16 +219,16 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // id fields and `counts` follows the same closed schema.
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
-                    "event_id": "ck:event:01964000-0000-7000-8000-000000000000",
-                    "strand_id": "ck:strand:01964000-0000-7000-8000-000000000000",
-                    "realm_id": "ck:realm:01964000-0000-7000-8000-000000000000",
-                    "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                    "event_id": "ak:event:01964000-0000-7000-8000-000000000000",
+                    "strand_id": "ak:strand:01964000-0000-7000-8000-000000000000",
+                    "realm_id": "ak:realm:01964000-0000-7000-8000-000000000000",
+                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "push_hint": "new_message",
                     "counts": {"unread_increment": 1},
                     "devices": [{
-                        "device_id": "ck:device:01964000-0000-7000-8000-000000000000",
+                        "device_id": "ak:device:01964000-0000-7000-8000-000000000000",
                         "app_id": "com.example.app",
                         "push_key": "<opaque-provider-token>",
                         "visible_notification_opt_in": true

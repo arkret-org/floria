@@ -26,14 +26,14 @@ pub(super) fn validate_origin_service_did(
     else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "Source-Service-DID header is required".to_owned(),
         });
     };
     if origin_service_did != caller.origin_service_did {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "origin service DID does not match the authenticated caller".to_owned(),
         });
     }
@@ -68,7 +68,7 @@ pub(super) fn validate_destination_service_did(
     {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
             message: "destination service DID does not match this gateway".to_owned(),
         });
     }
@@ -316,8 +316,8 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
 // The blind-wakeup profile only permits coarse hints; actual reaction
 // emoji or other message content must never appear in `push_hint`.
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
-    if cokret::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
+    if arkret::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
         return Ok(());
     }
-    Err("Cokret blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
+    Err("Arkret blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())
 }

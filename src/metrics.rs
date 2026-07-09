@@ -576,7 +576,7 @@ mod tests {
         notify_delivery_outcomes(1, 2, 3, 4);
         notify_delivery_outcome_by_provider("apns", "accepted", 1);
         notify_delivery_outcome_by_app("com.example.app", "accepted", 1);
-        set_circuit_breaker_state("apns", "realm", Some("ck:realm:test"), 2);
+        set_circuit_breaker_state("apns", "realm", Some("ak:realm:test"), 2);
         notify_rate_limit_reject("origin_service");
         notify_dedup_lookup("hit");
         audit_divert("policy_access", "success");

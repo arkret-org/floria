@@ -1,8 +1,8 @@
 floria
-Copyright 2025-2026 The Cokret Project Authors
+Copyright 2025-2026 The Arkret Project Authors
 
-This product includes software developed by the Cokret Project
-(https://cokret.dev).
+This product includes software developed by the Arkret Project
+(https://arkret.dev).
 
 This project depends on third-party Rust crates whose licenses are
 listed in `LICENSES.third-party.md` (generated via cargo-about or

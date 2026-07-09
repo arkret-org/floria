@@ -36,7 +36,7 @@ metrics:
 
 apps:
   # Usage notes:
-  # 1. Replace each key below with the real cokret app_id reported by clients.
+  # 1. Replace each key below with the real arkret app_id reported by clients.
   # 2. For the same app_id, keep only one exact provider block enabled at a time.
   # 3. If one Android package needs mixed mainland OEM routing behind a single backend,
   #    prefer JPush aggregation first.

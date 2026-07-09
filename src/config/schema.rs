@@ -13,7 +13,7 @@ use super::Config;
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://cokret.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
+        "$id": "https://arkret.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",

@@ -111,37 +111,37 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
 
     let first = r#"{
             "notification": {
-                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-                "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-                "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+                "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+                "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
                 },
-                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "default",
                 "push_hint": "new_message",
                 "devices": [
-                    {"device_id": "ck:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"},
-                    {"device_id": "ck:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"}
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"},
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"}
                 ]
             }
         }"#;
     let second = r#"{
             "notification": {
                 "devices": [
-                    {"push_key": "cached", "app_id": "com.example.app", "device_id": "ck:device:0196419b-0000-7000-8000-000000000001"}
+                    {"push_key": "cached", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"}
                 ],
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "default",
-                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
                 },
-                "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
-                "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001"
+                "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+                "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+                "event_id": "ak:event:0196419b-0000-7000-8000-000000000001"
             }
         }"#;
 

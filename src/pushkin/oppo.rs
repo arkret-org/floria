@@ -651,7 +651,7 @@ mod tests {
 
     fn device() -> Device {
         Device {
-            device_id: cokret::DeviceId::new("ck:device:0196419b-0000-7000-8000-000000000001")
+            device_id: arkret::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.oppo".to_owned()),
             push_key: Some("target-value".to_owned()),
@@ -669,20 +669,20 @@ mod tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                cokret::EventId::new("ck:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                cokret::MessageId::new("ck:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
             ),
             strand_id: Some(
-                cokret::StrandId::new("ck:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
                 ..Default::default()
             }),
             user_is_target: Some(true),
-            push_target_id: Some("ck:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],

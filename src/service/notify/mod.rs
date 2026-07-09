@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use cokret::{AgentEventRouting, classify_agent_event_kind, validate_push_notify_contract_shape};
+use arkret::{AgentEventRouting, classify_agent_event_kind, validate_push_notify_contract_shape};
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
 use salvo::prelude::*;
@@ -45,7 +45,7 @@ use validation::{
 /// diagnostic replay. floria MUST NOT fan the request out a second
 /// time; it answers 200 with an empty rejected list and no provider
 /// retries. The wire constant comes from the SDK.
-const HISTORICAL_ONLY_REASON: &str = cokret::ERROR_CODE_HISTORICAL_ONLY;
+const HISTORICAL_ONLY_REASON: &str = arkret::ERROR_CODE_HISTORICAL_ONLY;
 
 /// Round 4 — wire reason floria attaches to a RejectedDevice when the
 /// device's `target_route_token` is not present in the
@@ -88,7 +88,7 @@ fn provider_timing_bucket_for_notification(notification: &PushNotification) -> D
 fn notification_uses_high_privacy_timing(notification: &PushNotification) -> bool {
     notification
         .timing_profile_hint
-        .is_some_and(cokret::PushTimingProfileHint::is_traffic_metadata_hardened)
+        .is_some_and(arkret::PushTimingProfileHint::is_traffic_metadata_hardened)
         || notification.evaluation_locus_unresolved.unwrap_or(false)
         || notification.push_hint.as_deref() == Some("l10n_key")
         || notification
@@ -148,7 +148,7 @@ pub(super) async fn notify_method_not_allowed(res: &mut Response) {
     finish_error(
         res,
         StatusCode::METHOD_NOT_ALLOWED,
-        cokret::error::ERROR_CODE_METHOD_NOT_ALLOWED,
+        arkret::error::ERROR_CODE_METHOD_NOT_ALLOWED,
         "method not allowed",
         None,
         None,
@@ -176,7 +176,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                cokret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ERROR_CODE_INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -194,7 +194,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::PAYLOAD_TOO_LARGE,
-                cokret::error::ERROR_CODE_PAYLOAD_TOO_LARGE,
+                arkret::error::ERROR_CODE_PAYLOAD_TOO_LARGE,
                 "request body exceeds 512 KiB",
                 None,
                 Some(&request_id),
@@ -207,7 +207,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "failed to read request body",
                 None,
                 Some(&request_id),
@@ -247,15 +247,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = crate::dedup::request_hash(body.as_ref());
 
-    let request = match serde_json::from_slice::<cokret::PushNotifyRequestBody>(&body) {
+    let request = match serde_json::from_slice::<arkret::PushNotifyRequestBody>(&body) {
         Ok(request) => request,
         Err(error) => {
-            tracing::warn!(error = %error, "expected Cokret push notify request body");
+            tracing::warn!(error = %error, "expected Arkret push notify request body");
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
-                "expected Cokret push notify request body",
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                "expected Arkret push notify request body",
                 None,
                 Some(&request_id),
                 started,
@@ -296,7 +296,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
             &message,
             None,
             Some(&request_id),
@@ -332,7 +332,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "reason_code is only valid as `historical_only` on /push/notify",
                 None,
                 Some(&request_id),
@@ -402,7 +402,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 "audit_envelope.access_kind must be a non-empty string",
                 None,
                 Some(&request_id),
@@ -410,7 +410,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        let _parsed_access_kind = match serde_json::from_value::<cokret::AccessKind>(Value::String(
+        let _parsed_access_kind = match serde_json::from_value::<arkret::AccessKind>(Value::String(
             access_kind.to_owned(),
         )) {
             Ok(kind) => kind,
@@ -418,7 +418,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,
-                    cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                    arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                     "audit_envelope.access_kind is not a registered access kind",
                     None,
                     Some(&request_id),
@@ -433,7 +433,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 finish_error(
                     res,
                     StatusCode::BAD_REQUEST,
-                    cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                    arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                     "audit policy_access requires notification realm_id",
                     None,
                     Some(&request_id),
@@ -446,7 +446,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             audit_envelope
                 .late_recovery_original_event_id
                 .as_ref()
-                .map(cokret::EventId::as_str),
+                .map(arkret::EventId::as_str),
         );
         let sdk_policy_access = serde_json::json!({
             "realm_id": realm_id,
@@ -456,13 +456,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "observed_at": "1970-01-01T00:00:00Z",
         });
         let sdk_policy_access =
-            match serde_json::from_value::<cokret::AuditPolicyAccessPayload>(sdk_policy_access) {
+            match serde_json::from_value::<arkret::AuditPolicyAccessPayload>(sdk_policy_access) {
                 Ok(payload) => payload,
                 Err(error) => {
                     finish_error(
                         res,
                         StatusCode::BAD_REQUEST,
-                        cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                        arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                         &format!("invalid audit policy_access payload: {error}"),
                         None,
                         Some(&request_id),
@@ -475,7 +475,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &error.to_string(),
                 None,
                 Some(&request_id),
@@ -498,7 +498,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::SERVICE_UNAVAILABLE,
-                cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
+                arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
                 &message,
                 None,
                 Some(&request_id),
@@ -527,7 +527,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &message,
                 None,
                 Some(&request_id),
@@ -552,7 +552,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::PRECONDITION_FAILED,
-                cokret::error::ERROR_CODE_FAILED_PRECONDITION,
+                arkret::error::ERROR_CODE_FAILED_PRECONDITION,
                 &message,
                 None,
                 Some(&request_id),
@@ -564,7 +564,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::FORBIDDEN,
-                cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+                arkret::error::ERROR_CODE_CAPABILITY_DENIED,
                 &message,
                 None,
                 Some(&request_id),
@@ -576,7 +576,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 &message,
                 None,
                 Some(&request_id),
@@ -593,12 +593,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         let (status, code) = if message.starts_with(BLIND_PROFILE_PLAINTEXT_REASON) {
             (
                 StatusCode::PRECONDITION_FAILED,
-                cokret::error::ERROR_CODE_FAILED_PRECONDITION,
+                arkret::error::ERROR_CODE_FAILED_PRECONDITION,
             )
         } else {
             (
                 StatusCode::FORBIDDEN,
-                cokret::error::ERROR_CODE_CAPABILITY_DENIED,
+                arkret::error::ERROR_CODE_CAPABILITY_DENIED,
             )
         };
         finish_error(
@@ -628,7 +628,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::CONFLICT,
-                cokret::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                arkret::error::ERROR_CODE_DUPLICATE_CONFLICT,
                 "same idempotency key maps to different canonical request body",
                 None,
                 Some(&request_id),
@@ -662,7 +662,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            cokret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
             "no devices in notification",
             None,
             Some(&request_id),
@@ -686,7 +686,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             finish_error(
                 res,
                 StatusCode::TOO_MANY_REQUESTS,
-                cokret::error::ERROR_CODE_RATE_LIMITED,
+                arkret::error::ERROR_CODE_RATE_LIMITED,
                 &format!("notify rate limit exceeded for {}", rejection.scope),
                 Some(rejection.retry_after),
                 Some(&request_id),
@@ -1172,7 +1172,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            cokret::error::ERROR_CODE_INTERNAL_ERROR,
+            arkret::error::ERROR_CODE_INTERNAL_ERROR,
             &message,
             None,
             Some(&context.request_id),
@@ -1203,7 +1203,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
+            arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
             &message,
             retry_after,
             Some(&context.request_id),
@@ -1234,7 +1234,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_error(
             res,
             StatusCode::BAD_GATEWAY,
-            cokret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
+            arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
             &message,
             None,
             Some(&context.request_id),

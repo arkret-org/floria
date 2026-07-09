@@ -2,7 +2,7 @@
 
 floria still carries a local provider-payload sweep for forbidden egress
 fields that are stricter than the SDK's generic blind-payload helper. The
-SDK exposes `cokret::blind_payload_sanitizer::is_forbidden_payload_key`,
+SDK exposes `arkret::blind_payload_sanitizer::is_forbidden_payload_key`,
 but the exported list is not yet sufficient for realm, appeal, attestation,
 policy-frontier, cross-signing-reset, and Circle field names.
 
@@ -60,7 +60,7 @@ Do not remove the local sweep until all of these are true:
 
 ## Spec round upgrade checklist
 
-Use this when bumping floria to a newer cokret-spec round (R4 →
+Use this when bumping floria to a newer arkret-spec round (R4 →
 R5, CKP-0007 → CKP-0008, etc.):
 
 - [ ] Diff the new round's `forbidden_payload_keys` table against

@@ -10,7 +10,7 @@ use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
 /// FLORIA-01 — `GET /_cokret/describe` MUST emit the canonical
-/// `ServiceDescribe` (`cokret::ServiceDescribe` = `ServerDescription`)
+/// `ServiceDescribe` (`arkret::ServiceDescribe` = `ServerDescription`)
 /// defined by `service-describe.schema.json`, not a push-gateway-private
 /// shape. The push-private matrix (provider list, auth modes, dedup,
 /// rate-limit scopes, operation id) lives under the canonical
@@ -28,7 +28,7 @@ use crate::config::NotifyAuthConfig;
 /// Floria's HMAC push-target-id derivation profile metadata is mirrored
 /// into `limits.x_floria_privacy_derivation` so consumers that read the
 /// floria extension still see it.
-fn floria_service_did(auth: &NotifyAuthConfig) -> cokret::Did {
+fn floria_service_did(auth: &NotifyAuthConfig) -> arkret::Did {
     // production_mode enforces a configured gateway_service_did; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
@@ -36,8 +36,8 @@ fn floria_service_did(auth: &NotifyAuthConfig) -> cokret::Did {
         .gateway_service_did
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    cokret::Did::new(raw).unwrap_or_else(|_| {
-        cokret::Did::new("did:web:floria.invalid".to_owned())
+    arkret::Did::new(raw).unwrap_or_else(|_| {
+        arkret::Did::new("did:web:floria.invalid".to_owned())
             .expect("static placeholder DID is well-formed")
     })
 }
@@ -50,7 +50,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             ok: false,
             request_id: None,
             error: ErrorBody {
-                code: cokret::error::ERROR_CODE_INTERNAL_ERROR,
+                code: arkret::error::ERROR_CODE_INTERNAL_ERROR,
                 message: "application state missing",
                 retry_after_ms: None,
             },
@@ -84,13 +84,13 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     // invariant (validated by `ServerDescription::validate`) is trivially
     // upheld.
     let development_mode = false;
-    let verified_profiles: Vec<cokret::VerifiedProfileEntry> = Vec::new();
+    let verified_profiles: Vec<arkret::VerifiedProfileEntry> = Vec::new();
 
     let supported_profiles = describe_supported_profiles(auth);
     let claimed_profiles = supported_profiles
         .iter()
         .map(|&profile_id| {
-            let mut entry = cokret::ClaimedProfileEntry::self_claimed(profile_id);
+            let mut entry = arkret::ClaimedProfileEntry::self_claimed(profile_id);
             if profile_id == PROFILE_PUSH_GATEWAY {
                 entry.notes = Some(
                     "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)"
@@ -159,35 +159,35 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     } else {
         "anonymous"
     };
-    let mut auth_metadata = cokret::AuthMetadata::minimal(mode);
+    let mut auth_metadata = arkret::AuthMetadata::minimal(mode);
     auth_metadata
         .extra
         .insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
 
     let plaintext_visibility = if plaintext_class == "service-gated" {
-        cokret::PlaintextVisibility {
-            max_visibility: Some(cokret::PlaintextMaxVisibility::DerivedPlaintext),
+        arkret::PlaintextVisibility {
+            max_visibility: Some(arkret::PlaintextMaxVisibility::DerivedPlaintext),
             notes: Some(
                 "service-gated visible-notification plaintext; per-service allowlisted".to_owned(),
             ),
-            ..cokret::PlaintextVisibility::default()
+            ..arkret::PlaintextVisibility::default()
         }
     } else {
-        cokret::PlaintextVisibility::none()
+        arkret::PlaintextVisibility::none()
     };
 
-    let body = cokret::ServiceDescribe {
+    let body = arkret::ServiceDescribe {
         service_did: floria_service_did(auth),
         // DEFERRED: floria has no configured deployment trust domain; a
         // stable placeholder is emitted until a `trust_domain` config
         // field is wired in (see module doc / FLORIA-01 deferred items).
-        trust_domain: cokret::TypedTrustDomainId::new("ck:trust_domain:floria")
+        trust_domain: arkret::TypedTrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
         service_type: "push_gateway".to_owned(),
-        protocol_version: cokret::PROTOCOL_VERSION.to_owned(),
+        protocol_version: arkret::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],
-        supported_bindings: vec![cokret::SupportedBinding::new("http")],
+        supported_bindings: vec![arkret::SupportedBinding::new("http")],
         supported_features: vec![
             "push.notify".to_owned(),
             "push.bridge_describe".to_owned(),
@@ -215,9 +215,9 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         ],
         compat_surfaces: vec![],
         development_mode,
-        rate_limit_policy: Some(cokret::RateLimitPolicy::unspecified()),
+        rate_limit_policy: Some(arkret::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
-        egress_network_policy: Some(cokret::EgressNetworkPolicy::deny_private_defaults()),
+        egress_network_policy: Some(arkret::EgressNetworkPolicy::deny_private_defaults()),
         resource_types: vec![],
         discovery_profiles: vec![],
         restricted_query_proof: None,

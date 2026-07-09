@@ -79,7 +79,7 @@ fn sign_request(
     );
     let now = unix_now_secs();
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -88,10 +88,10 @@ fn sign_request(
         format!("\"@target-uri\": {target_uri}"),
         format!("\"@authority\": {authority}"),
         format!("\"content-digest\": {digest}"),
-        "\"x-cokret-origin-service-did\": did:web:sync.example.com".to_owned(),
-        "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
+        "\"x-arkret-origin-service-did\": did:web:sync.example.com".to_owned(),
+        "\"x-arkret-destination-service-did\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -115,18 +115,18 @@ async fn http_message_signature_authenticates_notify_request() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -171,18 +171,18 @@ async fn mtls_profile_authenticates_notify_request() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -228,18 +228,18 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -295,18 +295,18 @@ async fn rejects_tampered_body() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ck:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ck:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
                 "app_id": "com.example.app",
                 "push_key": "accept"
             }]
@@ -372,7 +372,7 @@ async fn rejects_signature_missing_required_components() {
     // Intentionally omit `@authority` from the covered components —
     // floria's required-component policy must still trip this.
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -380,10 +380,10 @@ async fn rejects_signature_missing_required_components() {
         "\"@method\": post".to_owned(),
         "\"@target-uri\": http://127.0.0.1/_cokret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
-        "\"x-cokret-origin-service-did\": did:web:sync.example.com".to_owned(),
-        "\"x-cokret-destination-service-did\": did:web:push.example.com".to_owned(),
+        "\"x-arkret-origin-service-did\": did:web:sync.example.com".to_owned(),
+        "\"x-arkret-destination-service-did\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-cokret-origin-service-did\" \"x-cokret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),

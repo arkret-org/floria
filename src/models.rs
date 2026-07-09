@@ -4,11 +4,11 @@ use blake2::Blake2s256;
 use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 
-pub type AuditEnvelopeMetadata = cokret::PushAuditEnvelopeMetadata;
-pub type Counts = cokret::PushCounts;
-pub type Device = cokret::PushDeviceRoute;
-pub type PushNotification = cokret::PushNotificationEnvelope;
-pub type RouteTokens = cokret::PushRouteTokens;
+pub type AuditEnvelopeMetadata = arkret::PushAuditEnvelopeMetadata;
+pub type Counts = arkret::PushCounts;
+pub type Device = arkret::PushDeviceRoute;
+pub type PushNotification = arkret::PushNotificationEnvelope;
+pub type RouteTokens = arkret::PushRouteTokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
@@ -152,21 +152,21 @@ impl NotificationExt for PushNotification {
     fn strand_id(&self) -> Option<&str> {
         self.strand_id
             .as_ref()
-            .map(cokret::StrandId::as_str)
+            .map(arkret::StrandId::as_str)
             .and_then(non_empty)
     }
 
     fn message_id(&self) -> Option<&str> {
         self.message_id
             .as_ref()
-            .map(cokret::MessageId::as_str)
+            .map(arkret::MessageId::as_str)
             .and_then(non_empty)
     }
 
     fn realm_id(&self) -> Option<&str> {
         self.realm_id
             .as_ref()
-            .map(cokret::RealmId::as_str)
+            .map(arkret::RealmId::as_str)
             .and_then(non_empty)
     }
 
@@ -304,18 +304,18 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
-        let request: cokret::PushNotifyRequestBody = serde_json::from_value(json!({
+        let request: arkret::PushNotifyRequestBody = serde_json::from_value(json!({
             "event_kind": "ck.message",
             "notification": {
-                "event_id": "ck:event:0196419b-0000-7000-8000-000000000001",
-                "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+                "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                 "wakeup_kind": "message",
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000003",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000003",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
                 },
                 "devices": [{
-                    "device_id": "ck:device:0196419b-0000-7000-8000-000000000004",
+                    "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
                     "app_id": "app.example.android",
                     "push_key": "token-123"
                 }]
@@ -326,7 +326,7 @@ mod tests {
         assert_eq!(request.event_kind.as_deref(), Some("ck.message"));
         assert_eq!(
             request.notification.realm_id(),
-            Some("ck:realm:0196419b-0000-7000-8000-000000000003")
+            Some("ak:realm:0196419b-0000-7000-8000-000000000003")
         );
         assert_eq!(
             request.notification.realm_route_token(),
@@ -343,7 +343,7 @@ mod tests {
             "origin_service_did",
             "destination_service_did",
         ] {
-            let err = serde_json::from_value::<cokret::PushNotifyRequestBody>(json!({
+            let err = serde_json::from_value::<arkret::PushNotifyRequestBody>(json!({
                 field: "x",
                 "notification": { "devices": [] }
             }))
@@ -358,7 +358,7 @@ mod tests {
     #[test]
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
         let response = PushNotifyOutcome {
-            request_id: "ck:request:123".to_owned(),
+            request_id: "ak:request:123".to_owned(),
             accepted: 1,
             rejected: vec![super::RejectedDevice::new(
                 Some("app.example.android"),
@@ -372,7 +372,7 @@ mod tests {
                 status: Some("accepted".to_owned()),
                 retry_after_ms: None,
                 timestamp: Some("2026-05-02T00:00:00Z".to_owned()),
-                request_id: Some("ck:request:123".to_owned()),
+                request_id: Some("ak:request:123".to_owned()),
             }],
         };
 
