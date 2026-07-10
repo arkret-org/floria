@@ -38,7 +38,7 @@ The caller should set:
 
 ## Notify Request
 
-`POST /_arkret/edge/push/notify` accepts `ck.edge.push.command.notify` envelopes:
+`POST /_arkret/edge/push/notify` accepts `ak.edge.push.command.notify` envelopes:
 
 ```json
 {

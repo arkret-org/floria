@@ -8,7 +8,7 @@
 //!
 //! These names are floria-local defence-in-depth for identifiers the
 //! SDK's `is_forbidden_payload_key` does not yet cover (rounds R2/R3,
-//! CKP-0007, the 9dabf26 carrier split). Names the SDK already rejects
+//! AKP-0007, the 9dabf26 carrier split). Names the SDK already rejects
 //! (e.g. `encrypted_content`, `sender_actor_display_name`, `realm_id`,
 //! `space_id`) are intentionally NOT duplicated here.
 // TODO(circle-rollout-P2C.5): once the SDK ships `is_forbidden_payload_key`
@@ -20,7 +20,7 @@ use arkret::blind_payload_sanitizer as sdk;
 /// Names accepted inbound but silently stripped before a provider sees
 /// them. Matched case-insensitively.
 ///
-///   * CKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) — drives
+///   * AKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) — drives
 ///     gateway-internal routing & dedup normalization; leaking it would disclose the encryption
 ///     sub-boundary / realm binding.
 ///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,

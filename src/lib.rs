@@ -62,7 +62,7 @@ pub struct AppState {
     pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
     pub push_contact_cache: Option<Arc<PushContactCache>>,
     pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
-    /// CKP-0007 — when `true`, per-(provider, scope) metrics use the
+    /// AKP-0007 — when `true`, per-(provider, scope) metrics use the
     /// `circle_id` (cardinality up to the number of active Circles).
     /// Default `false` — labels key off the parent `realm_id`.
     pub metrics_detailed_circle_labels: bool,

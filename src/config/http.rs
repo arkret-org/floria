@@ -22,7 +22,7 @@ pub struct HttpConfig {
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
-    /// CKP-0007 Circle primitive — when `true`, the per-(provider,
+    /// AKP-0007 Circle primitive — when `true`, the per-(provider,
     /// scope) delivery counter (`floria_notify_delivery_total`) labels
     /// `scope_id` with the `circle_id` instead of the parent
     /// `realm_id` when a Circle is set. Default `false` keeps the
@@ -31,7 +31,7 @@ pub struct HttpConfig {
     /// needed.
     #[serde(default)]
     pub metrics_detailed_circle_labels: bool,
-    /// CKP-0007 Circle primitive — per-Circle rate limits and
+    /// AKP-0007 Circle primitive — per-Circle rate limits and
     /// concurrency caps. Default disabled.
     #[serde(default)]
     pub circle_rate_limits: CircleRateLimitConfig,
@@ -39,7 +39,7 @@ pub struct HttpConfig {
     pub(super) extra: Map<String, Value>,
 }
 
-/// CKP-0007 Circle primitive — per-Circle rate-limit configuration.
+/// AKP-0007 Circle primitive — per-Circle rate-limit configuration.
 /// Defaults leave both knobs unset (no Circle-specific limits applied).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]

@@ -22,7 +22,7 @@ Out-of-scope:
 - Self-hosted dev defaults intended to be overridden in production
 - Theoretical issues without practical exploitation
 
-## CKP-0007 Circle Invariants
+## AKP-0007 Circle Invariants
 
 Per spec, Circle is an intra-Realm cryptographic sub-boundary:
 - Circle member lists MUST NOT leak to directory services or push gateways in plaintext
@@ -101,7 +101,7 @@ Pinning does NOT protect against:
   Apple/Google private key would sign new leaves we would, correctly, pin
   against).
 - Compromised push-payload secrets (covered by the encryption-scope
-  invariant under CKP-0007).
+  invariant under AKP-0007).
 
 ## Disclosure
 

@@ -75,7 +75,7 @@ pub struct ConsentRevokeBroadcast {
     /// MUST be `"any"`. Any other value is a wire-shape violation —
     /// floria responds with `unsupported_feature`.
     pub scope: String,
-    /// Phase P2 (CKP-0008 / CKP-0009) — optional diagnostic reason
+    /// Phase P2 (AKP-0008 / AKP-0009) — optional diagnostic reason
     /// soland attaches to a broadcast so floria can log *why* the
     /// principal's consent cache is being invalidated. Default
     /// (None / omitted) is the historical "user-initiated revoke"
@@ -105,7 +105,7 @@ impl ConsentRevokeBroadcast {
 }
 
 /// Phase P2 — well-known `reason` values for a `consent_revoke`
-/// broadcast. The two `Agent*` variants are new (CKP-0008 / CKP-0009)
+/// broadcast. The two `Agent*` variants are new (AKP-0008 / AKP-0009)
 /// and correspond to the Personal Agent lifecycle invalidating a
 /// principal's downstream capability cache. Any string soland sends
 /// that doesn't match a known variant is captured by `Other` so a new
@@ -117,11 +117,11 @@ pub enum ConsentRevokeReason {
     /// The soland broadcast may omit `reason` entirely for this case;
     /// when set explicitly it serializes as `"user_revoked"`.
     UserRevoked,
-    /// CKP-0008 — controller paused a native Personal Agent. The
+    /// AKP-0008 — controller paused a native Personal Agent. The
     /// agent's runtime capability cache is invalidated; the cache is
     /// re-warmed on resume.
     AgentPaused,
-    /// CKP-0009 — controller deactivated a native Personal Agent.
+    /// AKP-0009 — controller deactivated a native Personal Agent.
     /// The agent's runtime capability cache is torn down for good
     /// alongside the agent_key revocation cascade in soland.
     AgentDeactivated,

@@ -15,7 +15,7 @@
 //!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
 //!      earlier as an unknown product-private field.
 //!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
-//!      consecutive calls produce different opaque base64url tokens that don't embed any `ck:` /
+//!      consecutive calls produce different opaque base64url tokens that don't embed any `ak:` /
 //!      typed-id substring.
 
 use std::collections::HashMap;
@@ -243,7 +243,7 @@ fn sanitizer_strips_private_notification_preferences() {
 }
 
 // ---------------------------------------------------------------------------
-// CKP-0007 Circle primitive — privacy invariants.
+// AKP-0007 Circle primitive — privacy invariants.
 //
 // Circle routing metadata (`circle_id`, `effective_scope`,
 // `scope_circle_id`) drives gateway-internal routing only. It MUST
@@ -379,7 +379,7 @@ fn webpush_collapse_key_is_random_and_opaque() {
         );
         assert!(
             !key.to_ascii_lowercase().contains("ak:"),
-            "collapse key must not contain `ck:` substring: {key}"
+            "collapse key must not contain `ak:` substring: {key}"
         );
         assert!(
             !key.to_ascii_lowercase().contains("did:"),

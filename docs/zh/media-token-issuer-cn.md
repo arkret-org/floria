@@ -5,7 +5,7 @@
 
 ## 决策摘要
 
-在 Arkret v1 中，`ck.self.call.media.exchange.issue_token` 的**规范签发者**是
+在 Arkret v1 中，`ak.self.call.media.exchange.issue_token` 的**规范签发者**是
 **soland**。当前 floria 二进制不在公开 router 或 describe 响应中暴露
 `/rtc/token` 本地签发面；如果部署层未来在 floria 前后接入代理，也只能作为
 **透明代理**把请求交给 soland，并将 soland 返回的字节原样回传给客户端。
@@ -43,7 +43,7 @@
 
 ## 何时这条决策可能在未来版本变化
 
-`ck.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
+`ak.profile.media_service_binding.v1` 的发展路径上保留了一个未来选项：
 在受控的部署里（如 soland 与 floria 同主同时部署，且签发密钥已落在
 floria 的 KMS 内），允许 floria 作为副签发者承担流量。**这不是 v1 行
 为**；v1 中任何 floria 直签 token 的代码路径都按 bug 处理。当前 floria

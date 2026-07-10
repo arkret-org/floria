@@ -943,7 +943,7 @@ mod tests {
             // renamed container id (`space_id`) are off-wire — SDK
             // sanitizer covers both since spec 59ac1d4.
             "space_id",
-            // CKP-0007 — Circle routing identifiers MUST NOT surface
+            // AKP-0007 — Circle routing identifiers MUST NOT surface
             // on the webpush plaintext envelope.
             "circle_id",
             "effective_scope",
@@ -972,7 +972,7 @@ mod tests {
         let b = super::super::random_collapse_key();
         // Per-message randomness — two adjacent calls must differ.
         assert_ne!(a, b);
-        // base64url alphabet only — no `ck:` or other typed-id substrings.
+        // base64url alphabet only — no `ak:` or other typed-id substrings.
         assert!(!a.contains(':'));
         assert!(
             a.chars()

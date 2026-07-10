@@ -202,23 +202,23 @@
         "properties": {
           "event_id": {
             "type": "string",
-            "pattern": "^ck:event:"
+            "pattern": "^ak:event:"
           },
           "message_id": {
             "type": "string",
-            "pattern": "^ck:message:"
+            "pattern": "^ak:message:"
           },
           "strand_id": {
             "type": "string",
-            "pattern": "^ck:strand:"
+            "pattern": "^ak:strand:"
           },
           "realm_id": {
             "type": "string",
-            "pattern": "^ck:realm:"
+            "pattern": "^ak:realm:"
           },
           "push_target_id": {
             "type": "string",
-            "pattern": "^ck:pseudonym:push:"
+            "pattern": "^ak:pseudonym:push:"
           },
           "wakeup_kind": {
             "type": "string",

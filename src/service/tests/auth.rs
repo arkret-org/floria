@@ -553,7 +553,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     // the plaintext-eligible kind list, so the plaintext metadata in the
     // payload (sender_actor_display_name etc.) is rejected as a
     // `failed_precondition` — the caller is on the default blind
-    // profile (`ck.profile.push_gateway.blind_wakeup.v1`) and the
+    // profile (`ak.profile.push_gateway.blind_wakeup.v1`) and the
     // visible-notification profile is not in its supported set.
     assert_eq!(
         response.status_code.unwrap(),

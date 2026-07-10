@@ -129,7 +129,7 @@ the destination device's capabilities. The decision tree:
 Rules:
 
 1. **Visible-required overrides everything.** If the realm has declared
-   `ck.profile.delivery.visible_required.v1`, all notifications are
+   `ak.profile.delivery.visible_required.v1`, all notifications are
    visible regardless of device capability. This is the regulated /
    high-assurance posture.
 2. **Blind wakeup needs both ends.** Both the realm AND the device must
@@ -167,7 +167,7 @@ Operational signals:
 
 ## Media token issuer role in v1 (proxy posture)
 
-floria's role in the `ck.self.call.media.exchange.issue_token` strand is **not an
+floria's role in the `ak.self.call.media.exchange.issue_token` strand is **not an
 issuer** in v1. The current floria HTTP router and describe endpoints do
 not expose a public `/rtc/token` minting surface. If a deployment adds a
 separate proxy in front of soland, the canonical issuer is still soland

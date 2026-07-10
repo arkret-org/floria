@@ -6,7 +6,7 @@
 //! drains every queued to-device push for the affected
 //! `(actor, device)` cells, then reports the fanout outcome back to
 //! soland so soland can advance its own
-//! `ck.account.deactivate.fanout_state` machine.
+//! `ak.account.deactivate.fanout_state` machine.
 //!
 //! The wire shape mirrors soland's broadcast contract: per-actor +
 //! per-device unbind targets, an idempotent `fanout_id`, and an
@@ -76,7 +76,7 @@ pub struct DeactivateFanoutDevice {
 
 /// Outcome a push gateway reports back to soland for a fanout.
 ///
-/// Mirrors soland's `ck.account.deactivate.fanout_state` enum.
+/// Mirrors soland's `ak.account.deactivate.fanout_state` enum.
 /// `partially_completed` is reserved for the case where floria
 /// observed at least one cell it could not drain (e.g. queue subsystem
 /// momentarily unavailable) — sealed channels are treated as drained.

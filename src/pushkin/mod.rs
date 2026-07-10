@@ -780,7 +780,7 @@ mod sanitize_tests {
     /// audit agent, or cross-signing reset.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields() {
-        // We stage values that are safe (no `did:` / `ck:` literals)
+        // We stage values that are safe (no `did:` / `ak:` literals)
         // so the sanitizer doesn't reject for `sensitive_literal`; the
         // only assertion is "key was removed from the output map".
         let payload = json!({

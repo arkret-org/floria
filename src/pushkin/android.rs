@@ -240,7 +240,7 @@ mod tests {
         // id (`realm_id`) AND the renamed container id (`space_id`).
         assert!(payload.data.get("space_id").is_none());
         assert!(payload.data.get("realm_id").is_none());
-        // CKP-0007 — Circle routing identifiers never appear in the
+        // AKP-0007 — Circle routing identifiers never appear in the
         // android freeform `data` dict.
         assert!(payload.data.get("circle_id").is_none());
         assert!(payload.data.get("effective_scope").is_none());

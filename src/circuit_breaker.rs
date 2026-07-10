@@ -1,4 +1,4 @@
-//! CKP-0007 Circle primitive — per-(provider, realm, circle) circuit
+//! AKP-0007 Circle primitive — per-(provider, realm, circle) circuit
 //! breaker. Lightweight in-process breaker that opens a window when
 //! consecutive failures cross a threshold and stays open for a
 //! configurable cool-down. Designed so a single misbehaving Circle

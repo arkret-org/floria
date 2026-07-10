@@ -264,7 +264,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     };
     // SPEC-CR-016: `operation_id` is determined by the URL path
-    // (operationId `ck.edge.push.command.notify`) and is no longer a body
+    // (operationId `ak.edge.push.command.notify`) and is no longer a body
     // field, so there is nothing to validate here.
     if let Err(error) = validate_origin_service_did(req, &caller, state.notify_auth.enabled()) {
         finish_error(
@@ -341,7 +341,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     }
-    // Phase P2 (CKP-0008 / CKP-0009) — route Personal Agent event kinds.
+    // Phase P2 (AKP-0008 / AKP-0009) — route Personal Agent event kinds.
     //
     // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
@@ -392,7 +392,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
     // Any other `event_kind` string falls through — floria does not
     // gate non-agent kinds at this layer.
-    // Round 4 — route `ck.audit.policy_access{access_kind=
+    // Round 4 — route `ak.audit.policy_access{access_kind=
     // e2ee_late_recovery}` to the audit pipeline, NOT to push. floria
     // writes the audit event first, then acks 200 so the caller's
     // pipeline advances. It does not do push fanout for this shape.

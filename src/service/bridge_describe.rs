@@ -154,7 +154,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "The caller requested a non-canonical notify operation or unsupported contract feature.",
             ),
             // CARD-1 (R3 spec-sync 2026-05-27, `_before_todos.md` §0.7,
-            // CKP-0008 / CKP-0009 / CKP-0010) — push surface
+            // AKP-0008 / AKP-0009 / AKP-0010) — push surface
             // failure codes for Personal Agent lifecycle state and the
             // recording-artifact pipeline. Floria's notify pipeline
             // already silently consumes the durable `ck.agent.*` event
@@ -195,7 +195,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "X-Arkret-Destination-Service-Did": state.notify_auth.gateway_service_did,
             }),
             // Default interop privacy baseline
-            // (`ck.profile.push_gateway.blind_wakeup.v1`): identifying
+            // (`ak.profile.push_gateway.blind_wakeup.v1`): identifying
             // fields (`event_id` / `strand_id` / `realm_id` / sender) MUST
             // NOT appear — only the opaque pseudonym, wakeup discriminator
             // and bounded counts. Identifying-field examples live under

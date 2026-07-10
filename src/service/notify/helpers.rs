@@ -383,7 +383,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // CKP-0007 — `circle_id` and `effective_scope` are routing-affecting
+    // AKP-0007 — `circle_id` and `effective_scope` are routing-affecting
     // (two pushes for the same Strand in different Circles must not
     // collide in the dedup cache).
     if let Some(value) = notification.realm_route_token() {

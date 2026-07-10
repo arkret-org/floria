@@ -27,9 +27,9 @@ Realm/Space/Circle identifiers stay off the provider wire.
 | `policy_frontier_digest` | R3 | Stable policy frontier correlator — same linkability class as the audit policy version |
 | `trust_domain` | R3 | Deployment-scope leakage — exposes whether the principal is on a federation edge |
 | `reset_event_id` | R3 | Links a push to a cross-signing reset event, exposing key-rotation timing |
-| `circle_id` | CKP-0007 | Encryption sub-boundary id — would tell an observer which Circle inside a Realm a push is destined for |
-| `effective_scope` | CKP-0007 | Reveals the realm/circle binding the principal server stamped on the request |
-| `scope_circle_id` | CKP-0007 | Same class as `circle_id`; an alias used by some draft schemas |
+| `circle_id` | AKP-0007 | Encryption sub-boundary id — would tell an observer which Circle inside a Realm a push is destined for |
+| `effective_scope` | AKP-0007 | Reveals the realm/circle binding the principal server stamped on the request |
+| `scope_circle_id` | AKP-0007 | Same class as `circle_id`; an alias used by some draft schemas |
 
 The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
@@ -40,7 +40,7 @@ provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
 ROST-FLO-1..3 mention reference v2 fields are intentionally not part of
 floria's push wire model. `subject_id`, `display_name_at_time`, and
 related Message AST preview fields belong to chime / principal-service
-message rendering, not to `ck.edge.push.command.notify`. floria keeps the typed
+message rendering, not to `ak.edge.push.command.notify`. floria keeps the typed
 payload closed with `serde(deny_unknown_fields)`; the round4 service
 test `mention_reference_v2_fields_are_not_push_payload_fields` rejects
 those fields with `schema_violation`.
@@ -51,7 +51,7 @@ Do not remove the local sweep until all of these are true:
 
 1. The SDK helper rejects every name above case-insensitively.
 2. The SDK helper is documented as the canonical blind-wakeup
-   forbidden-key source for Round R2/R3 and CKP-0007 and later.
+   forbidden-key source for Round R2/R3 and AKP-0007 and later.
 3. floria tests pass after deleting the local `is_forbidden_egress_key` extension list and
    changing `sanitized_provider_payload` to rely on the SDK helper
    only.
@@ -61,7 +61,7 @@ Do not remove the local sweep until all of these are true:
 ## Spec round upgrade checklist
 
 Use this when bumping floria to a newer arkret-spec round (R4 →
-R5, CKP-0007 → CKP-0008, etc.):
+R5, AKP-0007 → AKP-0008, etc.):
 
 - [ ] Diff the new round's `forbidden_payload_keys` table against
       `is_forbidden_egress_key`. Add any newly forbidden names to

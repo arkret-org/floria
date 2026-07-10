@@ -76,7 +76,7 @@ The review focuses on the following adversaries and capabilities:
 
 1. **Untrusted /notify caller** — can craft arbitrary JSON / headers; goal is
    to bypass auth, replay a notification, smuggle plaintext metadata, or
-   inject forbidden Round R2/R3/CKP-0007 keys into the provider wire.
+   inject forbidden Round R2/R3/AKP-0007 keys into the provider wire.
 2. **Compromised provider credential** — has access to a single APNs key,
    FCM service account, or VAPID private key; goal is to widen the blast
    radius through floria's caches or rate-limit state.
@@ -103,7 +103,7 @@ implemented:
 
 1. **ROST-FLO-1..3 mention reference v2** — floria is a push gateway,
    not the Message AST authoring or rendering layer. The public
-   `ck.edge.push.command.notify` payload must not carry mention-preview fields such
+   `ak.edge.push.command.notify` payload must not carry mention-preview fields such
    as `subject_id` or `display_name_at_time`; the typed wire model uses
    `serde(deny_unknown_fields)` and the round4 test
    `mention_reference_v2_fields_are_not_push_payload_fields` proves the

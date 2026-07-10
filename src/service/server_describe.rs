@@ -252,7 +252,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
 pub(super) const PROFILE_PUSH_GATEWAY: &str = "ak.profile.push_gateway.v1";
 /// Mandatory default-interop privacy baseline. Spec (push-notifications.md
 /// §0, conformance-profiles.json) — any implementation claiming
-/// `ck.profile.push_gateway.v1` MUST also claim this profile.
+/// `ak.profile.push_gateway.v1` MUST also claim this profile.
 pub(super) const PROFILE_BLIND_WAKEUP: &str = "ak.profile.push_gateway.blind_wakeup.v1";
 /// Opt-in visible-payload profile. Only advertised when the gateway is
 /// configured with a plaintext-eligible service surface

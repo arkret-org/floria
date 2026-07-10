@@ -20,7 +20,7 @@ adapt to your local toolchain.
 
 ## Realm vs Space
 
-`floria` forwards `ck.device.push_route` and `ck.edge.push.command.notify` events that
+`floria` forwards `ak.device.push_route` and `ak.edge.push.command.notify` events that
 target a specific security boundary:
 
 - **Realm:** security boundary membership, capability, E2EE, federation.
@@ -48,7 +48,7 @@ wire-breaking list.
   replay, floria does not run a fresh push fanout. The event is
   diagnostic only.
 - **`e2ee_late_recovery` audit path**
-  `ck.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+  `ak.audit.policy_access{access_kind=e2ee_late_recovery}` routes
   through the audit pipeline and never produces a push wakeup.
 
 ## Round R2/R3 notes
@@ -63,7 +63,7 @@ consent_revoke` (T17) consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../arkret-spec/CHANGELOG.md`](../arkret-spec/CHANGELOG.md) for the
 normative source. Ephemeral kinds (`ck.presence`, `ck.typing`,
-`ck.receipt.read`, `ck.call.signal`) are confirmed to bypass floria
+`ak.receipt.read`, `ak.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
 
 ## Cross-project task tracking
@@ -139,7 +139,7 @@ Quick notes:
 ## Arkret notify semantics
 
 - `/_arkret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
-- `ck.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
+- `ak.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_did`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `strand_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
@@ -231,4 +231,4 @@ Licensed under Apache 2.0. See `LICENSE`.
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
 > `_floria_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (CKP-0007) work item list and per-stage checkpoints.
+> circle-rollout (AKP-0007) work item list and per-stage checkpoints.

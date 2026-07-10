@@ -35,7 +35,7 @@ const SIGNATURE_HEADER: &str = "signature";
 pub struct AuthenticatedNotifyCaller {
     pub origin_service_did: String,
     /// Whether this caller is gated for the visible-notification
-    /// profile (`ck.profile.push_gateway.visible_notification.v1`).
+    /// profile (`ak.profile.push_gateway.visible_notification.v1`).
     ///
     /// Set ONLY when the principal has both `allow_plaintext_metadata`
     /// flipped on AND a `service_type` that is on the plaintext-eligible

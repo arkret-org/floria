@@ -6,13 +6,13 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 
 ## R3.4 — Spec sync 2026-05-31 (arkret-spec @ c2848a4)
 
-- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ck:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
+- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ak:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 
 ## R3.3 — Spec sync 2026-05-28 (arkret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to arkret-spec @ cced4b8 (CKP-0011 shareable object addressing / `ck.find.directory.query.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to arkret-spec @ cced4b8 (AKP-0011 shareable object addressing / `ak.find.directory.query.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (arkret-spec @ b56cab1)
@@ -23,7 +23,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (arkret-spec @ b47ff6ec)
 
-- MEDIA-1: documented floria's `ck.self.call.media.exchange.issue_token` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
+- MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
 - MEDIA-2: Arkret-native binding token scaffolding (`CokretNativeBackendToken`, `CokretNativeTokenPayload`, `CokretNativeMediaCaps`) per `bindings/arkret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
@@ -33,14 +33,14 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 
 ## [Unreleased]
 
-### CKP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
+### AKP-0007 Circle rollout (circle-rollout branch, spec `2b0d70d`)
 
-Push-gateway alignment with the CKP-0007 Circle primitive landing in
+Push-gateway alignment with the AKP-0007 Circle primitive landing in
 arkret-rust-sdk P1.
 
 #### Added
 
-- `Notification.circle_id` (typed `ck:circle:…`) and
+- `Notification.circle_id` (typed `ak:circle:…`) and
   `Notification.effective_scope` (reducer-stamped envelope binding
   mirrored from the SDK's `EffectiveScope`). Routing / dedup /
   metrics key off `circle_id > strand_id > realm_id` precedence.
@@ -76,7 +76,7 @@ arkret-rust-sdk P1.
 - Dockerfile: pinned `rust:1.94-bookworm` → `rust:1.92-bookworm` to
   match the new MSRV floor.
 - Round-23 local forbidden-key list: drops `realm_id` (SDK now covers
-  it) and adds CKP-0007's `circle_id`, `effective_scope`, and
+  it) and adds AKP-0007's `circle_id`, `effective_scope`, and
   `scope_circle_id`.
 
 #### Fixed
@@ -102,7 +102,7 @@ Push-gateway alignment with the round-4 protocol-review commits. See
 - **Added** `reason_code=historical_only` recognition on federation
   idempotency replays: floria treats them as diagnostic only and does NOT
   trigger a new push fanout.
-- **Added** `ck.audit.policy_access{access_kind=e2ee_late_recovery}` routes
+- **Added** `ak.audit.policy_access{access_kind=e2ee_late_recovery}` routes
   through the audit pipeline rather than the push pipeline; late-recovery
   events never produce a wake-up.
 - **Added** DID method-name regex sweep tightened to
@@ -153,13 +153,13 @@ MUST upgrade soland and the principal-server fanout to a matching version.
 
 - Documented that **ephemeral kinds bypass floria** (T04 cross-check) — the
   four broadcast ephemeral signals (`ck.presence`, `ck.typing`,
-  `ck.receipt.read`, `ck.call.signal`) travel on dedicated
+  `ak.receipt.read`, `ak.call.signal`) travel on dedicated
   `ephemeral_envelope` / device-message channels in the Sync Service, are
   dropped at TTL, and MUST NOT enter floria's durable Event path. The
   `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects
   `ck:` / `did:`) and the ID-prefix gate on
   `event_id` / `message_id` / `strand_id` / `realm_id` together act as
-  defence-in-depth — no `ck:presence:` typed-id exists, so the prefix check
+  defence-in-depth — no `ak:presence:` typed-id exists, so the prefix check
   rejects any future caller that tries to smuggle an ephemeral as a durable
   Event. See the comment in `src/service/mod.rs`.
 - New test module `service::tests::internal` exercising both broadcast

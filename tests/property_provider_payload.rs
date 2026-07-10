@@ -7,7 +7,7 @@
 //!
 //!  1. **Any forbidden top-level or nested key is stripped** — the sanitized output never contains
 //!     a name on the SDK forbidden list at any nesting depth.
-//!  2. **`did:` / `ck:` literals are rejected** — strings that smell like correlation identifiers
+//!  2. **`did:` / `ak:` literals are rejected** — strings that smell like correlation identifiers
 //!     cause a `ProviderPayloadRejection` rather than silently surviving.
 //!  3. **Allowed static config keys (`client`, `wakeup_kind`, etc.) round-trip unchanged** —
 //!     sanitization is removal-only.
@@ -114,7 +114,7 @@ fn arb_leaf() -> impl Strategy<Value = Value> {
         Just(Value::Null),
         any::<bool>().prop_map(Value::Bool),
         // Non-sensitive ASCII text only (so we don't trigger the
-        // `did:` / `ck:` sensitive-literal path in this property).
+        // `did:` / `ak:` sensitive-literal path in this property).
         "[a-zA-Z0-9_ .-]{0,16}".prop_map(Value::String),
         any::<i32>().prop_map(|n| json!(n)),
     ]
@@ -188,7 +188,7 @@ proptest! {
     /// envelope check. (Top-level `client` / `wakeup_kind` are stripped
     /// of forbidden NAMES but not VALUES until the envelope step.)
     #[test]
-    fn did_or_cx_literal_in_extra_field_is_rejected(
+    fn did_or_ak_literal_in_extra_field_is_rejected(
         suffix in "[a-z0-9]{1,12}",
         prefix in prop_oneof![Just("did:web:"), Just("ak:event:"), Just("ak:strand:")],
     ) {
@@ -200,7 +200,7 @@ proptest! {
         payload.insert("custom_tracer".into(), json!(format!("{prefix}{suffix}")));
         prop_assert!(
             sanitized_provider_payload(payload).is_err(),
-            "did:/ck: literal smuggled in custom_tracer slipped through"
+            "did:/ak: literal smuggled in custom_tracer slipped through"
         );
     }
 

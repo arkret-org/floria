@@ -80,9 +80,9 @@ pub(super) fn validate_destination_service_did(
 //
 // floria exposes two push-gateway capability profiles:
 //
-//   * `ck.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
+//   * `ak.profile.push_gateway.blind_wakeup.v1`  (default) — opaque `push_target_id` +
 //     `wakeup_kind`, no plaintext metadata. Maps to `caller.allow_plaintext_metadata = false`.
-//   * `ck.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
+//   * `ak.profile.push_gateway.visible_notification.v1` — the caller has been explicitly gated as a
 //     plaintext-eligible service kind (sync / principal) AND the per-principal
 //     `allow_plaintext_metadata` flag is set. Maps to `caller.allow_plaintext_metadata = true`.
 //
@@ -90,7 +90,7 @@ pub(super) fn validate_destination_service_did(
 // rejected with `plaintext_in_blind_profile`. A caller on the visible
 // profile can still be rejected if the wire payload contains keys that
 // would let an observer correlate pushes across users (forbidden
-// payload keys, sensitive `did:` / `ck:` literals).
+// payload keys, sensitive `did:` / `ak:` literals).
 pub(in crate::service) const BLIND_PROFILE_PLAINTEXT_REASON: &str = "plaintext_in_blind_profile";
 pub(in crate::service) const VISIBLE_DEVICE_OPT_IN_REASON: &str =
     "visible_notification_device_opt_in_required";
@@ -109,11 +109,11 @@ pub(super) fn validate_notification_contract(
         return Err(format!(
             "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
              sender_actor_display_name or strand/realm name metadata under the default \
-             `ck.profile.push_gateway.blind_wakeup.v1` profile"
+             `ak.profile.push_gateway.blind_wakeup.v1` profile"
         ));
     }
 
-    // CKP-0007 — `effective_scope` must agree with the routing fields
+    // AKP-0007 — `effective_scope` must agree with the routing fields
     // when set. This catches operator misconfigurations (caller
     // updated `realm_id` but forgot `circle_id`, or stamped a Circle
     // scope on the envelope but kept `circle_id` blank in the push
@@ -142,7 +142,7 @@ fn validate_visible_notification_device_opt_in(
     {
         return Err(format!(
             "{VISIBLE_DEVICE_OPT_IN_REASON}: device {} has not explicitly opted in to \
-             `ck.profile.push_gateway.visible_notification.v1`",
+             `ak.profile.push_gateway.visible_notification.v1`",
             device.device_id.as_str()
         ));
     }
@@ -257,7 +257,7 @@ fn validate_plaintext_identity_tree(path: &str, value: &Value) -> Result<(), Str
                     return Err(format!(
                         "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
                          plaintext identity metadata in `{next_path}` under the default \
-                         `ck.profile.push_gateway.blind_wakeup.v1` profile"
+                         `ak.profile.push_gateway.blind_wakeup.v1` profile"
                     ));
                 }
                 validate_plaintext_identity_tree(&next_path, value)?;

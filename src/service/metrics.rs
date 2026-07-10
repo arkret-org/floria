@@ -170,10 +170,10 @@ pub(super) fn record_delivery_receipt_outcomes(
     }
 }
 
-/// CKP-0007 — emit the per-(provider, scope) delivery counter. When
+/// AKP-0007 — emit the per-(provider, scope) delivery counter. When
 /// `detailed_circle_labels` is `true` and the notification carried a
-/// `circle_id`, labels with `scope_kind=circle, scope_id=<ck:circle:…>`.
-/// Otherwise labels with `scope_kind=realm, scope_id=<ck:realm:…>` to
+/// `circle_id`, labels with `scope_kind=circle, scope_id=<ak:circle:…>`.
+/// Otherwise labels with `scope_kind=realm, scope_id=<ak:realm:…>` to
 /// keep the cardinality bounded.
 pub(super) fn record_notify_delivery_by_scope(
     notification: &PushNotification,
