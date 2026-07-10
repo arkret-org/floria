@@ -4,11 +4,11 @@
 //! Covers the three wire-affecting changes carried by phase P2 / B-A
 //! and B-B:
 //!
-//! 1. Durable agent lifecycle events (`ck.agent.{pause,resume,deactivate}`) MUST be silently
+//! 1. Durable agent lifecycle events (`ak.agent.{pause,resume,deactivate}`) MUST be silently
 //!    consumed on the `/push/notify` endpoint — 200 OK + zero provider fanout. The authoritative
 //!    capability-cache invalidation path is the `/internal/consent_revoke` listener with
 //!    `reason=agent_paused` or `agent_deactivated`.
-//! 2. Actor-private agent events (`ck.agent.{draft.propose,action_request,action_approve,
+//! 2. Actor-private agent events (`ak.agent.{draft.propose,action_request,action_approve,
 //!    action_reject}`) MUST be dropped by default — same 200 OK + zero-fanout shape, but logged
 //!    separately so an operator can later opt a subscription gate in.
 use std::sync::Arc;
@@ -136,7 +136,7 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
 #[tokio::test]
 async fn non_agent_event_kind_falls_through_to_push_fanout() {
     // Any other `event_kind` string (or non-agent durable kind) must
-    // continue down the historical push pipeline. We use `ck.message`
+    // continue down the historical push pipeline. We use `ak.message`
     // here as a placeholder for the normal-fanout kind.
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
     let calls = pushkin.calls.clone();

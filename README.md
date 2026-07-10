@@ -1,4 +1,4 @@
-﻿# floria
+# floria
 
 > **Spec target**: [arkret-spec @ c2848a4](../arkret-spec) (R3.4 sync 2026-05-31)
 
@@ -62,7 +62,7 @@ account_deactivate_fanout` (T07) and `POST /_floria/internal/
 consent_revoke` (T17) consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../arkret-spec/CHANGELOG.md`](../arkret-spec/CHANGELOG.md) for the
-normative source. Ephemeral kinds (`ck.presence`, `ck.typing`,
+normative source. Ephemeral kinds (`ak.presence`, `ak.typing`,
 `ak.receipt.read`, `ak.call.signal`) are confirmed to bypass floria
 entirely; they ride dedicated ephemeral channels in the Sync Service.
 

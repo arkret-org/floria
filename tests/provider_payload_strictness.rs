@@ -294,7 +294,7 @@ fn sanitizer_strips_nested_route_token_metadata() {
     // an APNs `aps` block, an Android `notification` block) must also
     // get stripped by the recursive walk. The strings here are
     // opaque to the sanitizer (it walks by key name, not value
-    // shape), so any ck-prefixed string works.
+    // shape), so any ak-prefixed string works.
     let payload = json!({
         "client": "android",
         "extra_block": {

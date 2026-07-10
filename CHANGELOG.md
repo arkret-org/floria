@@ -24,7 +24,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 ## R3 — Spec sync 2026-05-27 (arkret-spec @ b47ff6ec)
 
 - MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
-- MEDIA-2: Arkret-native binding token scaffolding (`CokretNativeBackendToken`, `CokretNativeTokenPayload`, `CokretNativeMediaCaps`) per `bindings/arkret-native.md` §2; signing path fails closed until R3.1.
+- MEDIA-2: Arkret-native binding token scaffolding (`ArkretNativeBackendToken`, `ArkretNativeTokenPayload`, `ArkretNativeMediaCaps`) per `bindings/arkret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
 - CARD-1: `bridge_describe` failure-codes now advertise `agent_paused`, `agent_deactivated`, `recording_artifact_pipeline_bypassed` sourced from `arkret::error::ERROR_CODE_*` so spec renames force a recompile.
@@ -152,12 +152,12 @@ MUST upgrade soland and the principal-server fanout to a matching version.
 #### Internal
 
 - Documented that **ephemeral kinds bypass floria** (T04 cross-check) — the
-  four broadcast ephemeral signals (`ck.presence`, `ck.typing`,
+  four broadcast ephemeral signals (`ak.presence`, `ak.typing`,
   `ak.receipt.read`, `ak.call.signal`) travel on dedicated
   `ephemeral_envelope` / device-message channels in the Sync Service, are
   dropped at TTL, and MUST NOT enter floria's durable Event path. The
   `wakeup_kind` validator (closed enum + snake_case custom tokens, rejects
-  `ck:` / `did:`) and the ID-prefix gate on
+  `ak:` / `did:`) and the ID-prefix gate on
   `event_id` / `message_id` / `strand_id` / `realm_id` together act as
   defence-in-depth — no `ak:presence:` typed-id exists, so the prefix check
   rejects any future caller that tries to smuggle an ephemeral as a durable

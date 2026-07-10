@@ -157,7 +157,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // AKP-0008 / AKP-0009 / AKP-0010) — push surface
             // failure codes for Personal Agent lifecycle state and the
             // recording-artifact pipeline. Floria's notify pipeline
-            // already silently consumes the durable `ck.agent.*` event
+            // already silently consumes the durable `ak.agent.*` event
             // kinds and flushes the PSI cache when soland broadcasts
             // `consent_revoke{reason=agent_paused|agent_deactivated}`;
             // these descriptors expose the wire-form error codes so

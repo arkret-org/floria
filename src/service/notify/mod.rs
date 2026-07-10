@@ -343,14 +343,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     }
     // Phase P2 (AKP-0008 / AKP-0009) — route Personal Agent event kinds.
     //
-    // The SDK exposes seven new `ck.agent.*` kinds. Floria does not
+    // The SDK exposes seven new `ak.agent.*` kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `ck.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
+    //   * `ak.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
     //     zero fanout. The authoritative capability-cache invalidation path for these state changes
     //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
     //     a push.
-    //   * `ck.agent.{draft.propose, action_request, action_approve, action_reject}` —
+    //   * `ak.agent.{draft.propose, action_request, action_approve, action_reject}` —
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.

@@ -237,7 +237,7 @@ impl NotifyAuthConfig {
 /// Caller `service_type` values that are allowed to send plaintext
 /// metadata (sender/realm/strand names, DID literals, etc.).
 ///
-/// Active service kinds — kept in sync with `ck.profile.*` artifacts in
+/// Active service kinds — kept in sync with `ak.profile.*` artifacts in
 /// the principal services. New kinds must be reviewed for whether they
 /// can legitimately read/forward plaintext bound to a user identity.
 pub fn is_plaintext_eligible_service_kind(kind: &str) -> bool {
