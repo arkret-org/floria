@@ -103,7 +103,7 @@ the destination device's capabilities. The decision tree:
                               │
                               ▼
             ┌─────────────────────────────────────┐
-            │ Realm has ck.profile.delivery.visible_required.v1? │
+            │ Realm has ak.profile.delivery.visible_required.v1? │
             └─────────────────────────────────────┘
                        │             │
                        │ Yes         │ No
@@ -111,7 +111,7 @@ the destination device's capabilities. The decision tree:
                   visible       ┌────────────────────────────┐
                                 │ Destination device         │
                                 │ profile includes           │
-                                │ ck.profile.delivery.blind_wakeup.v1? │
+                                │ ak.profile.delivery.blind_wakeup.v1? │
                                 └────────────────────────────┘
                                           │           │
                                           │ Yes       │ No

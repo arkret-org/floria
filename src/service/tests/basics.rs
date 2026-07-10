@@ -115,7 +115,7 @@ async fn describe_separates_claim_levels() {
         .expect("claimed_profiles present");
     assert!(
         !claimed.is_empty(),
-        "floria self-claims ck.profile.push_gateway.v1"
+        "floria self-claims ak.profile.push_gateway.v1"
     );
     for entry in claimed {
         assert_eq!(
@@ -236,7 +236,7 @@ async fn gateway_describe_lives_at_root_meta_position() {
     );
 
     // The self-made /_arkret/edge/push/describe path MUST NOT exist;
-    // ck.edge.push.* registers only register/unregister/notify.
+    // ak.edge.push.* registers only register/unregister/notify.
     let push_describe = TestClient::get("http://127.0.0.1/_arkret/edge/push/describe")
         .send(&service)
         .await;

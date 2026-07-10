@@ -139,7 +139,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
-                "The request body or headers did not match the active ck.edge.push.command.notify contract.",
+                "The request body or headers did not match the active ak.edge.push.command.notify contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
                 arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
