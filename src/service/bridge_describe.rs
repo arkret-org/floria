@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret::push_gateway_api::{
+use arkret::push::{
     PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
     PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
@@ -69,7 +69,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // `spec_version` = the arkret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.
-        spec_version: Some(arkret::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
+        spec_version: Some(arkret::push::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
             service_id: state.notify_auth.gateway_service_id.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)

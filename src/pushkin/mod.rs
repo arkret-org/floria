@@ -18,7 +18,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
-use arkret::push_gateway_api::ProviderCapabilityDescriptor;
+use arkret::push::ProviderCapabilityDescriptor;
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
