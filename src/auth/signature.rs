@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret::http_signature::{
+use arkret_signatures::http_signature::{
     self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
 };
 use salvo::http::StatusCode;
