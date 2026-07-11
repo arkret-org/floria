@@ -216,9 +216,9 @@ fn notify_auth_schema() -> Value {
                     {"type": "array", "items": {"type": "string"}}
                 ]
             },
-            "trusted_service_dids": string_or_string_list_schema(),
-            "plaintext_metadata_service_dids": string_or_string_list_schema(),
-            "gateway_service_did": {"type": ["string", "null"]},
+            "trusted_service_ids": string_or_string_list_schema(),
+            "plaintext_metadata_service_ids": string_or_string_list_schema(),
+            "gateway_service_id": {"type": ["string", "null"]},
             "require_message_signatures": {"type": "boolean", "default": false},
             "signature_max_skew_seconds": {"type": "integer", "minimum": 1, "default": 300},
             "mtls_verified_header": {"type": "string", "default": "x-client-certificate-verified"},
@@ -233,7 +233,7 @@ fn notify_auth_schema() -> Value {
             "bind_bearer_to_origin_did": {
                 "type": "boolean",
                 "default": false,
-                "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_did."
+                "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_id."
             },
             "service_principals": {
                 "type": "object",

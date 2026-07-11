@@ -20,15 +20,15 @@ pub enum AuditEvent {
     #[serde(rename = "ak.audit.policy_access")]
     PolicyAccess {
         request_id: String,
-        origin_service_did: String,
+        origin_service_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        destination_service_did: Option<String>,
+        destination_service_id: Option<String>,
         access_kind: String,
     },
     #[serde(rename = "ak.push.rejected_devices")]
     RejectedDevices {
         request_id: String,
-        origin_service_did: String,
+        origin_service_id: String,
         devices: Vec<RejectedDevice>,
     },
 }
@@ -159,8 +159,8 @@ mod tests {
         let sink = JsonlAuditSink::new(&path);
         let event = AuditEvent::PolicyAccess {
             request_id: "req-1".to_owned(),
-            origin_service_did: "did:web:sync.example.com".to_owned(),
-            destination_service_did: Some("did:web:push.example.com".to_owned()),
+            origin_service_id: "did:web:sync.example.com".to_owned(),
+            destination_service_id: Some("did:web:push.example.com".to_owned()),
             access_kind: "e2ee_late_recovery".to_owned(),
         };
 

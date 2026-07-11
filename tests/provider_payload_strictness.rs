@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use floria::AppState;
-use floria::auth::ORIGIN_SERVICE_DID_HEADER;
+use floria::auth::ORIGIN_SERVICE_ID_HEADER;
 use floria::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use floria::error::DispatchError;
 use floria::models::{Device, NotificationContext, PushNotification as Notification};
@@ -140,7 +140,7 @@ fn sanitizer_rejects_did_literal() {
 #[test]
 fn build_blind_provider_data_emits_only_allowed_fields() {
     // Drive build_blind_provider_data with a fully-populated Notification
-    // (via serde_json::from_value to avoid the recipient_service_did /
+    // (via serde_json::from_value to avoid the recipient_service_id /
     // delivery_binding_frontier struct-literal hazard) and assert that
     // only the SDK-allowed blind fields make it out.
     let notification: Notification = serde_json::from_value(json!({
@@ -427,7 +427,7 @@ fn blind_profile_service() -> salvo::Service {
     // resolve to false at the auth layer regardless of how the operator
     // flipped the flag.
     let mut auth = NotifyAuthConfig::default();
-    auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.service_type = Some("push".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
@@ -450,7 +450,7 @@ fn visible_profile_service() -> salvo::Service {
     // allow_plaintext_metadata is set, so the visible-notification
     // profile is in effect.
     let mut auth = NotifyAuthConfig::default();
-    auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.service_type = Some("sync".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
@@ -486,8 +486,8 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
     });
     let obj = notification.as_object_mut().unwrap();
     obj.extend(extra_notification_fields);
-    // SPEC-CR-016: transport fields (operation_id / origin_service_did /
-    // destination_service_did) ride HTTP headers, not the body.
+    // SPEC-CR-016: transport fields (operation_id / origin_service_id /
+    // destination_service_id) ride HTTP headers, not the body.
     json!({
         "notification": notification,
     })
@@ -505,7 +505,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",
@@ -543,7 +543,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",
@@ -581,7 +581,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",
@@ -615,7 +615,7 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",
@@ -653,7 +653,7 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",
@@ -682,7 +682,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             "x-arkret-destination-service-did",
             "did:web:push.example.com",

@@ -28,12 +28,12 @@ use crate::config::NotifyAuthConfig;
 /// Floria's HMAC push-target-id derivation profile metadata is mirrored
 /// into `limits.x_floria_privacy_derivation` so consumers that read the
 /// floria extension still see it.
-fn floria_service_did(auth: &NotifyAuthConfig) -> arkret::Did {
-    // production_mode enforces a configured gateway_service_did; in dev
+fn floria_service_id(auth: &NotifyAuthConfig) -> arkret::Did {
+    // production_mode enforces a configured gateway_service_id; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
     let raw = auth
-        .gateway_service_did
+        .gateway_service_id
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
     arkret::Did::new(raw).unwrap_or_else(|_| {
@@ -177,7 +177,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     };
 
     let body = arkret::ServiceDescribe {
-        service_did: floria_service_did(auth),
+        service_id: floria_service_id(auth),
         // DEFERRED: floria has no configured deployment trust domain; a
         // stable placeholder is emitted until a `trust_domain` config
         // field is wired in (see module doc / FLORIA-01 deferred items).
@@ -274,7 +274,7 @@ pub(super) fn describe_supported_profiles(auth: &NotifyAuthConfig) -> Vec<&'stat
 }
 
 pub(super) fn describe_plaintext_visibility(auth: &NotifyAuthConfig) -> &'static str {
-    if !auth.plaintext_metadata_service_dids.is_empty()
+    if !auth.plaintext_metadata_service_ids.is_empty()
         || auth
             .service_principals
             .values()
@@ -315,7 +315,7 @@ pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> 
     {
         modes.push("mtls");
     }
-    if !auth.trusted_service_dids.is_empty() || auth.gateway_service_did.is_some() {
+    if !auth.trusted_service_ids.is_empty() || auth.gateway_service_id.is_some() {
         modes.push("service-did");
     }
     modes.sort_unstable();

@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 use super::super::metrics::{finish_error, finish_json};
 use crate::audit::AuditEvent;
 use crate::auth::{
-    AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER,
+    AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER,
 };
 use crate::dedup::request_hash;
 use crate::models::{
@@ -64,7 +64,7 @@ pub(super) fn notify_rate_limit_checks(
 
     if let Some(limit) = config.per_origin_service.filter(|limit| *limit > 0) {
         let subject = req
-            .header::<String>(ORIGIN_SERVICE_DID_HEADER)
+            .header::<String>(ORIGIN_SERVICE_ID_HEADER)
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "<missing>".to_owned());
@@ -147,10 +147,10 @@ pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub(super) fn request_destination_service_did(req: &Request) -> Option<String> {
+pub(super) fn request_destination_service_id(req: &Request) -> Option<String> {
     // SPEC-CR-016: destination service DID rides the
-    // `Destination-Service-DID` transport header only.
-    req.header::<String>(DESTINATION_SERVICE_DID_HEADER)
+    // `Destination-Service-ID` transport header only.
+    req.header::<String>(DESTINATION_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
@@ -199,7 +199,7 @@ async fn record_rejected_devices_audit(
     };
     let event = AuditEvent::RejectedDevices {
         request_id: request_id.to_owned(),
-        origin_service_did: caller.origin_service_did.clone(),
+        origin_service_id: caller.origin_service_id.clone(),
         devices: rejected.iter().map(rejected_device_for_audit).collect(),
     };
     match sink.record(&event).await {

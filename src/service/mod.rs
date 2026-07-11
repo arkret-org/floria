@@ -6,7 +6,7 @@ use salvo::prelude::*;
 
 use crate::AppState;
 #[cfg(test)]
-use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
+use crate::auth::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER};
 use crate::config::AccessLogConfig;
 
 mod bridge_describe;

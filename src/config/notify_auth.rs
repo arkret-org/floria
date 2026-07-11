@@ -15,10 +15,10 @@ pub struct NotifyAuthConfig {
     #[serde(default, deserialize_with = "string_or_vec")]
     pub bearer_token_hashes: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
-    pub trusted_service_dids: Vec<String>,
+    pub trusted_service_ids: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
-    pub plaintext_metadata_service_dids: Vec<String>,
-    pub gateway_service_did: Option<String>,
+    pub plaintext_metadata_service_ids: Vec<String>,
+    pub gateway_service_id: Option<String>,
     pub require_message_signatures: bool,
     pub signature_max_skew_seconds: u64,
     pub mtls_verified_header: String,
@@ -32,11 +32,11 @@ pub struct NotifyAuthConfig {
     /// fallback when no signature is present on a known principal).
     pub production_mode: bool,
     /// When true, a bearer-only request MUST present a recognised
-    /// origin_service_did and the gateway will only accept the request
+    /// origin_service_id and the gateway will only accept the request
     /// if that DID has a configured `service_principal` entry whose
     /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
     /// stolen gateway-wide bearer token from being used to impersonate
-    /// an arbitrary tenant via the X-Arkret-Origin-Service-DID header.
+    /// an arbitrary tenant via the X-Arkret-Origin-Service-ID header.
     /// Has no effect in `production_mode` (which already disables the
     /// gateway-wide bearer fallback).
     pub bind_bearer_to_origin_did: bool,
@@ -59,12 +59,12 @@ impl fmt::Debug for NotifyAuthConfig {
         f.debug_struct("NotifyAuthConfig")
             .field("bearer_tokens", &bearer_tokens)
             .field("bearer_token_hashes", &self.bearer_token_hashes.len())
-            .field("trusted_service_dids", &self.trusted_service_dids)
+            .field("trusted_service_ids", &self.trusted_service_ids)
             .field(
-                "plaintext_metadata_service_dids",
-                &self.plaintext_metadata_service_dids,
+                "plaintext_metadata_service_ids",
+                &self.plaintext_metadata_service_ids,
             )
-            .field("gateway_service_did", &self.gateway_service_did)
+            .field("gateway_service_id", &self.gateway_service_id)
             .field(
                 "require_message_signatures",
                 &self.require_message_signatures,
@@ -94,9 +94,9 @@ impl NotifyAuthConfig {
     pub fn enabled(&self) -> bool {
         !self.bearer_tokens.is_empty()
             || !self.bearer_token_hashes.is_empty()
-            || !self.trusted_service_dids.is_empty()
+            || !self.trusted_service_ids.is_empty()
             || !self.service_principals.is_empty()
-            || self.gateway_service_did.is_some()
+            || self.gateway_service_id.is_some()
             || self.require_message_signatures
     }
 
@@ -186,8 +186,8 @@ impl NotifyAuthConfig {
                 "http.notify_auth.production_mode requires authentication; configure service_principals or signed access"
             );
         }
-        if self.gateway_service_did.is_none() {
-            bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_did");
+        if self.gateway_service_id.is_none() {
+            bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_id");
         }
         if self.service_principals.is_empty() {
             bail!(
@@ -252,9 +252,9 @@ impl Default for NotifyAuthConfig {
         Self {
             bearer_tokens: Vec::new(),
             bearer_token_hashes: Vec::new(),
-            trusted_service_dids: Vec::new(),
-            plaintext_metadata_service_dids: Vec::new(),
-            gateway_service_did: None,
+            trusted_service_ids: Vec::new(),
+            plaintext_metadata_service_ids: Vec::new(),
+            gateway_service_id: None,
             require_message_signatures: false,
             signature_max_skew_seconds: 300,
             mtls_verified_header: "x-client-certificate-verified".to_owned(),

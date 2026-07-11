@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use super::helpers::{authority, target_uri, unix_now_secs};
 use super::{
-    AuthFailure, CONTENT_DIGEST_HEADER, DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER,
+    AuthFailure, CONTENT_DIGEST_HEADER, DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER,
     SIGNATURE_HEADER, SIGNATURE_INPUT_HEADER,
 };
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
@@ -29,7 +29,7 @@ pub(super) fn verify_message_signature(
     let key_id = principal.signature_key_id.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
-            origin_service_did = %origin_did,
+            origin_service_id = %origin_did,
             "rejecting /notify request because principal is missing signature_key_id"
         );
         AuthFailure {
@@ -44,7 +44,7 @@ pub(super) fn verify_message_signature(
         .ok_or_else(|| {
             tracing::warn!(
                 request_id,
-                origin_service_did = %origin_did,
+                origin_service_id = %origin_did,
                 "rejecting /notify request because principal is missing signature_public_key_hex"
             );
             AuthFailure {
@@ -111,8 +111,8 @@ pub(super) fn verify_message_signature(
         Component::TargetUri,
         Component::Authority,
         Component::Header(CONTENT_DIGEST_HEADER.to_owned()),
-        Component::Header(ORIGIN_SERVICE_DID_HEADER.to_owned()),
-        Component::Header(DESTINATION_SERVICE_DID_HEADER.to_owned()),
+        Component::Header(ORIGIN_SERVICE_ID_HEADER.to_owned()),
+        Component::Header(DESTINATION_SERVICE_ID_HEADER.to_owned()),
     ];
     if !signature_input.covers_all(&required_components) {
         return Err(AuthFailure {
@@ -371,7 +371,7 @@ pub(super) async fn verify_nonce_freshness(
     let Some(nonce_store) = nonce_store else {
         tracing::warn!(
             request_id,
-            origin_service_did = %origin_did,
+            origin_service_id = %origin_did,
             "rejecting /notify request: nonce store is required for signed requests"
         );
         return Err(AuthFailure {
@@ -406,7 +406,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::Replayed => {
             tracing::warn!(
                 request_id,
-                origin_service_did = %origin_did,
+                origin_service_id = %origin_did,
                 "rejecting /notify request as a Signature replay within the expiry window"
             );
             Err(AuthFailure {
@@ -418,7 +418,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::BackendUnavailable => {
             tracing::warn!(
                 request_id,
-                origin_service_did = %origin_did,
+                origin_service_id = %origin_did,
                 "rejecting /notify request: nonce store backend unavailable (strict policy)"
             );
             Err(AuthFailure {

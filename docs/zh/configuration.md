@@ -79,9 +79,9 @@ http {
   notify_auth {
     bearer_tokens "replace-me"
     // bearer_token_hashes "sha256:<hex-digest>"
-    trusted_service_dids "did:web:sync.example.com"
-    plaintext_metadata_service_dids "did:web:sync.example.com"
-    gateway_service_did "did:web:push.example.com"
+    trusted_service_ids "did:web:sync.example.com"
+    plaintext_metadata_service_ids "did:web:sync.example.com"
+    gateway_service_id "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
@@ -122,9 +122,9 @@ http {
 | `notify_dedup.key_prefix` | string | `"floria"` | Redis 去重键前缀 |
 | `notify_auth.bearer_tokens` | string/string[] | — | 非生产 `/notify` 允许的 bearer service token；`production_mode=true` 时会被拒绝 |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
-| `notify_auth.trusted_service_dids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
-| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
-| `notify_auth.gateway_service_did` | string | — | 期望的 destination gateway DID |
+| `notify_auth.trusted_service_ids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
+| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
+| `notify_auth.gateway_service_id` | string | — | 期望的 destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
 | `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
@@ -158,7 +158,7 @@ http {
     key_prefix "floria-prod"
   }
   notify_auth {
-    gateway_service_did "did:web:push.example.com"
+    gateway_service_id "did:web:push.example.com"
     production_mode true
     require_message_signatures true
     service_principals {

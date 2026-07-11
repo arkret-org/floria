@@ -2,16 +2,16 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::Value;
 
-use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_DID_HEADER};
+use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER};
 use crate::config::NotifyAuthConfig;
 use crate::models::{DeviceExt, PushNotification};
 
-/// SPEC-CR-016: the originating service DID rides the `Source-Service-DID`
-/// transport header (`ORIGIN_SERVICE_DID_HEADER`), which the auth layer
-/// already resolved into `caller.origin_service_did`. We keep a
+/// SPEC-CR-016: the originating service DID rides the `Source-Service-ID`
+/// transport header (`ORIGIN_SERVICE_ID_HEADER`), which the auth layer
+/// already resolved into `caller.origin_service_id`. We keep a
 /// defense-in-depth check that the header is present and consistent with
 /// the authenticated caller rather than reading a (now removed) body field.
-pub(super) fn validate_origin_service_did(
+pub(super) fn validate_origin_service_id(
     req: &Request,
     caller: &AuthenticatedNotifyCaller,
     auth_enabled: bool,
@@ -19,18 +19,18 @@ pub(super) fn validate_origin_service_did(
     if !auth_enabled {
         return Ok(());
     }
-    let Some(origin_service_did) = req
-        .header::<String>(crate::auth::ORIGIN_SERVICE_DID_HEADER)
+    let Some(origin_service_id) = req
+        .header::<String>(crate::auth::ORIGIN_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
     else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
-            message: "Source-Service-DID header is required".to_owned(),
+            message: "Source-Service-ID header is required".to_owned(),
         });
     };
-    if origin_service_did != caller.origin_service_did {
+    if origin_service_id != caller.origin_service_id {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
@@ -41,14 +41,14 @@ pub(super) fn validate_origin_service_did(
 }
 
 /// SPEC-CR-016: the destination service DID rides the
-/// `Destination-Service-DID` transport header only (the body field is
+/// `Destination-Service-ID` transport header only (the body field is
 /// removed). The recipient-service-did scope binding reuses the same
-/// header value — `push_target_id` is a per-`(recipient_service_did, ...)`
+/// header value — `push_target_id` is a per-`(recipient_service_id, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
-/// destination equals its own `gateway_service_did` (spec
+/// destination equals its own `gateway_service_id` (spec
 /// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
 /// decorative.
-pub(super) fn validate_destination_service_did(
+pub(super) fn validate_destination_service_id(
     req: &Request,
     auth: &NotifyAuthConfig,
     auth_enabled: bool,
@@ -58,11 +58,11 @@ pub(super) fn validate_destination_service_did(
     }
 
     let header_destination = req
-        .header::<String>(DESTINATION_SERVICE_DID_HEADER)
+        .header::<String>(DESTINATION_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
 
-    if let Some(expected) = auth.gateway_service_did.as_deref()
+    if let Some(expected) = auth.gateway_service_id.as_deref()
         && let Some(destination) = header_destination.as_deref()
         && destination != expected
     {

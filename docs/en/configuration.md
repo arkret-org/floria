@@ -98,9 +98,9 @@ http {
   notify_auth {
     bearer_tokens "replace-me"
     // bearer_token_hashes "sha256:<hex-digest>"
-    trusted_service_dids "did:web:sync.example.com"
-    plaintext_metadata_service_dids "did:web:sync.example.com"
-    gateway_service_did "did:web:push.example.com"
+    trusted_service_ids "did:web:sync.example.com"
+    plaintext_metadata_service_ids "did:web:sync.example.com"
+    gateway_service_id "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
@@ -141,9 +141,9 @@ http {
 | `notify_dedup.key_prefix` | string | `"floria"` | Prefix used for dedup keys in Redis |
 | `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for non-production `/notify`; rejected when `production_mode=true` |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
-| `notify_auth.trusted_service_dids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
-| `notify_auth.plaintext_metadata_service_dids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
-| `notify_auth.gateway_service_did` | string | — | Expected destination gateway DID |
+| `notify_auth.trusted_service_ids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
+| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
+| `notify_auth.gateway_service_id` | string | — | Expected destination gateway DID |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
 | `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
@@ -177,7 +177,7 @@ http {
     key_prefix "floria-prod"
   }
   notify_auth {
-    gateway_service_did "did:web:push.example.com"
+    gateway_service_id "did:web:push.example.com"
     production_mode true
     require_message_signatures true
     service_principals {

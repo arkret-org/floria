@@ -27,9 +27,9 @@ http {
     // Basic bearer profile:
     // bearer_tokens "replace-me"
     // bearer_token_hashes "sha256:<hex-digest>"
-    // trusted_service_dids "did:web:sync.example.com"
-    // plaintext_metadata_service_dids "did:web:sync.example.com"
-    // gateway_service_did "did:web:push.example.com"
+    // trusted_service_ids "did:web:sync.example.com"
+    // plaintext_metadata_service_ids "did:web:sync.example.com"
+    // gateway_service_id "did:web:push.example.com"
     //
     // Stronger production profile:
     // production_mode #true

@@ -33,11 +33,11 @@ use helpers::{
     finish_standard_notify_json, idempotency_cache_key, mark_delivered_devices,
     normalized_notify_dedup_key, notify_rate_limit_checks, optional_owned_string,
     record_rejected_devices_audit_or_finish, record_required_audit_event, rejected_device,
-    request_destination_service_did, resolve_idempotency_key,
+    request_destination_service_id, resolve_idempotency_key,
 };
 use validation::{
-    BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_did,
-    validate_notification_contract, validate_origin_service_did,
+    BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_id,
+    validate_notification_contract, validate_origin_service_id,
     validate_plaintext_identity_metadata,
 };
 
@@ -226,10 +226,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     .await
     {
         Ok(caller) => {
-            span.record(
-                "caller",
-                tracing::field::display(&caller.origin_service_did),
-            );
+            span.record("caller", tracing::field::display(&caller.origin_service_id));
             caller
         }
         Err(error) => {
@@ -266,7 +263,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // SPEC-CR-016: `operation_id` is determined by the URL path
     // (operationId `ak.edge.push.command.notify`) and is no longer a body
     // field, so there is nothing to validate here.
-    if let Err(error) = validate_origin_service_did(req, &caller, state.notify_auth.enabled()) {
+    if let Err(error) = validate_origin_service_id(req, &caller, state.notify_auth.enabled()) {
         finish_error(
             res,
             error.status,
@@ -279,7 +276,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
     if let Err(error) =
-        validate_destination_service_did(req, &state.notify_auth, state.notify_auth.enabled())
+        validate_destination_service_id(req, &state.notify_auth, state.notify_auth.enabled())
     {
         finish_error(
             res,
@@ -450,7 +447,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         let sdk_policy_access = serde_json::json!({
             "realm_id": realm_id,
-            "actor": caller.origin_service_did.as_str(),
+            "actor": caller.origin_service_id.as_str(),
             "access_kind": access_kind,
             "late_recovery_original_event_id": late_recovery_original_event_id.as_deref(),
             "observed_at": "1970-01-01T00:00:00Z",
@@ -485,8 +482,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
         let audit_event = AuditEvent::PolicyAccess {
             request_id: request_id.clone(),
-            origin_service_did: caller.origin_service_did.clone(),
-            destination_service_did: request_destination_service_did(req),
+            origin_service_id: caller.origin_service_id.clone(),
+            destination_service_id: request_destination_service_id(req),
             access_kind: access_kind.to_owned(),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {

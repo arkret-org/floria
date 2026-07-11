@@ -232,22 +232,22 @@ pub(super) fn test_service_with_auth(
 pub(super) fn notify_auth_config() -> NotifyAuthConfig {
     let mut config = NotifyAuthConfig::default();
     config.bearer_tokens = vec!["secret-token".to_owned()];
-    config.trusted_service_dids = vec!["did:web:sync.example.com".to_owned()];
-    config.plaintext_metadata_service_dids = vec!["did:web:sync.example.com".to_owned()];
-    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.trusted_service_ids = vec!["did:web:sync.example.com".to_owned()];
+    config.plaintext_metadata_service_ids = vec!["did:web:sync.example.com".to_owned()];
+    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config
 }
 
 pub(super) fn restricted_notify_auth_config() -> NotifyAuthConfig {
     let mut config = notify_auth_config();
-    config.plaintext_metadata_service_dids.clear();
+    config.plaintext_metadata_service_ids.clear();
     config
 }
 
 pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
-    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.production_mode = true;
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
@@ -260,8 +260,8 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
 }
 
 pub(super) fn payload(devices: Vec<Value>) -> Value {
-    // SPEC-CR-016: transport fields (operation_id / origin_service_did /
-    // destination_service_did / idempotency_key) ride HTTP headers, not the
+    // SPEC-CR-016: transport fields (operation_id / origin_service_id /
+    // destination_service_id / idempotency_key) ride HTTP headers, not the
     // body. Gateway-internal routing ids (realm_id / circle_id / ...) live
     // under notification.route_tokens.
     json!({

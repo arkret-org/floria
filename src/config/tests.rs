@@ -243,12 +243,12 @@ fn validate_requires_service_principals_for_required_signatures() {
 }
 
 #[test]
-fn parses_plaintext_metadata_service_dids_and_endpoint_rate_limit() {
+fn parses_plaintext_metadata_service_ids_and_endpoint_rate_limit() {
     let config: Config = serde_saphyr::from_str(
         r#"
 http:
   notify_auth:
-    plaintext_metadata_service_dids: did:web:sync.example.com
+    plaintext_metadata_service_ids: did:web:sync.example.com
   notify_rate_limits:
     per_endpoint: 10
 apps: {}
@@ -257,7 +257,7 @@ apps: {}
     .unwrap();
 
     assert_eq!(
-        config.http.notify_auth.plaintext_metadata_service_dids,
+        config.http.notify_auth.plaintext_metadata_service_ids,
         vec!["did:web:sync.example.com"]
     );
     assert_eq!(config.http.notify_rate_limits.per_endpoint, Some(10));
@@ -304,7 +304,7 @@ apps: {}
 fn production_mode_requires_signed_or_mtls_principal() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         ..Default::default()
@@ -326,7 +326,7 @@ fn production_mode_requires_signed_or_mtls_principal() {
 fn production_mode_rejects_gateway_wide_bearer_tokens() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
@@ -350,7 +350,7 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
 fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
@@ -376,7 +376,7 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
 fn production_mode_rejects_plaintext_for_non_eligible_kind() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("b".repeat(64)),
@@ -401,7 +401,7 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
 fn production_mode_accepts_signed_eligible_principal() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("c".repeat(64)),

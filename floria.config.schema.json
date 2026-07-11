@@ -194,10 +194,10 @@
             },
             "bind_bearer_to_origin_did": {
               "default": false,
-              "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_did.",
+              "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_id.",
               "type": "boolean"
             },
-            "gateway_service_did": {
+            "gateway_service_id": {
               "type": [
                 "string",
                 "null"
@@ -252,7 +252,7 @@
               },
               "type": "object"
             },
-            "plaintext_metadata_service_dids": {
+            "plaintext_metadata_service_ids": {
               "oneOf": [
                 {
                   "type": "string"
@@ -385,7 +385,7 @@
               "minimum": 1,
               "type": "integer"
             },
-            "trusted_service_dids": {
+            "trusted_service_ids": {
               "oneOf": [
                 {
                   "type": "string"

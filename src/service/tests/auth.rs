@@ -17,9 +17,9 @@ async fn notify_accepts_authenticated_allowlisted_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -93,9 +93,9 @@ async fn notify_accepts_hashed_bearer_token() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -120,9 +120,9 @@ async fn notify_rejects_query_string_auth_material() {
     let mut response =
         TestClient::post("http://127.0.0.1/_arkret/edge/push/notify?access_token=secret-token")
             .add_header("authorization", "Bearer secret-token", true)
-            .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+            .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
             .add_header(
-                DESTINATION_SERVICE_DID_HEADER,
+                DESTINATION_SERVICE_ID_HEADER,
                 "did:web:push.example.com",
                 true,
             )
@@ -139,7 +139,7 @@ async fn notify_rejects_query_string_auth_material() {
 }
 
 #[tokio::test]
-async fn notify_rejects_bearer_without_origin_service_did() {
+async fn notify_rejects_bearer_without_origin_service_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -163,7 +163,7 @@ async fn notify_rejects_bearer_without_origin_service_did() {
 }
 
 #[tokio::test]
-async fn notify_rejects_non_allowlisted_origin_service_did() {
+async fn notify_rejects_non_allowlisted_origin_service_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -174,9 +174,9 @@ async fn notify_rejects_non_allowlisted_origin_service_did() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -204,9 +204,9 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -277,9 +277,9 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -310,9 +310,9 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -352,9 +352,9 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -374,13 +374,13 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
 }
 
 // SPEC-CR-016: the originating service DID is no longer a body field;
-// it rides the `Source-Service-DID` header and is the authenticated
+// it rides the `Source-Service-ID` header and is the authenticated
 // caller identity itself, so a "body origin vs caller" mismatch test is
 // obsolete. Header-based origin handling is covered by the auth-layer
 // tests in `auth.rs`.
 
 #[tokio::test]
-async fn notify_rejects_mismatched_destination_service_did() {
+async fn notify_rejects_mismatched_destination_service_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -391,9 +391,9 @@ async fn notify_rejects_mismatched_destination_service_did() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:other-gateway.example.com",
             true,
         )
@@ -410,14 +410,14 @@ async fn notify_rejects_mismatched_destination_service_did() {
 }
 
 // SPEC-CR-016: the destination service DID is header-only
-// (`Destination-Service-DID`); a "body destination" field no longer
+// (`Destination-Service-ID`); a "body destination" field no longer
 // exists, so the body-mismatch test is obsolete — header-mismatch
-// coverage lives in `notify_rejects_mismatched_destination_service_did`.
+// coverage lives in `notify_rejects_mismatched_destination_service_id`.
 
-// SPEC-CR-016: `recipient_service_did` is removed from the body and now
-// reuses the `Destination-Service-DID` header. The gateway enforces that
-// the declared destination equals its own `gateway_service_did`, which is
-// exactly what `notify_rejects_mismatched_destination_service_did` (reject)
+// SPEC-CR-016: `recipient_service_id` is removed from the body and now
+// reuses the `Destination-Service-ID` header. The gateway enforces that
+// the declared destination equals its own `gateway_service_id`, which is
+// exactly what `notify_rejects_mismatched_destination_service_id` (reject)
 // and the OK-path tests (accept) already cover. The dedicated
 // recipient-service-did body tests are therefore obsolete.
 
@@ -465,9 +465,9 @@ async fn production_mode_rejects_bearer_only_principal() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -497,9 +497,9 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer gateway-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -519,7 +519,7 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
 async fn principal_plaintext_policy_requires_eligible_service_kind() {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
-    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.bearer_tokens = vec!["principal-token".to_owned()];
     principal.allow_plaintext_metadata = true;
@@ -539,9 +539,9 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )

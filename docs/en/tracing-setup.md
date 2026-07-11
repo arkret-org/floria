@@ -92,7 +92,7 @@ floria attaches these to every `/notify` span:
 | `http.method` | `POST` |
 | `http.target` | `/_arkret/edge/push/notify` |
 | `floria.request_id` | per-request UUID |
-| `floria.origin_service_did` | resolved origin DID |
+| `floria.origin_service_id` | resolved origin DID |
 | `floria.app_id` | target app id |
 | `floria.realm_id` | realm scope (always present) |
 | `floria.circle_id` | circle scope (when set; respects detailed-labels toggle) |

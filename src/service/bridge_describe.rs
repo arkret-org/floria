@@ -15,7 +15,7 @@ use super::server_describe::{
 };
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
-use crate::auth::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER};
+use crate::auth::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER};
 use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
 
 fn owned(items: Vec<&'static str>) -> Vec<String> {
@@ -71,7 +71,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // the contract-vs-spec distinction.
         spec_version: Some(arkret::push_gateway_api::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
-            service_did: state.notify_auth.gateway_service_did.clone(),
+            service_id: state.notify_auth.gateway_service_id.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)
                 .into_iter()
                 .map(str::to_owned)
@@ -84,8 +84,8 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             operation_id: NOTIFY_OPERATION_ID.to_owned(),
             request_id_header: "X-Arkret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
-            origin_service_did_header: ORIGIN_SERVICE_DID_HEADER.to_owned(),
-            destination_service_did_header: DESTINATION_SERVICE_DID_HEADER.to_owned(),
+            origin_service_id_header: ORIGIN_SERVICE_ID_HEADER.to_owned(),
+            destination_service_id_header: DESTINATION_SERVICE_ID_HEADER.to_owned(),
             max_request_size_bytes: MAX_REQUEST_SIZE,
             dedup_backend: dedup_backend.map(str::to_owned),
             dedup_ttl_seconds,
@@ -192,7 +192,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "X-Arkret-Request-Id": "req_01js0000000000000000000000",
                 "Idempotency-Key": "notify-01js0000000000000000000000",
                 "X-Arkret-Origin-Service-Did": "did:web:soland.example",
-                "X-Arkret-Destination-Service-Did": state.notify_auth.gateway_service_did,
+                "X-Arkret-Destination-Service-Did": state.notify_auth.gateway_service_id,
             }),
             // Default interop privacy baseline
             // (`ak.profile.push_gateway.blind_wakeup.v1`): identifying

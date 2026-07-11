@@ -36,7 +36,7 @@
             }
           },
           {
-            "name": "X-Origin-Service-DID",
+            "name": "X-Origin-Service-ID",
             "in": "header",
             "required": false,
             "schema": {
@@ -44,7 +44,7 @@
             }
           },
           {
-            "name": "X-Destination-Service-DID",
+            "name": "X-Destination-Service-ID",
             "in": "header",
             "required": false,
             "schema": {
@@ -179,10 +179,10 @@
             "minLength": 1,
             "maxLength": 128
           },
-          "origin_service_did": {
+          "origin_service_id": {
             "type": "string"
           },
-          "destination_service_did": {
+          "destination_service_id": {
             "type": "string"
           },
           "notification": {

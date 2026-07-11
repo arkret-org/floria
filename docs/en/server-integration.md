@@ -33,8 +33,8 @@ The caller should set:
 | `Idempotency-Key` | Recommended | Stable key for retry-safe `/notify` calls |
 | `Authorization: Bearer ...` | Conditional | Only when bearer fallback is configured |
 | HTTP Message Signature headers | Conditional | Required when the caller principal requires signatures |
-| `X-Origin-Service-DID` | Recommended | Must match `origin_service_did` when present |
-| `X-Destination-Service-DID` | Recommended | Must match the gateway DID when configured |
+| `X-Origin-Service-ID` | Recommended | Must match `origin_service_id` when present |
+| `X-Destination-Service-ID` | Recommended | Must match the gateway DID when configured |
 
 ## Notify Request
 
@@ -44,8 +44,8 @@ The caller should set:
 {
   "operation_id": "ak.edge.push.command.notify",
   "idempotency_key": "notify-01J...",
-  "origin_service_did": "did:web:sync.example.com",
-  "destination_service_did": "did:web:push.example.com",
+  "origin_service_id": "did:web:sync.example.com",
+  "destination_service_id": "did:web:push.example.com",
   "notification": {
     "event_id": "ak:event:01JS0EV000000000000000000",
     "message_id": "ak:message:01JS0MSG0000000000000000",

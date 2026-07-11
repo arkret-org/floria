@@ -10,7 +10,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::helpers::{signature_public_key_hex, unix_now_secs};
-use super::{DESTINATION_SERVICE_DID_HEADER, ORIGIN_SERVICE_DID_HEADER, redact_url_credentials};
+use super::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER, redact_url_credentials};
 use crate::AppState;
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use crate::nonce_store::NonceStore;
@@ -50,7 +50,7 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
     )]));
     let mut state = AppState::new(Arc::new(registry));
     let mut notify_auth = NotifyAuthConfig::default();
-    notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     notify_auth.require_message_signatures = true;
     notify_auth.replay_window_seconds = 300;
     notify_auth.service_principals =
@@ -146,9 +146,9 @@ async fn http_message_signature_authenticates_notify_request() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -204,9 +204,9 @@ async fn mtls_profile_authenticates_notify_request() {
         .add_header("signature", signature, true)
         .add_header("x-client-certificate-verified", "true", true)
         .add_header("x-client-certificate-sha256", "aa:bb:cc", true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -259,9 +259,9 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -329,9 +329,9 @@ async fn rejects_tampered_body() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -400,9 +400,9 @@ async fn rejects_signature_missing_required_components() {
         .add_header("content-digest", digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_DID_HEADER, "did:web:sync.example.com", true)
+        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            DESTINATION_SERVICE_DID_HEADER,
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
