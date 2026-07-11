@@ -42,7 +42,7 @@ pub(super) fn validate_origin_service_id(
 
 /// SPEC-CR-016: the destination service DID rides the
 /// `Destination-Service-ID` transport header only (the body field is
-/// removed). The recipient-service-did scope binding reuses the same
+/// removed). The recipient-service-id scope binding reuses the same
 /// header value — `push_target_id` is a per-`(recipient_service_id, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
 /// destination equals its own `gateway_service_id` (spec

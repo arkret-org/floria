@@ -210,7 +210,7 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
 
     assert!(!modes.contains(&json!("bearer")));
     assert!(modes.contains(&json!("http-message-signature")));
-    assert!(modes.contains(&json!("service-did")));
+    assert!(modes.contains(&json!("service-id")));
 }
 
 #[tokio::test]

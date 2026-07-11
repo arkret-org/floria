@@ -191,8 +191,8 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             notify_headers: serde_json::json!({
                 "X-Arkret-Request-Id": "req_01js0000000000000000000000",
                 "Idempotency-Key": "notify-01js0000000000000000000000",
-                "X-Arkret-Origin-Service-Did": "did:web:soland.example",
-                "X-Arkret-Destination-Service-Did": state.notify_auth.gateway_service_id,
+                "X-Arkret-Origin-Service-ID": "did:web:soland.example",
+                "X-Arkret-Destination-Service-ID": state.notify_auth.gateway_service_id,
             }),
             // Default interop privacy baseline
             // (`ak.profile.push_gateway.blind_wakeup.v1`): identifying

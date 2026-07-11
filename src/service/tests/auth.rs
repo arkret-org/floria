@@ -419,7 +419,7 @@ async fn notify_rejects_mismatched_destination_service_id() {
 // the declared destination equals its own `gateway_service_id`, which is
 // exactly what `notify_rejects_mismatched_destination_service_id` (reject)
 // and the OK-path tests (accept) already cover. The dedicated
-// recipient-service-did body tests are therefore obsolete.
+// recipient-service-id body tests are therefore obsolete.
 
 #[tokio::test]
 async fn production_mode_rejects_anonymous_requests() {

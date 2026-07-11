@@ -18,8 +18,8 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
-use async_trait::async_trait;
 use arkret::push_gateway_api::ProviderCapabilityDescriptor;
+use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;

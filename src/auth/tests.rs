@@ -79,7 +79,7 @@ fn sign_request(
     );
     let now = unix_now_secs();
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -88,10 +88,10 @@ fn sign_request(
         format!("\"@target-uri\": {target_uri}"),
         format!("\"@authority\": {authority}"),
         format!("\"content-digest\": {digest}"),
-        "\"x-arkret-origin-service-did\": did:web:sync.example.com".to_owned(),
-        "\"x-arkret-destination-service-did\": did:web:push.example.com".to_owned(),
+        "\"x-arkret-origin-service-id\": did:web:sync.example.com".to_owned(),
+        "\"x-arkret-destination-service-id\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -372,7 +372,7 @@ async fn rejects_signature_missing_required_components() {
     // Intentionally omit `@authority` from the covered components —
     // floria's required-component policy must still trip this.
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -380,10 +380,10 @@ async fn rejects_signature_missing_required_components() {
         "\"@method\": post".to_owned(),
         "\"@target-uri\": http://127.0.0.1/_arkret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
-        "\"x-arkret-origin-service-did\": did:web:sync.example.com".to_owned(),
-        "\"x-arkret-destination-service-did\": did:web:push.example.com".to_owned(),
+        "\"x-arkret-origin-service-id\": did:web:sync.example.com".to_owned(),
+        "\"x-arkret-destination-service-id\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-did\" \"x-arkret-destination-service-did\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),

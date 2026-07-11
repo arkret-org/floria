@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use floria::AppState;
-use floria::auth::ORIGIN_SERVICE_ID_HEADER;
+use floria::auth::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER};
 use floria::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use floria::error::DispatchError;
 use floria::models::{Device, NotificationContext, PushNotification as Notification};
@@ -507,7 +507,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -545,7 +545,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -583,7 +583,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -617,7 +617,7 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -655,7 +655,7 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )
@@ -684,7 +684,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
-            "x-arkret-destination-service-did",
+            DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
             true,
         )

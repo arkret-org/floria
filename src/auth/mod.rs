@@ -25,8 +25,8 @@ use signature::{
     verify_nonce_freshness,
 };
 
-pub const ORIGIN_SERVICE_ID_HEADER: &str = "x-arkret-origin-service-did";
-pub const DESTINATION_SERVICE_ID_HEADER: &str = "x-arkret-destination-service-did";
+pub const ORIGIN_SERVICE_ID_HEADER: &str = "x-arkret-origin-service-id";
+pub const DESTINATION_SERVICE_ID_HEADER: &str = "x-arkret-destination-service-id";
 const CONTENT_DIGEST_HEADER: &str = "content-digest";
 const SIGNATURE_INPUT_HEADER: &str = "signature-input";
 const SIGNATURE_HEADER: &str = "signature";

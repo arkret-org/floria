@@ -316,7 +316,7 @@ pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> 
         modes.push("mtls");
     }
     if !auth.trusted_service_ids.is_empty() || auth.gateway_service_id.is_some() {
-        modes.push("service-did");
+        modes.push("service-id");
     }
     modes.sort_unstable();
     modes.dedup();
