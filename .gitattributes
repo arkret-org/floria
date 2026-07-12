@@ -1,1 +1,2 @@
-floria.config.schema.json text eol=lf
+# Keep text files consistent across operating systems.
+* text=auto eol=lf
