@@ -19,9 +19,15 @@ use floria::{AppState, metrics};
 use salvo::prelude::*;
 use tokio::task::JoinSet;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let (config, path) = Config::load()?;
+fn main() -> Result<()> {
+    let loaded_config = Config::load_from_args()?;
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(run(loaded_config))
+}
+
+async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
     let _telemetry: TelemetryGuard =
         observability::init_telemetry(&config.observability()).context("initialise telemetry")?;
     tracing::info!(config = %path.display(), "using configuration file");

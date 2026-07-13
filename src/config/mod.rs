@@ -65,22 +65,35 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<(Self, PathBuf)> {
-        let path = env::var("FLORIA_CONF").unwrap_or_else(|_| "floria.kdl".to_owned());
-        let path = PathBuf::from(path);
+        Self::load_with_options(ConfigLoadOptions::legacy())
+    }
+
+    /// Load configuration using the common Arkret server configuration-source
+    /// contract exposed by `--config` and `--no-env-overrides`.
+    pub fn load_from_args() -> Result<(Self, PathBuf)> {
+        Self::load_with_options(ConfigLoadOptions::from_process_args()?)
+    }
+
+    fn load_with_options(options: ConfigLoadOptions) -> Result<(Self, PathBuf)> {
+        let path = options.path.unwrap_or_else(|| {
+            env::var("FLORIA_CONF")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("floria.kdl"))
+        });
         let body = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config file {}", path.display()))?;
-        let mut config = match path.extension().and_then(|ext| ext.to_str()) {
-            Some("kdl") => {
-                let json_value = kdl::parse_kdl_to_json(&body)
-                    .with_context(|| format!("failed to parse KDL config {}", path.display()))?;
-                serde_json::from_value(json_value).with_context(|| {
-                    format!("failed to deserialize KDL config {}", path.display())
-                })?
-            }
-            _ => serde_saphyr::from_str::<Self>(&body)
+        let mut value = match path.extension().and_then(|ext| ext.to_str()) {
+            Some("kdl") => kdl::parse_kdl_to_json(&body)
+                .with_context(|| format!("failed to parse KDL config {}", path.display()))?,
+            _ => serde_saphyr::from_str::<Value>(&body)
                 .with_context(|| format!("failed to parse YAML config {}", path.display()))?,
         };
-        if config.proxy.is_none() {
+        if options.explicit_config && !options.no_env_overrides {
+            apply_prefixed_environment(&mut value)?;
+        }
+        let mut config = serde_json::from_value::<Self>(value)
+            .with_context(|| format!("failed to deserialize config {}", path.display()))?;
+        if config.proxy.is_none() && (!options.explicit_config || !options.no_env_overrides) {
             config.proxy = env::var("HTTPS_PROXY")
                 .ok()
                 .filter(|value| !value.trim().is_empty());
@@ -125,6 +138,101 @@ impl Config {
             self.metrics.opentracing.clone(),
             self.metrics.sentry.clone(),
         )
+    }
+}
+
+fn apply_prefixed_environment(root: &mut Value) -> Result<()> {
+    for (key, raw_value) in env::vars() {
+        let Some(suffix) = key.strip_prefix("FLORIA_") else {
+            continue;
+        };
+        if suffix == "CONF" {
+            continue;
+        }
+        let path = suffix
+            .split("__")
+            .map(str::trim)
+            .filter(|component| !component.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect::<Vec<_>>();
+        if path.is_empty() {
+            continue;
+        }
+        let value = serde_json::from_str(&raw_value).unwrap_or(Value::String(raw_value));
+        set_json_path(root, &path, value)?;
+    }
+    Ok(())
+}
+
+fn set_json_path(root: &mut Value, path: &[String], value: Value) -> Result<()> {
+    let mut current = root;
+    for component in &path[..path.len() - 1] {
+        let object = current
+            .as_object_mut()
+            .ok_or_else(|| anyhow!("FLORIA_ environment override crosses a non-object field"))?;
+        current = object
+            .entry(component.clone())
+            .or_insert_with(|| Value::Object(Map::new()));
+    }
+    let object = current
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("FLORIA_ environment override targets a non-object field"))?;
+    object.insert(path[path.len() - 1].clone(), value);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ConfigLoadOptions {
+    path: Option<PathBuf>,
+    explicit_config: bool,
+    no_env_overrides: bool,
+}
+
+impl ConfigLoadOptions {
+    fn legacy() -> Self {
+        Self {
+            path: None,
+            explicit_config: false,
+            no_env_overrides: false,
+        }
+    }
+
+    fn from_process_args() -> Result<Self> {
+        let args = env::args().skip(1).collect::<Vec<_>>();
+        let mut path = None;
+        let mut no_env_overrides = false;
+        let mut index = 0;
+        while index < args.len() {
+            let arg = &args[index];
+            if arg == "--config" {
+                let value = args
+                    .get(index + 1)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("--config requires a file path"))?;
+                path = Some(PathBuf::from(value));
+                index += 2;
+                continue;
+            }
+            if let Some(value) = arg.strip_prefix("--config=") {
+                if value.trim().is_empty() {
+                    bail!("--config requires a file path");
+                }
+                path = Some(PathBuf::from(value));
+                index += 1;
+                continue;
+            }
+            if arg == "--no-env-overrides" {
+                no_env_overrides = true;
+                index += 1;
+                continue;
+            }
+            bail!("unsupported argument {arg:?}");
+        }
+        Ok(Self {
+            explicit_config: path.is_some(),
+            path,
+            no_env_overrides,
+        })
     }
 }
 
