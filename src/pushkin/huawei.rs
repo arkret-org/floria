@@ -311,9 +311,9 @@ mod tests {
             push_hint: None,
             devices: vec![device()],
             counts: Some(Counts {
-                badge: Some(serde_json::json!("2-5")),
+                badge: Some(arkret::PushCountIndicator::Bucket("2-5".to_owned())),
                 unread_increment: Some(2),
-                missed_call: Some(1),
+                missed_call: Some(arkret::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
         }

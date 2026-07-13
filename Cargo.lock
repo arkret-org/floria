@@ -153,11 +153,10 @@ dependencies = [
 name = "arkret-identifiers"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
  "getrandom 0.2.17",
  "getrandom 0.4.2",
- "hex",
  "serde",
- "sha2 0.11.0",
  "thiserror 2.0.18",
  "uuid",
 ]

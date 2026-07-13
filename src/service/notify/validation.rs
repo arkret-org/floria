@@ -1,6 +1,5 @@
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde_json::Value;
 
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER};
 use crate::config::NotifyAuthConfig;
@@ -227,14 +226,6 @@ pub(super) fn validate_plaintext_identity_metadata(
         notification.membership.as_deref(),
     )?;
 
-    if let Some(badge) = notification
-        .counts
-        .as_ref()
-        .and_then(|counts| counts.badge.as_ref())
-    {
-        validate_plaintext_identity_tree("notification.counts.badge", badge)?;
-    }
-
     Ok(())
 }
 
@@ -246,50 +237,6 @@ fn validate_optional_plaintext_identity_string(
         validate_plaintext_identity_string(path, value)?;
     }
     Ok(())
-}
-
-fn validate_plaintext_identity_tree(path: &str, value: &Value) -> Result<(), String> {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                let next_path = format!("{path}.{key}");
-                if is_identity_metadata_key(key) && has_visible_identity_value(value) {
-                    return Err(format!(
-                        "{BLIND_PROFILE_PLAINTEXT_REASON}: caller is not authorized to send \
-                         plaintext identity metadata in `{next_path}` under the default \
-                         `ak.profile.push_gateway.blind_wakeup.v1` profile"
-                    ));
-                }
-                validate_plaintext_identity_tree(&next_path, value)?;
-            }
-            Ok(())
-        }
-        Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                validate_plaintext_identity_tree(&format!("{path}[{index}]"), value)?;
-            }
-            Ok(())
-        }
-        Value::String(value) => validate_plaintext_identity_string(path, value),
-        Value::Null | Value::Bool(_) | Value::Number(_) => Ok(()),
-    }
-}
-
-fn is_identity_metadata_key(key: &str) -> bool {
-    matches!(
-        key.trim().to_ascii_lowercase().as_str(),
-        "sender" | "target_did"
-    )
-}
-
-fn has_visible_identity_value(value: &Value) -> bool {
-    match value {
-        Value::String(value) => !value.trim().is_empty(),
-        Value::Array(values) => values.iter().any(has_visible_identity_value),
-        Value::Object(map) => map.values().any(has_visible_identity_value),
-        Value::Null => false,
-        Value::Bool(_) | Value::Number(_) => true,
-    }
 }
 
 fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), String> {

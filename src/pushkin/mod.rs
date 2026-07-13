@@ -23,7 +23,6 @@ use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
 use serde::Serialize;
-use serde_json::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::{AppConfig, Config};
@@ -684,24 +683,13 @@ fn counts_badge_count(counts: &Counts) -> Option<u64> {
     counts
         .badge
         .as_ref()
-        .and_then(badge_value_to_count)
-        .or_else(|| counts.missed_call.map(boolean_count))
-}
-
-fn badge_value_to_count(value: &Value) -> Option<u64> {
-    match value {
-        Value::Bool(false) | Value::Null => Some(0),
-        Value::Bool(true) => Some(1),
-        Value::String(bucket) if bucket == "1" => Some(1),
-        Value::String(bucket) if bucket == "2-5" => Some(1),
-        Value::String(bucket) if bucket == "6-20" => Some(1),
-        Value::String(bucket) if bucket == "21+" => Some(1),
-        _ => value.as_u64().map(boolean_count),
-    }
-}
-
-fn boolean_count(value: u64) -> u64 {
-    u64::from(value > 0)
+        .map(|indicator| u64::from(indicator.is_present()))
+        .or_else(|| {
+            counts
+                .missed_call
+                .as_ref()
+                .map(|indicator| u64::from(indicator.is_present()))
+        })
 }
 
 /// Generate a fresh random base64url collapse key for future provider
@@ -895,9 +883,9 @@ mod sanitize_tests {
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
             counts: Some(crate::models::Counts {
-                badge: Some(serde_json::json!("2-5")),
+                badge: Some(arkret::PushCountIndicator::Bucket("2-5".to_owned())),
                 unread_increment: Some(2),
-                missed_call: Some(1),
+                missed_call: Some(arkret::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
         };
@@ -915,17 +903,16 @@ mod sanitize_tests {
 
     #[test]
     fn badge_count_is_booleanized_for_blind_wakeup() {
+        use arkret::PushCountIndicator::{Bucket, Present};
+
         for (badge, missed_call, expected) in [
-            (Some(json!("1")), None, Some(1_u64)),
-            (Some(json!("2-5")), None, Some(1_u64)),
-            (Some(json!("6-20")), None, Some(1_u64)),
-            (Some(json!("21+")), None, Some(1_u64)),
-            (Some(json!(42)), None, Some(1_u64)),
-            (Some(json!(0)), None, Some(0_u64)),
-            (Some(json!(false)), Some(7), Some(0_u64)),
-            (Some(json!(null)), Some(7), Some(0_u64)),
-            (None, Some(7), Some(1_u64)),
-            (None, Some(0), Some(0_u64)),
+            (Some(Bucket("1".to_owned())), None, Some(1_u64)),
+            (Some(Bucket("2-5".to_owned())), None, Some(1_u64)),
+            (Some(Bucket("6-20".to_owned())), None, Some(1_u64)),
+            (Some(Bucket("21+".to_owned())), None, Some(1_u64)),
+            (Some(Present(false)), Some(Present(true)), Some(0_u64)),
+            (None, Some(Present(true)), Some(1_u64)),
+            (None, Some(Present(false)), Some(0_u64)),
             (None, None, None),
         ] {
             let notification = PushNotification {

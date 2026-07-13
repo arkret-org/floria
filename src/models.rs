@@ -284,12 +284,37 @@ mod tests {
         let counts: Counts = serde_json::from_value(json!({
             "badge": "2-5",
             "unread_increment": 2,
-            "missed_call": 0
+            "missed_call": false
         }))
         .unwrap();
 
-        assert_eq!(counts.badge, Some(json!("2-5")));
+        assert_eq!(
+            counts.badge,
+            Some(arkret::PushCountIndicator::Bucket("2-5".to_owned()))
+        );
         assert_eq!(counts.unread_increment, Some(2));
+        assert_eq!(
+            counts.missed_call,
+            Some(arkret::PushCountIndicator::Present(false))
+        );
+    }
+
+    #[test]
+    fn counts_reject_absolute_integer_indicators() {
+        for absolute_count in [0, 1, 99] {
+            let result = serde_json::from_value::<Counts>(json!({
+                "missed_call": absolute_count
+            }));
+
+            assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn counts_accept_boolean_and_bucket_indicators() {
+        for indicator in [json!(false), json!(true), json!("2-5")] {
+            assert!(serde_json::from_value::<Counts>(json!({ "missed_call": indicator })).is_ok());
+        }
     }
 
     #[test]
