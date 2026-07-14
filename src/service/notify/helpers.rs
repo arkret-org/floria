@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -275,7 +275,25 @@ fn standard_notify_outcome(response: &PushNotifyOutcome) -> arkret::PushNotifyOu
         rejected: response
             .rejected
             .iter()
-            .filter_map(|device| serde_json::to_value(device).ok())
+            .map(|device| arkret::PushNotifyRejection {
+                push_target_id: device.push_key.clone(),
+                device_id: None,
+                reason_code: device
+                    .reason_code
+                    .clone()
+                    .unwrap_or_else(|| "provider_rejected".to_owned()),
+                retry_after_ms: None,
+                extra: device
+                    .app_id
+                    .as_ref()
+                    .map(|app_id| {
+                        BTreeMap::from([(
+                            "app_id".to_owned(),
+                            serde_json::Value::String(app_id.clone()),
+                        )])
+                    })
+                    .unwrap_or_default(),
+            })
             .collect(),
     }
 }

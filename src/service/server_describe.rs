@@ -196,7 +196,10 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "push.provider_matrix".to_owned(),
         ],
         auth_metadata,
-        limits: Value::Object(limits),
+        limits: arkret::ServerLimits {
+            max_get_query_selectors: None,
+            extensions: limits.into_iter().collect(),
+        },
         plaintext_visibility,
         privacy_derivation: None,
         receive_policy_constraints: None,
