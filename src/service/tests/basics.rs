@@ -18,7 +18,7 @@ async fn accepted_devices_are_not_rejected() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, 1, vec![], 0).await;
+    assert_notify_ok(&mut response, vec![]).await;
 }
 
 #[tokio::test]
@@ -34,7 +34,7 @@ async fn notify_endpoint_accepts_active_payload_shape() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, 1, vec![], 0).await;
+    assert_notify_ok(&mut response, vec![]).await;
 }
 
 #[tokio::test]

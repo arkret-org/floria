@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::TestClient;
 
 use super::*;
 
@@ -21,9 +21,7 @@ async fn rejected_devices_are_reported() {
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_notify_ok(
         &mut response,
-        0,
         vec![rejected(Some("com.example.app"), "reject")],
-        0,
     )
     .await;
 }
@@ -49,9 +47,7 @@ async fn ambiguous_app_ids_are_rejected() {
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_notify_ok(
         &mut response,
-        0,
         vec![rejected(Some("com.example.app"), "spqr")],
-        0,
     )
     .await;
 }
@@ -184,9 +180,7 @@ async fn duplicate_devices_are_dispatched_only_once() {
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_notify_ok(
         &mut response,
-        0,
         vec![rejected(Some("com.example.app"), "dup")],
-        0,
     )
     .await;
 }
@@ -209,12 +203,10 @@ async fn blank_device_fields_are_rejected_without_dispatch() {
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert_notify_ok(
         &mut response,
-        0,
         vec![
             rejected(None, "blank-app"),
             rejected(Some("com.example.app"), "   "),
         ],
-        0,
     )
     .await;
 }
@@ -244,7 +236,7 @@ async fn mixed_success_and_temporary_failure_returns_200() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, 1, vec![], 1).await;
+    assert_notify_ok(&mut response, vec![]).await;
 }
 
 #[tokio::test]

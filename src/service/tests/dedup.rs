@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::TestClient;
 use serde_json::json;
 
 use super::*;

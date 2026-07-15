@@ -1,18 +1,14 @@
-#![allow(unused_imports)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::ResponseExt;
 use serde_json::{Value, json};
-use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use super::*;
-use crate::audit::{AuditEvent, AuditSink};
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
@@ -120,23 +116,6 @@ impl Pushkin for TestPushkin {
     }
 }
 
-pub(super) struct RecordingAuditSink {
-    events: Arc<Mutex<Vec<AuditEvent>>>,
-}
-
-#[async_trait]
-impl AuditSink for RecordingAuditSink {
-    async fn record(&self, event: &AuditEvent) -> anyhow::Result<()> {
-        self.events.lock().await.push(event.clone());
-        Ok(())
-    }
-}
-
-pub(super) fn recording_audit_sink() -> (Arc<Mutex<Vec<AuditEvent>>>, Arc<dyn AuditSink>) {
-    let events = Arc::new(Mutex::new(Vec::new()));
-    (events.clone(), Arc::new(RecordingAuditSink { events }))
-}
-
 pub(super) fn test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {
     let registry = PushkinRegistry::new(
         pushkins
@@ -146,21 +125,6 @@ pub(super) fn test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {
     );
     let state = Arc::new(AppState::new(Arc::new(registry)));
     Service::new(build_router(state))
-}
-
-pub(super) fn test_service_with_audit_sink(
-    pushkins: Vec<(&str, Arc<dyn Pushkin>)>,
-    audit_sink: Arc<dyn AuditSink>,
-) -> Service {
-    let registry = PushkinRegistry::new(
-        pushkins
-            .into_iter()
-            .map(|(name, pushkin)| (name.to_owned(), pushkin))
-            .collect::<HashMap<_, _>>(),
-    );
-    let mut state = AppState::new(Arc::new(registry));
-    state.audit_sink = Some(audit_sink);
-    Service::new(build_router(Arc::new(state)))
 }
 
 pub(super) fn test_service_with_dedup(
@@ -331,9 +295,7 @@ pub(super) async fn assert_notify_error<T: ResponseExt + ?Sized>(
 
 pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     response: &mut T,
-    _accepted: usize,
     rejected_devices: Vec<RejectedDevice>,
-    _provider_retries: usize,
 ) {
     let body = response
         .take_json::<arkret::PushNotifyOutcome>()
@@ -341,8 +303,14 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
         .unwrap();
     let expected = rejected_devices
         .into_iter()
-        .map(serde_json::to_value)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    assert_eq!(body.rejected, expected);
+        .map(|device| {
+            json!({
+                "push_target_id": device.push_key,
+                "reason_code": device
+                    .reason_code
+                    .unwrap_or_else(|| "provider_rejected".to_owned()),
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(serde_json::to_value(body.rejected).unwrap(), json!(expected));
 }

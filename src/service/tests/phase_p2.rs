@@ -16,7 +16,7 @@ use std::sync::atomic::Ordering;
 
 use salvo::http::StatusCode;
 use salvo::test::{ResponseExt, TestClient};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::*;
 

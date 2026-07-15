@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::TestClient;
 use serde_json::{Value, json};
 
 use super::*;
@@ -28,7 +28,7 @@ async fn notify_accepts_authenticated_allowlisted_service() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, 1, vec![], 0).await;
+    assert_notify_ok(&mut response, vec![]).await;
 }
 
 #[tokio::test]
@@ -104,7 +104,7 @@ async fn notify_accepts_hashed_bearer_token() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, 1, vec![], 0).await;
+    assert_notify_ok(&mut response, vec![]).await;
 }
 
 #[tokio::test]
