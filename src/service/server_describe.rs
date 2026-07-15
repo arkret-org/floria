@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, json};
 
 use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
@@ -10,7 +10,7 @@ use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
 /// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
-/// `ServiceDescribe` (`arkret::ServiceDescribe` = `ServerDescription`)
+/// `ServiceDescribe` (`arkret::ServiceDescribe` = `ServiceDescribe`)
 /// defined by `service-describe.schema.json`, not a push-gateway-private
 /// shape. The push-private matrix (provider list, auth modes, dedup,
 /// rate-limit scopes, operation id) lives under the canonical
@@ -20,7 +20,7 @@ use crate::config::NotifyAuthConfig;
 ///
 /// DEFERRED (SDK gap): the schema's `service_type=push_gateway` branch
 /// additionally requires a top-level `privacy_derivation.push_target_id`
-/// block. The SDK `ServerDescription` struct has no `privacy_derivation`
+/// block. The SDK `ServiceDescribe` struct has no `privacy_derivation`
 /// field and exposes no top-level `extra` flatten, so this gateway-only
 /// required block cannot be expressed through the strongly-typed SDK
 /// surface today. It is intentionally NOT fabricated here; emitting it
@@ -81,7 +81,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     // T6.1 — floria has no cotest verifier wired in, so the push gateway
     // profile is self-claimed only and `verified_profiles` is always
     // empty. The `development_mode=true => verified_profiles=[]`
-    // invariant (validated by `ServerDescription::validate`) is trivially
+    // invariant (validated by `ServiceDescribe::validate`) is trivially
     // upheld.
     let development_mode = false;
     let verified_profiles: Vec<arkret::VerifiedProfileEntry> = Vec::new();

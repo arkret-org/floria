@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -283,16 +283,6 @@ fn standard_notify_outcome(response: &PushNotifyOutcome) -> arkret::PushNotifyOu
                     .clone()
                     .unwrap_or_else(|| "provider_rejected".to_owned()),
                 retry_after_ms: None,
-                extra: device
-                    .app_id
-                    .as_ref()
-                    .map(|app_id| {
-                        BTreeMap::from([(
-                            "app_id".to_owned(),
-                            serde_json::Value::String(app_id.clone()),
-                        )])
-                    })
-                    .unwrap_or_default(),
             })
             .collect(),
     }
