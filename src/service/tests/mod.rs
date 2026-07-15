@@ -301,16 +301,16 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
         .take_json::<arkret::PushNotifyOutcome>()
         .await
         .unwrap();
-    let expected = rejected_devices
-        .into_iter()
-        .map(|device| {
-            json!({
-                "push_target_id": device.push_key,
-                "reason_code": device
-                    .reason_code
-                    .unwrap_or_else(|| "provider_rejected".to_owned()),
-            })
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(serde_json::to_value(body.rejected).unwrap(), json!(expected));
+    assert_eq!(body.rejected.len(), rejected_devices.len());
+    for (actual, expected) in body.rejected.iter().zip(rejected_devices) {
+        assert_eq!(actual.push_target_id, expected.push_key);
+        assert!(actual.device_id.is_none());
+        assert_eq!(
+            actual.reason_code,
+            expected
+                .reason_code
+                .unwrap_or_else(|| "provider_rejected".to_owned())
+        );
+        assert!(actual.retry_after_ms.is_none());
+    }
 }
