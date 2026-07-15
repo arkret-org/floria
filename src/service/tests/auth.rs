@@ -373,12 +373,6 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     );
 }
 
-// SPEC-CR-016: the originating service DID is no longer a body field;
-// it rides the `Source-Service-ID` header and is the authenticated
-// caller identity itself, so a "body origin vs caller" mismatch test is
-// obsolete. Header-based origin handling is covered by the auth-layer
-// tests in `auth.rs`.
-
 #[tokio::test]
 async fn notify_rejects_mismatched_destination_service_id() {
     let service = test_service_with_auth(
@@ -408,18 +402,6 @@ async fn notify_rejects_mismatched_destination_service_id() {
         json!("destination service DID does not match this gateway")
     );
 }
-
-// SPEC-CR-016: the destination service DID is header-only
-// (`Destination-Service-ID`); a "body destination" field no longer
-// exists, so the body-mismatch test is obsolete — header-mismatch
-// coverage lives in `notify_rejects_mismatched_destination_service_id`.
-
-// SPEC-CR-016: `recipient_service_id` is removed from the body and now
-// reuses the `Destination-Service-ID` header. The gateway enforces that
-// the declared destination equals its own `gateway_service_id`, which is
-// exactly what `notify_rejects_mismatched_destination_service_id` (reject)
-// and the OK-path tests (accept) already cover. The dedicated
-// recipient-service-id body tests are therefore obsolete.
 
 #[tokio::test]
 async fn production_mode_rejects_anonymous_requests() {
