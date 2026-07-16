@@ -597,13 +597,23 @@ impl Pushkin for WebpushPushkin {
             }
         };
 
+        // Both guards below fail the dispatch rather than returning
+        // `Ok(vec![])`. An empty reject list means "delivered, no devices to
+        // unregister", so reporting it here would book a withheld push as a
+        // success: the caller could neither retry nor count it, and an
+        // unconfigured `allowed_endpoints` (fail-closed by design — see
+        // docs/configuration.md) would silently blackhole every WebPush.
+        // These are policy decisions, not provider faults, so they are
+        // permanent (`remote`) rather than retryable.
         if !self.allows_endpoint(&endpoint_domain) {
             tracing::error!(
                 push_key_hash = %device.redacted_push_key(),
                 endpoint = %endpoint_domain,
                 "webpush endpoint not allowed by configuration"
             );
-            return Ok(vec![]);
+            return Err(DispatchError::remote(format!(
+                "webpush endpoint {endpoint_domain} is not permitted by allowed_endpoints"
+            )));
         }
 
         if let Err(error) = self.validate_endpoint_for_egress(&subscription.endpoint) {
@@ -613,7 +623,9 @@ impl Pushkin for WebpushPushkin {
                 error = %error,
                 "webpush endpoint rejected by egress policy"
             );
-            return Ok(vec![]);
+            return Err(DispatchError::remote(format!(
+                "webpush endpoint {endpoint_domain} rejected by egress policy: {error}"
+            )));
         }
 
         self.send_message(&subscription, notification, device).await
@@ -1001,27 +1013,48 @@ mod tests {
         assert!(!endpoint_allowed(Some(&patterns), "fcm.googleapis.com"));
     }
 
+    fn dispatch_context() -> NotificationContext {
+        NotificationContext {
+            request_id: "test".to_owned(),
+            start_time: Instant::now(),
+            allow_plaintext_metadata: false,
+        }
+    }
+
     #[tokio::test]
     async fn webpush_dispatch_blocks_private_endpoint_even_when_allowlisted() {
         let patterns = vec![Glob::new("*").unwrap().compile_matcher()];
         let pushkin = pushkin_with_allowed_endpoints(Some(patterns));
         let device = network_device("http://127.0.0.1/push");
-        let notification = notification("hello");
 
-        let rejected = pushkin
-            .dispatch_notification(
-                &notification,
-                &device,
-                &NotificationContext {
-                    request_id: "test".to_owned(),
-                    start_time: Instant::now(),
-                    allow_plaintext_metadata: false,
-                },
-            )
+        let error = pushkin
+            .dispatch_notification(&notification("hello"), &device, &dispatch_context())
             .await
-            .unwrap();
+            .expect_err("a blocked endpoint must fail the dispatch, not report success");
 
-        assert!(rejected.is_empty());
+        assert!(
+            error.to_string().contains("egress policy"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// `allowed_endpoints` is fail-closed when unset (docs/configuration.md).
+    /// Withholding every push is intended; booking it as a delivered push is
+    /// not — the caller would see neither an error nor a rejected device.
+    #[tokio::test]
+    async fn webpush_dispatch_fails_when_the_endpoint_allowlist_is_unconfigured() {
+        let pushkin = pushkin_with_allowed_endpoints(None);
+        let device = network_device("https://updates.push.example.test/push");
+
+        let error = pushkin
+            .dispatch_notification(&notification("hello"), &device, &dispatch_context())
+            .await
+            .expect_err("an unconfigured allowlist must fail the dispatch, not silently drop it");
+
+        assert!(
+            error.to_string().contains("allowed_endpoints"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
