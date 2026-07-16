@@ -36,7 +36,7 @@ pub(super) fn verify_principal_service_type(
     );
     Err(AuthFailure {
         status: StatusCode::FORBIDDEN,
-        code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
+        code: arkret::error::ErrorCode::CAPABILITY_DENIED,
         message: "origin service is not delegated for push notify".to_owned(),
     })
 }
@@ -65,7 +65,7 @@ pub(super) fn verify_destination_service_id(
         );
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ErrorCode::CAPABILITY_DENIED,
             message: "destination service DID does not match this gateway".to_owned(),
         });
     }
@@ -97,7 +97,7 @@ pub(super) fn verify_mtls_profile(
         );
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
+            code: arkret::error::ErrorCode::UNAUTHENTICATED,
             message: "verified mTLS client certificate is required".to_owned(),
         });
     }
@@ -109,7 +109,7 @@ pub(super) fn verify_mtls_profile(
         );
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
+            code: arkret::error::ErrorCode::UNAUTHENTICATED,
             message: "mTLS certificate fingerprint is required".to_owned(),
         });
     };
@@ -127,7 +127,7 @@ pub(super) fn verify_mtls_profile(
         );
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
+            code: arkret::error::ErrorCode::UNAUTHENTICATED,
             message: "mTLS certificate fingerprint is not allowlisted".to_owned(),
         });
     }
@@ -146,7 +146,7 @@ pub(super) fn verify_mtls_profile(
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
+                code: arkret::error::ErrorCode::UNAUTHENTICATED,
                 message: "mTLS Subject DN does not match service principal binding".to_owned(),
             });
         }
@@ -177,7 +177,7 @@ pub(super) fn verify_mtls_profile(
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
-                    code: arkret::error::ERROR_CODE_UNAUTHENTICATED,
+                    code: arkret::error::ErrorCode::UNAUTHENTICATED,
                     message: "mTLS certificate is missing a required Subject Alternative Name"
                         .to_owned(),
                 });

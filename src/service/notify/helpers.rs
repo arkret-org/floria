@@ -250,7 +250,7 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ERROR_CODE_TEMPORARILY_UNAVAILABLE,
+            arkret::error::ErrorCode::TEMPORARILY_UNAVAILABLE,
             &message,
             None,
             Some(request_id),

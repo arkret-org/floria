@@ -25,14 +25,14 @@ pub(super) fn validate_origin_service_id(
     else {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ErrorCode::CAPABILITY_DENIED,
             message: "Source-Service-ID header is required".to_owned(),
         });
     };
     if origin_service_id != caller.origin_service_id {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ErrorCode::CAPABILITY_DENIED,
             message: "origin service DID does not match the authenticated caller".to_owned(),
         });
     }
@@ -67,7 +67,7 @@ pub(super) fn validate_destination_service_id(
     {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: arkret::error::ERROR_CODE_CAPABILITY_DENIED,
+            code: arkret::error::ErrorCode::CAPABILITY_DENIED,
             message: "destination service DID does not match this gateway".to_owned(),
         });
     }

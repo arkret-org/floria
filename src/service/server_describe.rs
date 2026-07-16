@@ -50,7 +50,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             ok: false,
             request_id: None,
             error: ErrorBody {
-                code: arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                code: arkret::error::ErrorCode::INTERNAL_ERROR,
                 message: "application state missing",
                 retry_after_ms: None,
             },
@@ -183,7 +183,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         // field is wired in (see module doc / FLORIA-01 deferred items).
         trust_domain: arkret::TypedTrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
-        service_type: "push_gateway".to_owned(),
+        service_type: arkret::ServiceType::PushGateway,
         protocol_version: arkret::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],

@@ -33,7 +33,7 @@ pub(super) async fn require_internal_auth(
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -51,7 +51,7 @@ pub(super) async fn require_internal_auth(
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
             "internal endpoint authentication is not configured",
             None,
             None,
@@ -76,7 +76,7 @@ pub(super) async fn require_internal_auth(
             finish_error(
                 res,
                 StatusCode::UNAUTHORIZED,
-                arkret::error::ERROR_CODE_UNAUTHENTICATED,
+                arkret::error::ErrorCode::UNAUTHENTICATED,
                 "missing internal bearer token",
                 None,
                 None,
@@ -91,7 +91,7 @@ pub(super) async fn require_internal_auth(
             finish_error(
                 res,
                 StatusCode::UNAUTHORIZED,
-                arkret::error::ERROR_CODE_UNAUTHENTICATED,
+                arkret::error::ErrorCode::UNAUTHENTICATED,
                 "invalid internal bearer token",
                 None,
                 None,
@@ -113,7 +113,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -130,7 +130,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ErrorCode::SCHEMA_VIOLATION,
             "idempotency_key path parameter is required",
             None,
             None,
@@ -142,7 +142,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
             "notify deduplication cache is disabled; status lookup unavailable",
             None,
             None,
@@ -159,7 +159,7 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
         None => finish_error(
             res,
             StatusCode::NOT_FOUND,
-            arkret::error::ERROR_CODE_NOT_FOUND,
+            arkret::error::ErrorCode::NOT_FOUND,
             "no status known for the supplied idempotency_key",
             None,
             None,
@@ -181,7 +181,7 @@ pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res:
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -203,7 +203,7 @@ pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res:
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ErrorCode::SCHEMA_VIOLATION,
                 "invalid device_unregister body",
                 None,
                 None,
@@ -218,7 +218,7 @@ pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res:
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ErrorCode::SCHEMA_VIOLATION,
             "app_id must not be empty",
             None,
             None,
@@ -230,7 +230,7 @@ pub(super) async fn device_unregister(req: &mut Request, depot: &mut Depot, res:
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ErrorCode::SCHEMA_VIOLATION,
             "push_key must not be empty",
             None,
             None,
@@ -278,7 +278,7 @@ pub(super) async fn account_deactivate_fanout(
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -295,7 +295,7 @@ pub(super) async fn account_deactivate_fanout(
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ErrorCode::SCHEMA_VIOLATION,
                 "invalid account_deactivate_fanout body",
                 None,
                 None,
@@ -309,7 +309,7 @@ pub(super) async fn account_deactivate_fanout(
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ErrorCode::SCHEMA_VIOLATION,
             "fanout_id must not be empty",
             None,
             None,
@@ -321,7 +321,7 @@ pub(super) async fn account_deactivate_fanout(
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+            arkret::error::ErrorCode::SCHEMA_VIOLATION,
             "actor_id must not be empty",
             None,
             None,
@@ -338,7 +338,7 @@ pub(super) async fn account_deactivate_fanout(
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
             "in-process broadcast bus is not configured on this push gateway",
             None,
             None,
@@ -353,7 +353,7 @@ pub(super) async fn account_deactivate_fanout(
             finish_error(
                 res,
                 StatusCode::SERVICE_UNAVAILABLE,
-                arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+                arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
                 error.message(),
                 None,
                 None,
@@ -388,7 +388,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
             finish_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                arkret::error::ERROR_CODE_INTERNAL_ERROR,
+                arkret::error::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
                 None,
                 None,
@@ -405,7 +405,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
-                arkret::error::ERROR_CODE_SCHEMA_VIOLATION,
+                arkret::error::ErrorCode::SCHEMA_VIOLATION,
                 "invalid consent_revoke body",
                 None,
                 None,
@@ -422,7 +422,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         finish_error(
             res,
             StatusCode::BAD_REQUEST,
-            arkret::error::ERROR_CODE_UNSUPPORTED_FEATURE,
+            arkret::error::ErrorCode::UNSUPPORTED_FEATURE,
             &format!(
                 "consent_revoke scope must be `{}`; floria does not handle scoped revocations",
                 ConsentRevokeBroadcast::SUPPORTED_SCOPE
@@ -442,7 +442,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+            arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
             "in-process broadcast bus is not configured on this push gateway",
             None,
             None,
@@ -457,7 +457,7 @@ pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &m
             finish_error(
                 res,
                 StatusCode::SERVICE_UNAVAILABLE,
-                arkret::error::ERROR_CODE_SERVICE_UNAVAILABLE,
+                arkret::error::ErrorCode::SERVICE_UNAVAILABLE,
                 error.message(),
                 None,
                 None,
