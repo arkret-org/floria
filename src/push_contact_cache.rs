@@ -9,8 +9,8 @@
 //! next push goes through a fresh consent check.
 //!
 //! Storage modes:
-//!   * In-memory (`PushContactCache::in_memory()`) — clearing is a `HashMap::clear()` for the
-//!     scoped entries.
+//!   * In-memory (`PushContactCache::in_memory()`) — clearing drops the scoped entries from the
+//!     bounded LRU tier.
 //!   * On-disk overlay (`PushContactCache::with_disk_overlay(path)`) — the in-memory tier is
 //!     cleared AND the on-disk overlay is marked invalid by writing a sentinel file. The next cache
 //!     load checks the sentinel and forces a refresh.
@@ -18,15 +18,18 @@
 //!     written through a table with `(principal_id, peer_psi_token, verdict, updated_at)` columns
 //!     and a unique key on `(principal_id, peer_psi_token)`.
 //!
-//! The cache is intentionally tiny — keys are `(principal_id,
-//! peer_psi_token)` pairs and values are a single `verdict` byte
-//! (`allowed` / `denied`). floria never stores plaintext contacts.
+//! Entries are small — keys are `(principal_id, peer_psi_token)` pairs and
+//! values are a single `verdict` byte (`allowed` / `denied`), and floria never
+//! stores plaintext contacts — but they are attacker-influenced, so the
+//! in-memory tier is a capped [`LruCache`] rather than a plain map (see
+//! [`MEMORY_PSI_CACHE_CAPACITY`]).
 //
-use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
+use lru::LruCache;
 use serde::Deserialize;
 
 use crate::auth::redact_url_credentials;
@@ -163,10 +166,21 @@ pub struct PushContactCache {
     inner: Mutex<PushContactCacheInner>,
 }
 
+/// Slot ceiling for the in-memory PSI tier.
+///
+/// `peer_psi_token` is caller-supplied, so an authenticated high-cardinality
+/// tenant (or an attacker looping tokens) would otherwise grow the map without
+/// bound: entries only ever left on `consent_revoke` or `clear_all`, never on
+/// pressure. Same reasoning — and same remedy — as `dedup.rs`'s
+/// `MEMORY_DEDUP_CAPACITY` (FLO-02-003); this map was missed by that pass.
+/// Eviction is O(1) and a dropped entry is safe: `get` simply misses and the
+/// caller re-derives the verdict.
+const MEMORY_PSI_CACHE_CAPACITY: usize = 100_000;
+
 #[derive(Debug)]
 struct PushContactCacheInner {
     /// `(principal_id, peer_psi_token)` -> verdict
-    entries: HashMap<(String, String), PsiVerdict>,
+    entries: LruCache<(String, String), PsiVerdict>,
     /// Optional path to a disk-overlay sentinel file. When set, every
     /// `invalidate_principal` / `clear_all` call also writes / removes
     /// a tombstone so a process restart sees the invalidation.
@@ -268,11 +282,17 @@ impl PostgresPushContactOverlay {
     }
 }
 
+fn new_entry_cache() -> LruCache<(String, String), PsiVerdict> {
+    let capacity =
+        NonZeroUsize::new(MEMORY_PSI_CACHE_CAPACITY).expect("MEMORY_PSI_CACHE_CAPACITY non-zero");
+    LruCache::new(capacity)
+}
+
 impl PushContactCache {
     pub fn in_memory() -> Self {
         Self {
             inner: Mutex::new(PushContactCacheInner {
-                entries: HashMap::new(),
+                entries: new_entry_cache(),
                 disk_overlay: None,
                 postgres_overlay: None,
                 last_invalidated_principal: None,
@@ -283,7 +303,7 @@ impl PushContactCache {
     pub fn with_disk_overlay(path: PathBuf) -> Self {
         Self {
             inner: Mutex::new(PushContactCacheInner {
-                entries: HashMap::new(),
+                entries: new_entry_cache(),
                 disk_overlay: Some(path),
                 postgres_overlay: None,
                 last_invalidated_principal: None,
@@ -297,7 +317,7 @@ impl PushContactCache {
     ) -> Result<Self> {
         Ok(Self {
             inner: Mutex::new(PushContactCacheInner {
-                entries: HashMap::new(),
+                entries: new_entry_cache(),
                 disk_overlay: None,
                 postgres_overlay: Some(PostgresPushContactOverlay::new(postgres_url, table)?),
                 last_invalidated_principal: None,
@@ -307,7 +327,7 @@ impl PushContactCache {
 
     pub fn insert(&self, principal_id: &str, peer_psi_token: &str, verdict: PsiVerdict) {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
-        inner.entries.insert(
+        inner.entries.put(
             (principal_id.to_owned(), peer_psi_token.to_owned()),
             verdict,
         );
@@ -345,7 +365,7 @@ impl PushContactCache {
             }
         });
         if let Some(verdict) = verdict {
-            inner.entries.insert(
+            inner.entries.put(
                 (principal_id.to_owned(), peer_psi_token.to_owned()),
                 verdict,
             );
@@ -363,9 +383,19 @@ impl PushContactCache {
         principal_id: &str,
     ) -> (usize, Option<PathBuf>, Option<PostgresPushContactOverlay>) {
         let mut inner = self.inner.lock().expect("push contact cache poisoned");
-        let before = inner.entries.len();
-        inner.entries.retain(|(did, _), _| did != principal_id);
-        let removed = before - inner.entries.len();
+        // `LruCache` has no `retain`, so collect this principal's keys before
+        // popping them: the scan is bounded by MEMORY_PSI_CACHE_CAPACITY.
+        let doomed: Vec<(String, String)> = inner
+            .entries
+            .iter()
+            .map(|(key, _)| key)
+            .filter(|(did, _)| did == principal_id)
+            .cloned()
+            .collect();
+        let removed = doomed.len();
+        for key in doomed {
+            inner.entries.pop(&key);
+        }
         inner.last_invalidated_principal = Some(principal_id.to_owned());
         (
             removed,
@@ -510,6 +540,34 @@ mod tests {
         cache.insert("did:web:alice.example", "psi-token-1", PsiVerdict::Allowed);
         assert_eq!(
             cache.get("did:web:alice.example", "psi-token-1"),
+            Some(PsiVerdict::Allowed)
+        );
+    }
+
+    /// `peer_psi_token` is caller-supplied, so the in-memory tier must stay
+    /// bounded under a unique-token flood rather than growing until the next
+    /// `consent_revoke`. Guards against a regression back to a plain map.
+    #[test]
+    fn in_memory_cache_is_bounded_under_a_unique_token_flood() {
+        let cache = PushContactCache::in_memory();
+        let flood = MEMORY_PSI_CACHE_CAPACITY + 1_000;
+        for i in 0..flood {
+            cache.insert(
+                "did:web:alice.example",
+                &format!("psi-{i}"),
+                PsiVerdict::Allowed,
+            );
+        }
+
+        let held = cache.inner.lock().expect("cache lock").entries.len();
+        assert_eq!(
+            held, MEMORY_PSI_CACHE_CAPACITY,
+            "cache must cap at MEMORY_PSI_CACHE_CAPACITY, held {held} after {flood} inserts"
+        );
+        // The oldest token was evicted; the newest is still resident.
+        assert!(cache.get("did:web:alice.example", "psi-0").is_none());
+        assert_eq!(
+            cache.get("did:web:alice.example", &format!("psi-{}", flood - 1)),
             Some(PsiVerdict::Allowed)
         );
     }
