@@ -64,10 +64,6 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Result<(Self, PathBuf)> {
-        Self::load_with_options(ConfigLoadOptions::legacy())
-    }
-
     /// Load configuration using the common Arkret server configuration-source
     /// contract exposed by `--config` and `--no-env-overrides`.
     pub fn load_from_args() -> Result<(Self, PathBuf)> {
@@ -189,14 +185,6 @@ struct ConfigLoadOptions {
 }
 
 impl ConfigLoadOptions {
-    fn legacy() -> Self {
-        Self {
-            path: None,
-            explicit_config: false,
-            no_env_overrides: false,
-        }
-    }
-
     fn from_process_args() -> Result<Self> {
         let args = env::args().skip(1).collect::<Vec<_>>();
         let mut path = None;
@@ -241,7 +229,7 @@ impl Config {
     pub const SCHEMA_VERSION: &'static str = "2026-06-03.1";
 
     /// Parse a KDL config body into the intermediate JSON shape used by
-    /// [`Config::load`]. Exposed for parity tests and ops tooling so
+    /// [`Config::load_from_args`]. Exposed for parity tests and ops tooling so
     /// callers can compare KDL ↔ YAML samples without re-rolling the
     /// parser. The shape matches what `serde_json::from_value::<Config>`
     /// expects, so consumers can deserialize directly.

@@ -121,7 +121,7 @@ impl PostgresConnectionManager {
         if matches!(config.get_ssl_mode(), SslMode::Prefer) {
             tracing::warn!(
                 backend = target_label,
-                "PostgreSQL URL uses sslmode=prefer/default; set sslmode=require for encrypted DB transport without cleartext fallback"
+                "PostgreSQL URL uses sslmode=prefer/default; set sslmode=require for encrypted DB transport without plaintext fallback"
             );
         }
         Ok(Self { config, tls })

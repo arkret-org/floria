@@ -97,8 +97,6 @@ pub struct WebpushPushkin {
     client: Client,
     vapid_key: VapidKeyMaterial,
     vapid_contact_email: String,
-    vapid_key_id: String,
-    vapid_key_fingerprint: String,
     allowed_endpoints: Option<Vec<GlobMatcher>>,
     ttl: u32,
 }
@@ -312,22 +310,9 @@ impl WebpushPushkin {
             client,
             vapid_key,
             vapid_contact_email,
-            vapid_key_id,
-            vapid_key_fingerprint,
             allowed_endpoints,
             ttl,
         })
-    }
-
-    /// Stable label for the active VAPID key — surfaced via
-    /// `bridge/describe` and the `floria_webpush_vapid_active_key`
-    /// gauge so operators can track rotation cadence.
-    pub fn vapid_key_id(&self) -> &str {
-        &self.vapid_key_id
-    }
-
-    pub fn vapid_key_fingerprint(&self) -> &str {
-        &self.vapid_key_fingerprint
     }
 
     /// Build the WebPush JSON payload that goes into the encrypted
@@ -870,8 +855,6 @@ mod tests {
             .unwrap(),
             vapid_key: VapidKeyMaterial::from_signing_key(SigningKey::random(&mut OsRng)),
             vapid_contact_email: "push@example.com".to_owned(),
-            vapid_key_id: "test".to_owned(),
-            vapid_key_fingerprint: "test".to_owned(),
             allowed_endpoints,
             ttl: DEFAULT_WEBPUSH_TTL_SECS,
         }

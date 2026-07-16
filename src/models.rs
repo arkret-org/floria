@@ -4,7 +4,6 @@ use blake2::Blake2s256;
 use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 
-pub type AuditEnvelopeMetadata = arkret::PushAuditEnvelopeMetadata;
 pub type Counts = arkret::PushCounts;
 pub type Device = arkret::PushDeviceRoute;
 pub type PushNotification = arkret::PushNotificationEnvelope;
@@ -249,13 +248,6 @@ pub fn redact_push_token(token: &str) -> String {
     hasher.update(trimmed.as_bytes());
     let digest = hex::encode(hasher.finalize());
     format!("pkh_{}", &digest[..12])
-}
-
-pub fn redact_push_tokens(tokens: &[String]) -> Vec<String> {
-    tokens
-        .iter()
-        .map(|token| redact_push_token(token))
-        .collect()
 }
 
 #[cfg(test)]

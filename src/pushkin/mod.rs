@@ -61,40 +61,6 @@ pub struct DispatchTarget {
     pub app_id: String,
 }
 
-/// Unified result of a single pushkin dispatch attempt.
-///
-/// Surfaces both happy-path (`accepted`) and partial-failure
-/// (`rejected`) outcomes alongside the retry hint that drives the
-/// retry queue + dead-letter ring (see [`crate::retry_queue`]). The
-/// `dedup_binding` field carries any provider-emitted message id so
-/// downstream observers can match the gateway delivery receipt to the
-/// upstream provider record.
-#[derive(Debug, Clone, Default)]
-pub struct DispatchOutcome {
-    pub accepted: Vec<DispatchTarget>,
-    pub rejected: Vec<String>,
-    pub retry_after: Option<std::time::Duration>,
-    pub dedup_binding: Vec<(String, String)>,
-}
-
-impl DispatchOutcome {
-    pub fn from_rejected_tokens(targets: &[DispatchTarget], rejected: Vec<String>) -> Self {
-        let rejected_set: std::collections::HashSet<&str> =
-            rejected.iter().map(String::as_str).collect();
-        let accepted = targets
-            .iter()
-            .filter(|target| !rejected_set.contains(target.push_key.as_str()))
-            .cloned()
-            .collect();
-        Self {
-            accepted,
-            rejected,
-            retry_after: None,
-            dedup_binding: Vec::new(),
-        }
-    }
-}
-
 #[async_trait]
 pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
@@ -122,24 +88,6 @@ pub trait Pushkin: Send + Sync {
         device: &Device,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
-
-    /// Unified dispatch entry point. The default implementation wraps
-    /// [`Self::dispatch_notification`] so existing pushkins keep
-    /// working unchanged. Implementations that can return per-target
-    /// provider message IDs should override this method to surface a
-    /// richer [`DispatchOutcome`].
-    async fn dispatch_outcome(
-        &self,
-        notification: &PushNotification,
-        device: &Device,
-        context: &NotificationContext,
-    ) -> Result<DispatchOutcome, DispatchError> {
-        let targets = self.dispatch_targets(notification, device);
-        let rejected = self
-            .dispatch_notification(notification, device, context)
-            .await?;
-        Ok(DispatchOutcome::from_rejected_tokens(&targets, rejected))
-    }
 }
 
 /// Frozen capability snapshot for a provider kind, surfaced through

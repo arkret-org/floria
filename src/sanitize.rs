@@ -64,8 +64,6 @@ pub const STRIP_ONLY_KEYS: &[&str] = &[
     "snoozed",
     "snooze_expires_at",
     "snooze_until",
-    "target_ref",
-    "target_key",
     // --- R2/R3 governance / correlation identifiers ---
     "appeal_id",
     "audit_purpose",
@@ -84,12 +82,6 @@ pub fn is_forbidden_egress_key(key: &str) -> bool {
             .iter()
             .any(|name| name.eq_ignore_ascii_case(key))
 }
-
-/// Visible-text leaf keys that a blind-profile caller must not embed in
-/// the `content` object. These are *plaintext rendering* fields (alert
-/// title/body/etc.).
-pub const BLIND_FORBIDDEN_CONTENT_TEXT_KEYS: &[&str] =
-    &["title", "body", "subtitle", "alert", "preview", "summary"];
 
 /// Representative value for the closed `6-20` count bucket.
 pub const BUCKET_SIX_TO_TWENTY: u64 = 20;
@@ -156,10 +148,10 @@ mod tests {
         assert!(is_forbidden_egress_key("policy_frontier_digest"));
         // SDK-covered names are egress-stripped.
         assert!(is_forbidden_egress_key("encrypted_content"));
+        assert!(is_forbidden_egress_key("target_ref"));
         // Actor-private notification preference state is egress-stripped.
         assert!(is_forbidden_egress_key("dnd_schedule"));
         assert!(is_forbidden_egress_key("snooze_expires_at"));
-        assert!(is_forbidden_egress_key("target_ref"));
         // Allowed blind field stays allowed at both layers.
         assert!(!is_forbidden_egress_key("push_target_id"));
     }
