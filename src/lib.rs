@@ -20,7 +20,24 @@ pub mod retry_queue;
 pub mod sanitize;
 pub mod service;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static RUSTLS_CRYPTO_PROVIDER: OnceLock<()> = OnceLock::new();
+
+/// Install the process-wide rustls crypto provider, once.
+///
+/// `reqwest` is built with `rustls-no-provider` and `rustls` with `ring`, so
+/// **every** TLS consumer must call this before constructing a client or
+/// rustls panics ("No rustls crypto provider is configured"). Call it from each
+/// entry point rather than relying on another one having run first: installing
+/// it only alongside the PostgreSQL connector meant a deployment with no
+/// Postgres overlay panicked as soon as a pushkin built its HTTP client.
+pub(crate) fn ensure_rustls_crypto_provider() {
+    RUSTLS_CRYPTO_PROVIDER.get_or_init(|| {
+        // Errs only if a provider is already installed, which is fine.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 use audit::AuditSink;
 use broadcast::InProcessBroadcastBus;

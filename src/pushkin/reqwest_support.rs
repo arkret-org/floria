@@ -29,6 +29,8 @@ pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<Client> {
+    // reqwest runs with `rustls-no-provider`; without this the builder panics.
+    crate::ensure_rustls_crypto_provider();
     let mut builder = Client::builder()
         .user_agent(user_agent)
         .connect_timeout(CONNECT_TIMEOUT)

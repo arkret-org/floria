@@ -1,5 +1,4 @@
 use std::str::FromStr;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -7,7 +6,6 @@ use postgres::config::SslMode;
 
 const DEFAULT_POSTGRES_POOL_SIZE: u32 = 16;
 const POSTGRES_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
-static RUSTLS_CRYPTO_PROVIDER: OnceLock<()> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlTableName {
@@ -129,9 +127,7 @@ impl PostgresConnectionManager {
 }
 
 fn load_postgres_tls(target_label: &str) -> Result<tokio_postgres_rustls::MakeRustlsConnect> {
-    RUSTLS_CRYPTO_PROVIDER.get_or_init(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
+    crate::ensure_rustls_crypto_provider();
     let (tls, cert_errors) = tokio_postgres_rustls::MakeRustlsConnect::with_native_certs()
         .map_err(|errors| {
             anyhow!("failed to load native root certificates for PostgreSQL TLS: {errors:?}")
