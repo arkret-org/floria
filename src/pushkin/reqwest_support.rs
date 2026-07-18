@@ -32,10 +32,11 @@ pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<
     // reqwest runs with `rustls-no-provider`; without this the builder panics.
     crate::ensure_rustls_crypto_provider();
     let mut builder = Client::builder()
+        .https_only(true)
         .user_agent(user_agent)
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
-        .dns_resolver(crate::egress::EgressGuardResolver::from_env())
+        .dns_resolver(crate::egress::EgressGuardResolver::new())
         .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = config.outbound_proxy() {
         builder =

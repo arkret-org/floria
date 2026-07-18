@@ -103,9 +103,10 @@ impl HttpAuditSink {
             // cannot block the dispatch path indefinitely (mirrors the
             // pushkin reqwest_support CONNECT_TIMEOUT / REQUEST_TIMEOUT).
             client: reqwest::Client::builder()
+                .https_only(true)
                 .connect_timeout(std::time::Duration::from_secs(5))
                 .timeout(std::time::Duration::from_secs(30))
-                .dns_resolver(crate::egress::EgressGuardResolver::from_env())
+                .dns_resolver(crate::egress::EgressGuardResolver::new())
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("build audit HTTP client"),

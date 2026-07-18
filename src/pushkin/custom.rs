@@ -318,10 +318,11 @@ impl Pushkin for CustomPushkin {
 
 fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Result<Client> {
     let mut builder = Client::builder()
+        .https_only(true)
         .user_agent("floria")
         .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
         .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-        .dns_resolver(crate::egress::EgressGuardResolver::from_env())
+        .dns_resolver(crate::egress::EgressGuardResolver::new())
         .http2_adaptive_window(true)
         .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = proxy {

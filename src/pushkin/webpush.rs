@@ -372,11 +372,7 @@ impl WebpushPushkin {
     fn validate_endpoint_for_egress(&self, endpoint: &str) -> Result<(), String> {
         let url = Url::parse(endpoint)
             .map_err(|error| format!("webpush endpoint: invalid URL: {error}"))?;
-        crate::egress::validate_url_for_egress(
-            &url,
-            "webpush endpoint",
-            crate::egress::private_networks_allowed(),
-        )
+        crate::egress::validate_url_for_egress(&url, "webpush endpoint", false)
     }
 
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {

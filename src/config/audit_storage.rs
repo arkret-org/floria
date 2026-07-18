@@ -102,12 +102,8 @@ impl AuditConfig {
                     .with_context(|| "audit.endpoint must be an absolute HTTP(S) URL")?;
                 match parsed.scheme() {
                     "http" | "https" => {
-                        crate::egress::validate_url_for_egress(
-                            &parsed,
-                            "audit.endpoint",
-                            crate::egress::private_networks_allowed(),
-                        )
-                        .map_err(anyhow::Error::msg)?;
+                        crate::egress::validate_url_for_egress(&parsed, "audit.endpoint", false)
+                            .map_err(anyhow::Error::msg)?;
                         Ok(())
                     }
                     scheme => bail!("audit.endpoint must use http or https, got `{scheme}`"),

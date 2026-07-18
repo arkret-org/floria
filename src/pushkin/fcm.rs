@@ -144,10 +144,12 @@ impl FcmPushkin {
         // window as throughput climbs so per-stream pacing stays
         // pipeline-bound rather than window-bound.
         let mut client_builder = Client::builder()
+            .https_only(true)
             .user_agent("floria")
             .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
             .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-            .dns_resolver(crate::egress::EgressGuardResolver::from_env())
+            .dns_resolver(crate::egress::EgressGuardResolver::new())
+            .redirect(reqwest::redirect::Policy::none())
             .http2_adaptive_window(true);
         if let Some(proxy) = config.outbound_proxy() {
             client_builder = client_builder.proxy(Proxy::all(proxy).with_context(|| {

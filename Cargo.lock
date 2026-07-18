@@ -162,6 +162,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-network-policy"
+version = "0.3.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
 name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
@@ -984,6 +992,7 @@ version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
+ "arkret-network-policy",
  "arkret-signatures",
  "arkret-wire-edge",
  "async-trait",
