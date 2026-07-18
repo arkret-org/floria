@@ -4,7 +4,6 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
 
-use super::metrics::{ErrorBody, ErrorEnvelope};
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
@@ -46,15 +45,13 @@ fn floria_service_id(auth: &NotifyAuthConfig) -> arkret::Did {
 pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.render(Json(ErrorEnvelope {
-            ok: false,
-            request_id: None,
-            error: ErrorBody {
-                code: arkret::error::ErrorCode::INTERNAL_ERROR,
-                message: "application state missing",
-                retry_after_ms: None,
-            },
-        }));
+        res.render(Json(
+            arkret::ErrorEnvelope::new(
+                arkret::error::ErrorCode::INTERNAL_ERROR,
+                "application state missing",
+            )
+            .with_request_id(arkret::new_prefixed_uuid7("ak:request:")),
+        ));
         return;
     };
 

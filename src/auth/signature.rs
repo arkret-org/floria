@@ -132,7 +132,7 @@ pub(super) fn verify_message_signature(
             message: "HTTP Message Signature created timestamp is in the future".to_owned(),
         });
     }
-    if now - signature_input.created > SIGNATURE_MAX_LIFETIME_SECONDS {
+    if signature_input.created < now - created_skew {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "auth_expired",

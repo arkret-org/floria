@@ -84,7 +84,7 @@ fn sign_request(
         now + 300
     );
     let signing_string = [
-        format!("\"@method\": {}", method.to_ascii_lowercase()),
+        format!("\"@method\": {method}"),
         format!("\"@target-uri\": {target_uri}"),
         format!("\"@authority\": {authority}"),
         format!("\"content-digest\": {digest}"),
@@ -377,7 +377,7 @@ async fn rejects_signature_missing_required_components() {
         now + 300
     );
     let signing_string = [
-        "\"@method\": post".to_owned(),
+        "\"@method\": POST".to_owned(),
         "\"@target-uri\": http://127.0.0.1/_arkret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
         "\"x-arkret-origin-service-id\": did:web:sync.example.com".to_owned(),

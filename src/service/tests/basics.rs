@@ -450,7 +450,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
             .and_then(|value| value.to_str().ok()),
         Some("POST")
     );
-    assert_notify_error(&mut get_response, "method_not_allowed", false).await;
+    assert_notify_error(&mut get_response, "method_not_allowed", true).await;
 
     let mut put_response = TestClient::put("http://127.0.0.1/_arkret/edge/push/notify")
         .send(&service)
@@ -459,7 +459,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
         put_response.status_code.unwrap(),
         StatusCode::METHOD_NOT_ALLOWED
     );
-    assert_notify_error(&mut put_response, "method_not_allowed", false).await;
+    assert_notify_error(&mut put_response, "method_not_allowed", true).await;
 
     let mut delete_response = TestClient::delete("http://127.0.0.1/_arkret/edge/push/notify")
         .send(&service)
@@ -468,7 +468,7 @@ async fn notify_method_not_allowed_returns_standard_error_envelope() {
         delete_response.status_code.unwrap(),
         StatusCode::METHOD_NOT_ALLOWED
     );
-    assert_notify_error(&mut delete_response, "method_not_allowed", false).await;
+    assert_notify_error(&mut delete_response, "method_not_allowed", true).await;
 }
 
 #[tokio::test]

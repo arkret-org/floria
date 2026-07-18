@@ -112,22 +112,6 @@ fn record_realm_and_check_guard(realm_id: &str) -> bool {
     )
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct ErrorEnvelope<'a> {
-    pub(super) ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) request_id: Option<&'a str>,
-    pub(super) error: ErrorBody<'a>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ErrorBody<'a> {
-    pub(super) code: &'a str,
-    pub(super) message: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) retry_after_ms: Option<u64>,
-}
-
 pub(super) fn record_notify_delivery_outcomes(response: &PushNotifyOutcome) {
     record_delivery_receipt_outcomes(
         &response.delivery_receipts,
@@ -248,15 +232,14 @@ pub(super) fn finish_error(
             true,
         );
     }
-    let body = ErrorEnvelope {
-        ok: false,
-        request_id,
-        error: ErrorBody {
-            code,
-            message: body,
-            retry_after_ms: retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
-        },
-    };
+    let request_id = request_id
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| arkret::new_prefixed_uuid7("ak:request:"));
+    let body = arkret::ErrorEnvelope::new(code, body)
+        .with_request_id(request_id)
+        .with_retry_after_ms(
+            retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
+        );
     res.status_code(status);
     res.render(Json(body));
     app_metrics::pushgateway_response(status);
