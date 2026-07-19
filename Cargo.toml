@@ -21,7 +21,7 @@ arkret-models-integration = {workspace = true,default-features = false}
 arkret-policy = {workspace = true,default-features = false}
 arkret-wire = {workspace = true,default-features = false}
 arkret-signatures = {workspace = true,default-features = false}
-arkret-network-policy = {workspace = true}
+arkret-egress-policy = {workspace = true}
 arkret-server = {workspace = true}
 ed25519-dalek = {workspace = true}
 futures = {workspace = true,default-features = false,features = ["std"]}
@@ -88,7 +88,7 @@ arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integratio
 arkret-policy = {path = "../arkret-rust-sdk/crates/policy",default-features = false}
 arkret-wire = {path = "../arkret-rust-sdk/crates/wire",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false}
-arkret-network-policy = {path = "../arkret-rust-sdk/crates/network-policy",default-features = false}
+arkret-egress-policy = {path = "../arkret-rust-sdk/crates/egress-policy",default-features = false}
 arkret-server = {path = "../arkret-rust-sdk/crates/server",default-features = false}
 ed25519-dalek = "2.2.0"
 futures = {version = "0.3.32",default-features = false}

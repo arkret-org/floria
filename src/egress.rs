@@ -1,7 +1,7 @@
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 
-use arkret_network_policy::OutboundPolicy;
+use arkret_egress_policy::OutboundPolicy;
 use reqwest::Url;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 

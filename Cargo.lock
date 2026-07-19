@@ -179,6 +179,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-egress-policy"
+version = "0.3.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
 name = "arkret-identifiers"
 version = "0.3.0"
 dependencies = [
@@ -219,14 +227,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "arkret-network-policy"
-version = "0.3.0"
-dependencies = [
- "thiserror 2.0.18",
- "url",
 ]
 
 [[package]]
@@ -1103,10 +1103,10 @@ version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
+ "arkret-egress-policy",
  "arkret-models-collaboration",
  "arkret-models-discovery",
  "arkret-models-integration",
- "arkret-network-policy",
  "arkret-policy",
  "arkret-server",
  "arkret-signatures",
