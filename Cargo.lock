@@ -134,6 +134,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
+name = "arkret-auth"
+version = "0.3.0"
+dependencies = [
+ "argon2",
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-identity",
+ "arkret-signatures",
+ "arkret-wire",
+ "base64",
+ "chrono",
+ "getrandom 0.4.2",
+ "serde",
+ "serde_json",
+ "subtle",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "arkret-canonical"
 version = "0.3.0"
 dependencies = [
@@ -153,13 +185,22 @@ dependencies = [
 name = "arkret-core"
 version = "0.3.0"
 dependencies = [
+ "arkret-auth",
  "arkret-canonical",
+ "arkret-crypto",
+ "arkret-event-draft",
+ "arkret-hlc",
  "arkret-identifiers",
+ "arkret-identity",
+ "arkret-keystore",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-discovery",
+ "arkret-models-identity",
  "arkret-models-integration",
  "arkret-policy",
  "arkret-schema",
+ "arkret-signatures",
  "arkret-state",
  "arkret-wire",
  "chrono",
@@ -179,11 +220,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-crypto"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "arkret-egress-policy"
 version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
  "url",
+]
+
+[[package]]
+name = "arkret-event-draft"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "arkret-hlc"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "chrono",
+ "getrandom 0.4.2",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -199,23 +283,91 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-identity"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-egress-policy",
+ "arkret-identifiers",
+ "arkret-models-identity",
+ "arkret-signatures",
+ "arkret-wire",
+ "base64",
+ "chrono",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "subtle",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "arkret-keystore"
+version = "0.3.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
 name = "arkret-models-collaboration"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-crypto",
+ "arkret-models-identity",
  "arkret-wire",
  "chrono",
+ "chrono-tz",
+ "hmac 0.13.0",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.18",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "arkret-models-crypto"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-models-identity",
+ "arkret-wire",
+ "chrono",
+ "hex",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "arkret-models-discovery"
 version = "0.3.0"
 dependencies = [
+ "arkret-models-identity",
  "arkret-wire",
  "chrono",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "arkret-models-identity"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subtle",
+ "url",
 ]
 
 [[package]]
@@ -233,6 +385,8 @@ dependencies = [
 name = "arkret-policy"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
+ "arkret-models-collaboration",
  "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
@@ -262,8 +416,10 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-core",
+ "arkret-models-integration",
  "arkret-signatures",
  "arkret-state",
+ "arkret-wire",
  "chrono",
  "serde",
  "serde_json",
@@ -274,7 +430,9 @@ name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
- "arkret-core",
+ "arkret-models-collaboration",
+ "arkret-models-discovery",
+ "arkret-models-identity",
  "arkret-wire",
  "base64",
  "chrono",
@@ -295,6 +453,8 @@ name = "arkret-state"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
  "arkret-wire",
  "chrono",
  "hex",
@@ -2440,6 +2600,17 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
