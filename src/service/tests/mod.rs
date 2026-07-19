@@ -298,7 +298,7 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     rejected_devices: Vec<RejectedDevice>,
 ) {
     let body = response
-        .take_json::<arkret::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
     assert_eq!(body.rejected.len(), rejected_devices.len());

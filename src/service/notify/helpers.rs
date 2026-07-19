@@ -250,7 +250,7 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
         finish_error(
             res,
             StatusCode::SERVICE_UNAVAILABLE,
-            arkret::error::ErrorCode::TEMPORARILY_UNAVAILABLE,
+            arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,
             &message,
             None,
             Some(request_id),
@@ -270,12 +270,12 @@ pub(super) fn finish_standard_notify_json(
     finish_json(res, status, standard_notify_outcome(response), started);
 }
 
-fn standard_notify_outcome(response: &PushNotifyOutcome) -> arkret::PushNotifyOutcome {
-    arkret::PushNotifyOutcome {
+fn standard_notify_outcome(response: &PushNotifyOutcome) -> arkret_models_integration::PushNotifyOutcome {
+    arkret_models_integration::PushNotifyOutcome {
         rejected: response
             .rejected
             .iter()
-            .map(|device| arkret::PushNotifyRejection {
+            .map(|device| arkret_models_integration::PushNotifyRejection {
                 push_target_id: device.push_key.clone(),
                 device_id: None,
                 reason_code: device
@@ -482,7 +482,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
         .collect::<Option<Vec<_>>>()
         .unwrap_or_default();
     devices.sort_by_cached_key(|value| {
-        arkret::canonical::canonical_json_string(value).unwrap_or_default()
+        arkret_wire::canonical::canonical_json_string(value).unwrap_or_default()
     });
     devices.dedup();
     normalized.insert("devices".to_owned(), Value::Array(devices));
@@ -492,7 +492,7 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
     // service (soland/inkson/chime). `canonical_json_bytes` recursively
     // sorts object keys and emits the v1 canonical encoding, replacing
     // floria's former local `canonical_json_value` helper.
-    arkret::canonical::canonical_json_bytes(&Value::Object(normalized))
+    arkret_wire::canonical::canonical_json_bytes(&Value::Object(normalized))
         .ok()
         .map(|bytes| request_hash(&bytes))
 }

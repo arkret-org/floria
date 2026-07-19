@@ -15,7 +15,11 @@ aes-gcm = {workspace = true}
 base64 = {workspace = true}
 blake2 = {workspace = true}
 chacha20poly1305 = {workspace = true}
-arkret = {workspace = true,default-features = false}
+arkret-models-collaboration = {workspace = true,default-features = false}
+arkret-models-discovery = {workspace = true,default-features = false}
+arkret-models-integration = {workspace = true,default-features = false}
+arkret-policy = {workspace = true,default-features = false}
+arkret-wire = {workspace = true,default-features = false}
 arkret-signatures = {workspace = true,default-features = false}
 arkret-network-policy = {workspace = true}
 arkret-server = {workspace = true}
@@ -78,7 +82,11 @@ aes-gcm = "0.10.3"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
-arkret = {package = "arkret-wire-edge",path = "../arkret-rust-sdk/crates/wire-edge",default-features = false}
+arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration",default-features = false}
+arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery",default-features = false}
+arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration",default-features = false}
+arkret-policy = {path = "../arkret-rust-sdk/crates/policy",default-features = false}
+arkret-wire = {path = "../arkret-rust-sdk/crates/wire",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false}
 arkret-network-policy = {path = "../arkret-rust-sdk/crates/network-policy",default-features = false}
 arkret-server = {path = "../arkret-rust-sdk/crates/server",default-features = false}

@@ -15,7 +15,7 @@
 // coverage for these names, drop the local egress list and route provider
 // stripping straight at the SDK predicate.
 
-use arkret::blind_payload_sanitizer as sdk;
+use arkret_policy::blind_payload_sanitizer as sdk;
 
 /// Names accepted inbound but silently stripped before a provider sees
 /// them. Matched case-insensitively.

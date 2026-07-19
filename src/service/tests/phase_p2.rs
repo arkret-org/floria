@@ -36,7 +36,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let resp = response
-        .take_json::<arkret::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
     assert!(resp.rejected.is_empty());
@@ -62,7 +62,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let resp = response
-        .take_json::<arkret::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
     assert!(resp.rejected.is_empty());
@@ -85,7 +85,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let resp = response
-        .take_json::<arkret::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
     assert!(resp.rejected.is_empty());
@@ -118,7 +118,7 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
             "actor_private agent kind {kind} should be dropped (200 OK)"
         );
         let resp = response
-            .take_json::<arkret::PushNotifyOutcome>()
+            .take_json::<arkret_models_integration::PushNotifyOutcome>()
             .await
             .unwrap();
         assert!(
@@ -152,7 +152,7 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let resp = response
-        .take_json::<arkret::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
     assert!(resp.rejected.is_empty());

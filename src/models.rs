@@ -4,10 +4,10 @@ use blake2::Blake2s256;
 use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 
-pub type Counts = arkret::PushCounts;
-pub type Device = arkret::PushDeviceRoute;
-pub type PushNotification = arkret::PushNotificationEnvelope;
-pub type RouteTokens = arkret::PushRouteTokens;
+pub type Counts = arkret_models_integration::PushCounts;
+pub type Device = arkret_models_integration::PushDeviceRoute;
+pub type PushNotification = arkret_models_integration::PushNotificationEnvelope;
+pub type RouteTokens = arkret_models_integration::PushRouteTokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
@@ -151,21 +151,21 @@ impl NotificationExt for PushNotification {
     fn strand_id(&self) -> Option<&str> {
         self.strand_id
             .as_ref()
-            .map(arkret::StrandId::as_str)
+            .map(arkret_wire::StrandId::as_str)
             .and_then(non_empty)
     }
 
     fn message_id(&self) -> Option<&str> {
         self.message_id
             .as_ref()
-            .map(arkret::MessageId::as_str)
+            .map(arkret_wire::MessageId::as_str)
             .and_then(non_empty)
     }
 
     fn realm_id(&self) -> Option<&str> {
         self.realm_id
             .as_ref()
-            .map(arkret::RealmId::as_str)
+            .map(arkret_wire::RealmId::as_str)
             .and_then(non_empty)
     }
 
@@ -282,12 +282,12 @@ mod tests {
 
         assert_eq!(
             counts.badge,
-            Some(arkret::PushCountIndicator::Bucket("2-5".to_owned()))
+            Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned()))
         );
         assert_eq!(counts.unread_increment, Some(2));
         assert_eq!(
             counts.missed_call,
-            Some(arkret::PushCountIndicator::Present(false))
+            Some(arkret_models_integration::PushCountIndicator::Present(false))
         );
     }
 
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
-        let request: arkret::PushNotifyRequestBody = serde_json::from_value(json!({
+        let request: arkret_models_integration::PushNotifyRequestBody = serde_json::from_value(json!({
             "event_kind": "ak.message",
             "notification": {
                 "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
@@ -360,7 +360,7 @@ mod tests {
             "origin_service_id",
             "destination_service_id",
         ] {
-            let err = serde_json::from_value::<arkret::PushNotifyRequestBody>(json!({
+            let err = serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
                 field: "x",
                 "notification": { "devices": [] }
             }))

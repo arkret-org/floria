@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret::push::{
+use arkret_models_integration::push::{
     PushBridgeDescribeExamples, PushBridgeDescribeGatewayDescriptor,
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
     PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
@@ -26,11 +26,11 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
     let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Json(
-            arkret::ErrorEnvelope::new(
-                arkret::error::ErrorCode::INTERNAL_ERROR,
+            arkret_wire::ErrorEnvelope::new(
+                arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
             )
-            .with_request_id(arkret::new_prefixed_uuid7("ak:request:")),
+            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
         ));
         return;
     };
@@ -66,7 +66,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // `spec_version` = the arkret-spec revision the SDK was built
         // against (single source: SDK constant). See `version` above for
         // the contract-vs-spec distinction.
-        spec_version: Some(arkret::push::EXPECTED_SPEC_VERSION.to_owned()),
+        spec_version: Some(arkret_models_integration::push::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
             service_id: state.notify_auth.gateway_service_id.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)
@@ -103,49 +103,49 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         provider_capabilities: state.registry.provider_capabilities(),
         failure_codes: vec![
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::CAPABILITY_DENIED,
+                arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "The caller is authenticated but not allowed to send this notify shape or destination.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::DUPLICATE_CONFLICT,
+                arkret_wire::error_codes::ErrorCode::DUPLICATE_CONFLICT,
                 StatusCode::CONFLICT.as_u16(),
                 false,
                 "The same idempotency key was replayed with a different canonical request body.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::METHOD_NOT_ALLOWED,
+                arkret_wire::error_codes::ErrorCode::METHOD_NOT_ALLOWED,
                 StatusCode::METHOD_NOT_ALLOWED.as_u16(),
                 false,
                 "The notify surface only accepts POST.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::PAYLOAD_TOO_LARGE,
+                arkret_wire::error_codes::ErrorCode::PAYLOAD_TOO_LARGE,
                 StatusCode::PAYLOAD_TOO_LARGE.as_u16(),
                 false,
                 "The notify request body exceeded the configured maximum size.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::RATE_LIMITED,
+                arkret_wire::error_codes::ErrorCode::RATE_LIMITED,
                 StatusCode::TOO_MANY_REQUESTS.as_u16(),
                 true,
                 "A rate-limit scope rejected the request; callers should respect Retry-After.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::SCHEMA_VIOLATION,
+                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
                 "The request body or headers did not match the active ak.edge.push.command.notify contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::TEMPORARILY_UNAVAILABLE,
+                arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,
                 StatusCode::SERVICE_UNAVAILABLE.as_u16(),
                 true,
                 "All dispatch attempts failed with retryable provider or gateway conditions.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ErrorCode::UNSUPPORTED_FEATURE,
+                arkret_wire::error_codes::ErrorCode::UNSUPPORTED_FEATURE,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
                 "The caller requested a non-canonical notify operation or unsupported contract feature.",
@@ -178,7 +178,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
             ),
             PushBridgeFailureCodeDescriptor::new(
-                arkret::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+                arkret_wire::error_codes::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED,
                 StatusCode::FORBIDDEN.as_u16(),
                 false,
                 "A media-service token-exchange or recording artifact reference would route through a destination outside the Arkret blob pipeline (e.g. LiveKit Egress pointed at S3 directly). Floria refuses to relay the corresponding push.",

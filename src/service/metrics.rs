@@ -234,8 +234,8 @@ pub(super) fn finish_error(
     }
     let request_id = request_id
         .map(ToOwned::to_owned)
-        .unwrap_or_else(|| arkret::new_prefixed_uuid7("ak:request:"));
-    let body = arkret::ErrorEnvelope::new(code, body)
+        .unwrap_or_else(|| arkret_wire::new_prefixed_uuid7("ak:request:"));
+    let body = arkret_wire::ErrorEnvelope::new(code, body)
         .with_request_id(request_id)
         .with_retry_after_ms(
             retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),

@@ -16,7 +16,7 @@ pub(super) fn reject_query_string_auth(req: &Request) -> Result<(), AuthFailure>
         if is_forbidden_query_auth_param(name) {
             return Err(AuthFailure {
                 status: StatusCode::BAD_REQUEST,
-                code: arkret::error::ErrorCode::SCHEMA_VIOLATION,
+                code: arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
                 message: "query string authentication is not allowed".to_owned(),
             });
         }
@@ -55,7 +55,7 @@ pub(super) fn required_header(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AuthFailure {
             status: StatusCode::FORBIDDEN,
-            code: arkret::error::ErrorCode::CAPABILITY_DENIED,
+            code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
             message: missing_message.to_owned(),
         })
 }
@@ -67,7 +67,7 @@ pub(super) fn authority(req: &Request) -> Result<String, AuthFailure> {
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret::error::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
             message: "request authority is missing".to_owned(),
         })
 }

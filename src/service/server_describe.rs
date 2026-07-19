@@ -9,7 +9,7 @@ use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
 /// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
-/// `ServiceDescribe` (`arkret::ServiceDescribe` = `ServiceDescribe`)
+/// `ServiceDescribe` (`arkret_models_discovery::ServiceDescribe` = `ServiceDescribe`)
 /// defined by `service-describe.schema.json`, not a push-gateway-private
 /// shape. The push-private matrix (provider list, auth modes, dedup,
 /// rate-limit scopes, operation id) lives under the canonical
@@ -27,7 +27,7 @@ use crate::config::NotifyAuthConfig;
 /// Floria's HMAC push-target-id derivation profile metadata is mirrored
 /// into `limits.x_floria_privacy_derivation` so consumers that read the
 /// floria extension still see it.
-fn floria_service_id(auth: &NotifyAuthConfig) -> arkret::Did {
+fn floria_service_id(auth: &NotifyAuthConfig) -> arkret_wire::Did {
     // production_mode enforces a configured gateway_service_id; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
@@ -35,8 +35,8 @@ fn floria_service_id(auth: &NotifyAuthConfig) -> arkret::Did {
         .gateway_service_id
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    arkret::Did::new(raw).unwrap_or_else(|_| {
-        arkret::Did::new("did:web:floria.invalid".to_owned())
+    arkret_wire::Did::new(raw).unwrap_or_else(|_| {
+        arkret_wire::Did::new("did:web:floria.invalid".to_owned())
             .expect("static placeholder DID is well-formed")
     })
 }
@@ -46,11 +46,11 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Json(
-            arkret::ErrorEnvelope::new(
-                arkret::error::ErrorCode::INTERNAL_ERROR,
+            arkret_wire::ErrorEnvelope::new(
+                arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
             )
-            .with_request_id(arkret::new_prefixed_uuid7("ak:request:")),
+            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
         ));
         return;
     };
@@ -81,13 +81,13 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     // invariant (validated by `ServiceDescribe::validate`) is trivially
     // upheld.
     let development_mode = false;
-    let verified_profiles: Vec<arkret::VerifiedProfileEntry> = Vec::new();
+    let verified_profiles: Vec<arkret_models_discovery::VerifiedProfileEntry> = Vec::new();
 
     let supported_profiles = describe_supported_profiles(auth);
     let claimed_profiles = supported_profiles
         .iter()
         .map(|&profile_id| {
-            let mut entry = arkret::ClaimedProfileEntry::self_claimed(profile_id);
+            let mut entry = arkret_models_discovery::ClaimedProfileEntry::self_claimed(profile_id);
             if profile_id == PROFILE_PUSH_GATEWAY {
                 entry.notes = Some(
                     "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)"
@@ -156,35 +156,35 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     } else {
         "anonymous"
     };
-    let mut auth_metadata = arkret::AuthMetadata::minimal(mode);
+    let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal(mode);
     auth_metadata
         .extra
         .insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
 
     let plaintext_visibility = if plaintext_class == "service-gated" {
-        arkret::PlaintextVisibility {
-            max_visibility: Some(arkret::PlaintextMaxVisibility::DerivedPlaintext),
+        arkret_models_discovery::PlaintextVisibility {
+            max_visibility: Some(arkret_models_discovery::PlaintextMaxVisibility::DerivedPlaintext),
             notes: Some(
                 "service-gated visible-notification plaintext; per-service allowlisted".to_owned(),
             ),
-            ..arkret::PlaintextVisibility::default()
+            ..arkret_models_discovery::PlaintextVisibility::default()
         }
     } else {
-        arkret::PlaintextVisibility::none()
+        arkret_models_discovery::PlaintextVisibility::none()
     };
 
-    let body = arkret::ServiceDescribe {
+    let body = arkret_models_discovery::ServiceDescribe {
         service_id: floria_service_id(auth),
         // DEFERRED: floria has no configured deployment trust domain; a
         // stable placeholder is emitted until a `trust_domain` config
         // field is wired in (see module doc / FLORIA-01 deferred items).
-        trust_domain: arkret::TypedTrustDomainId::new("ak:trust_domain:floria")
+        trust_domain: arkret_wire::TypedTrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
-        service_type: arkret::ServiceType::PushGateway,
-        protocol_version: arkret::PROTOCOL_VERSION.to_owned(),
+        service_type: arkret_wire::ServiceType::PushGateway,
+        protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],
-        supported_bindings: vec![arkret::SupportedBinding::new("http")],
+        supported_bindings: vec![arkret_models_discovery::SupportedBinding::new("http")],
         supported_features: vec![
             "push.notify".to_owned(),
             "push.bridge_describe".to_owned(),
@@ -193,7 +193,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "push.provider_matrix".to_owned(),
         ],
         auth_metadata,
-        limits: arkret::ServerLimits {
+        limits: arkret_models_discovery::ServerLimits {
             max_get_query_selectors: None,
             extensions: limits.into_iter().collect(),
         },
@@ -215,9 +215,9 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         ],
         compat_surfaces: vec![],
         development_mode,
-        rate_limit_policy: Some(arkret::RateLimitPolicy::unspecified()),
+        rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
-        egress_network_policy: Some(arkret::EgressNetworkPolicy::deny_private_defaults()),
+        egress_network_policy: Some(arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults()),
         resource_types: vec![],
         discovery_profiles: vec![],
         restricted_query_proof: None,

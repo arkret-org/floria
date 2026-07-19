@@ -289,7 +289,7 @@ mod tests {
 
     fn device() -> Device {
         Device {
-            device_id: arkret::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
+            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.honor".to_owned()),
             push_key: Some("honor-token".to_owned()),
@@ -307,13 +307,13 @@ mod tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                arkret::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                arkret::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
             ),
             strand_id: Some(
-                arkret::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
@@ -325,9 +325,9 @@ mod tests {
             push_hint: None,
             devices: vec![device()],
             counts: Some(Counts {
-                badge: Some(arkret::PushCountIndicator::Bucket("2-5".to_owned())),
+                badge: Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned())),
                 unread_increment: Some(2),
-                missed_call: Some(arkret::PushCountIndicator::Present(true)),
+                missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
         }

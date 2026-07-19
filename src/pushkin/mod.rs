@@ -18,7 +18,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
-use arkret::push::ProviderCapabilityDescriptor;
+use arkret_models_integration::push::ProviderCapabilityDescriptor;
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
@@ -497,7 +497,7 @@ pub fn sanitized_provider_payload(
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
-    if let Err(err) = arkret::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
+    if let Err(err) = arkret_policy::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
         return Err(ProviderPayloadRejection {
             field_path: err.field_path,
             reason_code: err.reason_code.as_str().to_owned(),
@@ -568,7 +568,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` as a boolean unread indicator, plus bucketed `unread_count`
 pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
-    use arkret::blind_payload_sanitizer as sdk;
+    use arkret_policy::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
     if let Some(push_target_id) = notification.push_target_id.as_deref()
@@ -813,13 +813,13 @@ mod sanitize_tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                arkret::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                arkret::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
             ),
             strand_id: Some(
-                arkret::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
@@ -831,9 +831,9 @@ mod sanitize_tests {
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
             counts: Some(crate::models::Counts {
-                badge: Some(arkret::PushCountIndicator::Bucket("2-5".to_owned())),
+                badge: Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned())),
                 unread_increment: Some(2),
-                missed_call: Some(arkret::PushCountIndicator::Present(true)),
+                missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
         };
@@ -851,7 +851,7 @@ mod sanitize_tests {
 
     #[test]
     fn badge_count_is_booleanized_for_blind_wakeup() {
-        use arkret::PushCountIndicator::{Bucket, Present};
+        use arkret_models_integration::PushCountIndicator::{Bucket, Present};
 
         for (badge, missed_call, expected) in [
             (Some(Bucket("1".to_owned())), None, Some(1_u64)),

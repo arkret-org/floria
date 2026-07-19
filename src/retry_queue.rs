@@ -870,7 +870,7 @@ pub async fn run_worker(
             // to replay payload metadata. Provider implementations
             // accept blind-wakeup defaults.
             let device = Device {
-                device_id: arkret::DeviceId::new(format!(
+                device_id: arkret_wire::DeviceId::new(format!(
                     "ak:device:0196419b-0000-7000-8000-{:012}",
                     1
                 ))

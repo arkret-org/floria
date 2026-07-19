@@ -370,7 +370,7 @@ mod tests {
             auth: CustomAuth::None,
         };
         let device = Device {
-            device_id: arkret::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
+            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.custom".to_owned()),
             push_key: Some("user/abc".to_owned()),
