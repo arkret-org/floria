@@ -16,8 +16,9 @@ base64 = {workspace = true}
 blake2 = {workspace = true}
 chacha20poly1305 = {workspace = true}
 arkret = {workspace = true,default-features = false}
-arkret-signatures = {workspace = true,default-features = false,features = ["http-signature"]}
+arkret-signatures = {workspace = true,default-features = false}
 arkret-network-policy = {workspace = true}
+arkret-server = {workspace = true}
 ed25519-dalek = {workspace = true}
 futures = {workspace = true,default-features = false,features = ["std"]}
 globset = {workspace = true}
@@ -78,8 +79,9 @@ base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
 arkret = {package = "arkret-wire-edge",path = "../arkret-rust-sdk/crates/wire-edge",default-features = false}
-arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["http-signature"]}
+arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false}
 arkret-network-policy = {path = "../arkret-rust-sdk/crates/network-policy",default-features = false}
+arkret-server = {path = "../arkret-rust-sdk/crates/server",default-features = false}
 ed25519-dalek = "2.2.0"
 futures = {version = "0.3.32",default-features = false}
 globset = "0.4.18"

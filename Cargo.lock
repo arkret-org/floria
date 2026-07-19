@@ -150,6 +150,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-core"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-policy",
+ "arkret-schema",
+ "arkret-state",
+ "arkret-wire-base",
+ "arkret-wire-edge",
+ "chrono",
+ "chrono-tz",
+ "getrandom 0.4.2",
+ "hex",
+ "hmac 0.13.0",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subtle",
+ "thiserror 2.0.18",
+ "unicode-normalization",
+ "url",
+ "zeroize",
+]
+
+[[package]]
 name = "arkret-identifiers"
 version = "0.3.0"
 dependencies = [
@@ -170,10 +197,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-policy"
+version = "0.3.0"
+dependencies = [
+ "arkret-schema",
+ "arkret-wire-base",
+ "chrono",
+ "chrono-tz",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "arkret-schema"
+version = "0.3.0"
+dependencies = [
+ "arkret-wire-base",
+ "chrono",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "arkret-server"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-core",
+ "arkret-signatures",
+ "arkret-state",
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
+ "arkret-core",
  "arkret-wire-base",
  "base64",
  "chrono",
@@ -187,6 +253,19 @@ dependencies = [
  "url",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "arkret-state"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-wire-base",
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -522,6 +601,16 @@ dependencies = [
  "num-traits",
  "serde",
  "windows-link",
+]
+
+[[package]]
+name = "chrono-tz"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
+dependencies = [
+ "chrono",
+ "phf 0.12.1",
 ]
 
 [[package]]
@@ -993,6 +1082,7 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "arkret-network-policy",
+ "arkret-server",
  "arkret-signatures",
  "arkret-wire-edge",
  "async-trait",
@@ -2353,12 +2443,30 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared 0.12.1",
+]
+
+[[package]]
+name = "phf"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
 dependencies = [
- "phf_shared",
+ "phf_shared 0.13.1",
  "serde",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
+dependencies = [
+ "siphasher",
 ]
 
 [[package]]
@@ -3703,7 +3811,7 @@ dependencies = [
  "log",
  "parking_lot",
  "percent-encoding",
- "phf",
+ "phf 0.13.1",
  "pin-project-lite",
  "postgres-protocol",
  "postgres-types",

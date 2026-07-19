@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
+use arkret_server::{FixedWindowConfig, MemoryFixedWindowRateLimiter};
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
@@ -32,15 +33,8 @@ pub struct NotifyRateLimitRejection {
     pub retry_after: Duration,
 }
 
-#[derive(Debug)]
-struct WindowCounter {
-    started_at: Instant,
-    count: u64,
-}
-
-#[derive(Debug)]
 struct MemoryRateLimiter {
-    counters: Mutex<HashMap<String, WindowCounter>>,
+    counters: MemoryFixedWindowRateLimiter<String>,
 }
 
 #[derive(Debug)]
@@ -51,17 +45,29 @@ struct RedisRateLimiter {
     failure_policy: RedisFailurePolicy,
 }
 
-#[derive(Debug)]
 enum RateLimiterBackend {
     Memory(MemoryRateLimiter),
     Redis(RedisRateLimiter),
 }
 
-#[derive(Debug)]
 pub struct NotifyRateLimiter {
     config: NotifyRateLimitConfig,
     window: Duration,
     backend: RateLimiterBackend,
+}
+
+impl std::fmt::Debug for NotifyRateLimiter {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let backend = match &self.backend {
+            RateLimiterBackend::Memory(_) => "memory",
+            RateLimiterBackend::Redis(_) => "redis",
+        };
+        formatter
+            .debug_struct("NotifyRateLimiter")
+            .field("window", &self.window)
+            .field("backend", &backend)
+            .finish_non_exhaustive()
+    }
 }
 
 impl NotifyRateLimiter {
@@ -70,7 +76,11 @@ impl NotifyRateLimiter {
             window: Duration::from_secs(config.window_seconds.max(1)),
             config,
             backend: RateLimiterBackend::Memory(MemoryRateLimiter {
-                counters: Mutex::new(HashMap::new()),
+                counters: MemoryFixedWindowRateLimiter::new(FixedWindowConfig::new(
+                    1,
+                    Duration::from_secs(60),
+                    MEMORY_RATE_LIMIT_MAX_ENTRIES,
+                )),
             }),
         }
     }
@@ -304,53 +314,30 @@ impl MemoryRateLimiter {
         window: Duration,
         checks: &[NotifyRateLimitCheck],
     ) -> Result<(), NotifyRateLimitRejection> {
-        let now = Instant::now();
-        let mut counters = self
-            .counters
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        counters.retain(|_, counter| now.duration_since(counter.started_at) < window);
-
-        for check in checks {
-            let counter = counters
-                .entry(counter_key(check.scope, &check.subject))
-                .or_insert_with(|| WindowCounter {
-                    started_at: now,
-                    count: 0,
-                });
-            if now.duration_since(counter.started_at) >= window {
-                counter.started_at = now;
-                counter.count = 0;
-            }
-            if counter.count.saturating_add(check.units) > check.limit {
-                return Err(NotifyRateLimitRejection {
+        self.counters
+            .check_many_with_config(checks.iter().map(|check| {
+                (
+                    counter_key(check.scope, &check.subject),
+                    check.units,
+                    FixedWindowConfig::new(check.limit, window, MEMORY_RATE_LIMIT_MAX_ENTRIES),
+                )
+            }))
+            .map_err(|rejection| {
+                let check = checks
+                    .iter()
+                    .find(|check| counter_key(check.scope, &check.subject) == rejection.key)
+                    .expect("rejected key came from the supplied checks");
+                NotifyRateLimitRejection {
                     scope: check.scope,
                     subject: check.subject.clone(),
                     limit: check.limit,
-                    retry_after: window
-                        .saturating_sub(now.duration_since(counter.started_at))
-                        .max(Duration::from_secs(1)),
-                });
-            }
-        }
-
-        for check in checks {
-            let counter = counters
-                .entry(counter_key(check.scope, &check.subject))
-                .or_insert_with(|| WindowCounter {
-                    started_at: now,
-                    count: 0,
-                });
-            if now.duration_since(counter.started_at) >= window {
-                counter.started_at = now;
-                counter.count = 0;
-            }
-            counter.count = counter.count.saturating_add(check.units);
-        }
-
-        Ok(())
+                    retry_after: rejection.retry_after.max(Duration::from_secs(1)),
+                }
+            })
     }
 }
+
+const MEMORY_RATE_LIMIT_MAX_ENTRIES: usize = 100_000;
 
 /// Lua script that performs an all-or-nothing rate limit check across N
 /// (key, limit, units) triples. ARGV is `[ttl_secs, limit_1, units_1, ...,
@@ -671,11 +658,7 @@ mod tests {
 
     fn memory_counter_len(limiter: &NotifyRateLimiter) -> usize {
         match &limiter.backend {
-            RateLimiterBackend::Memory(backend) => backend
-                .counters
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .len(),
+            RateLimiterBackend::Memory(backend) => backend.counters.entry_count(),
             RateLimiterBackend::Redis(_) => unreachable!("soak scaffold uses memory backend"),
         }
     }

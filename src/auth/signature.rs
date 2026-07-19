@@ -146,7 +146,7 @@ pub(super) fn verify_message_signature(
             message: "HTTP Message Signature lifetime exceeds 300 seconds".to_owned(),
         });
     }
-    if signature_input.expires < now - auth.signature_max_skew_seconds() as i64 {
+    if signature_input.expires < now {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: "auth_expired",
