@@ -282,12 +282,16 @@ mod tests {
 
         assert_eq!(
             counts.badge,
-            Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned()))
+            Some(arkret_models_integration::PushCountIndicator::Bucket(
+                "2-5".to_owned()
+            ))
         );
         assert_eq!(counts.unread_increment, Some(2));
         assert_eq!(
             counts.missed_call,
-            Some(arkret_models_integration::PushCountIndicator::Present(false))
+            Some(arkret_models_integration::PushCountIndicator::Present(
+                false
+            ))
         );
     }
 
@@ -321,24 +325,25 @@ mod tests {
 
     #[test]
     fn notify_request_accepts_cx_push_notify_contract_metadata() {
-        let request: arkret_models_integration::PushNotifyRequestBody = serde_json::from_value(json!({
-            "event_kind": "ak.message",
-            "notification": {
-                "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
-                "wakeup_kind": "message",
-                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000003",
-                "route_tokens": {
-                    "realm_route_token": "realm_route_token_000000001"
-                },
-                "devices": [{
-                    "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
-                    "app_id": "app.example.android",
-                    "push_key": "token-123"
-                }]
-            }
-        }))
-        .unwrap();
+        let request: arkret_models_integration::PushNotifyRequestBody =
+            serde_json::from_value(json!({
+                "event_kind": "ak.message",
+                "notification": {
+                    "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "wakeup_kind": "message",
+                    "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000003",
+                    "route_tokens": {
+                        "realm_route_token": "realm_route_token_000000001"
+                    },
+                    "devices": [{
+                        "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
+                        "app_id": "app.example.android",
+                        "push_key": "token-123"
+                    }]
+                }
+            }))
+            .unwrap();
 
         assert_eq!(request.event_kind.as_deref(), Some("ak.message"));
         assert_eq!(
@@ -360,11 +365,12 @@ mod tests {
             "origin_service_id",
             "destination_service_id",
         ] {
-            let err = serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
-                field: "x",
-                "notification": { "devices": [] }
-            }))
-            .unwrap_err();
+            let err =
+                serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
+                    field: "x",
+                    "notification": { "devices": [] }
+                }))
+                .unwrap_err();
             assert!(
                 err.to_string().contains("unknown field"),
                 "expected `{field}` to be rejected in body, got: {err}"
@@ -388,7 +394,7 @@ mod tests {
                 push_key_hash: Some("pkh_abc".to_owned()),
                 status: Some("accepted".to_owned()),
                 retry_after_ms: None,
-                timestamp: Some("2026-05-02T00:00:00Z".to_owned()),
+                timestamp: Some("2026-05-02T00:00:00.000Z".to_owned()),
                 request_id: Some("ak:request:123".to_owned()),
             }],
         };

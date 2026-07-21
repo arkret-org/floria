@@ -208,13 +208,13 @@ fn sanitizer_strips_private_notification_preferences() {
         },
         "push_rules": [{ "rule_id": "quiet-hours" }],
         "snooze": {
-            "snooze_expires_at": "2026-06-07T09:00:00Z",
+            "snooze_expires_at": "2026-06-07T09:00:00.000Z",
             "target_ref": "opaque-target-ref",
             "target_key": "opaque-target-key",
         },
         "nested": {
             "dnd_schedule": { "periods": [{ "start": "22:00", "end": "08:00" }] },
-            "snooze_until": "2026-06-07T09:00:00Z",
+            "snooze_until": "2026-06-07T09:00:00.000Z",
         },
     })
     .as_object()

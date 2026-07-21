@@ -196,10 +196,12 @@ mod tests {
                 arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002")
+                    .unwrap(),
             ),
             strand_id: Some(
-                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000")
+                    .unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
@@ -211,7 +213,9 @@ mod tests {
             push_hint: None,
             devices: vec![device()],
             counts: Some(Counts {
-                badge: Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned())),
+                badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
+                    "2-5".to_owned(),
+                )),
                 unread_increment: Some(2),
                 missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
@@ -297,7 +301,8 @@ mod tests {
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
                 event_id: Some(
-                    arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                    arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001")
+                        .unwrap(),
                 ),
                 message_id: None,
                 strand_id: Some(

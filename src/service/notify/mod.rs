@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use arkret_models_integration::validate_push_notify_contract_shape;
-use arkret_models_integration::{AgentEventRouting, classify_agent_event_kind};
+use arkret_models_integration::{
+    AgentEventRouting, classify_agent_event_kind, validate_push_notify_contract_shape,
+};
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
 use salvo::prelude::*;
@@ -245,22 +246,23 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
     let raw_request_hash = crate::dedup::request_hash(body.as_ref());
 
-    let request = match serde_json::from_slice::<arkret_models_integration::PushNotifyRequestBody>(&body) {
-        Ok(request) => request,
-        Err(error) => {
-            tracing::warn!(error = %error, "expected Arkret push notify request body");
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                "expected Arkret push notify request body",
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-    };
+    let request =
+        match serde_json::from_slice::<arkret_models_integration::PushNotifyRequestBody>(&body) {
+            Ok(request) => request,
+            Err(error) => {
+                tracing::warn!(error = %error, "expected Arkret push notify request body");
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+                    "expected Arkret push notify request body",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        };
     // SPEC-CR-016: `operation_id` is determined by the URL path
     // (operationId `ak.edge.push.command.notify`) and is no longer a body
     // field, so there is nothing to validate here.
@@ -408,9 +410,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        let _parsed_access_kind = match serde_json::from_value::<arkret_models_collaboration::AccessKind>(Value::String(
-            access_kind.to_owned(),
-        )) {
+        let _parsed_access_kind = match serde_json::from_value::<
+            arkret_models_collaboration::AccessKind,
+        >(Value::String(access_kind.to_owned()))
+        {
             Ok(kind) => kind,
             Err(_) => {
                 finish_error(
@@ -451,24 +454,26 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "actor": caller.origin_service_id.as_str(),
             "access_kind": access_kind,
             "late_recovery_original_event_id": late_recovery_original_event_id.as_deref(),
-            "observed_at": "1970-01-01T00:00:00Z",
+            "observed_at": "1970-01-01T00:00:00.000Z",
         });
-        let sdk_policy_access =
-            match serde_json::from_value::<arkret_models_collaboration::AuditPolicyAccessPayload>(sdk_policy_access) {
-                Ok(payload) => payload,
-                Err(error) => {
-                    finish_error(
-                        res,
-                        StatusCode::BAD_REQUEST,
-                        arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                        &format!("invalid audit policy_access payload: {error}"),
-                        None,
-                        Some(&request_id),
-                        started,
-                    );
-                    return;
-                }
-            };
+        let sdk_policy_access = match serde_json::from_value::<
+            arkret_models_collaboration::AuditPolicyAccessPayload,
+        >(sdk_policy_access)
+        {
+            Ok(payload) => payload,
+            Err(error) => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+                    &format!("invalid audit policy_access payload: {error}"),
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        };
         if let Err(error) = sdk_policy_access.validate_minimal() {
             finish_error(
                 res,

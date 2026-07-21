@@ -2,7 +2,8 @@ use serde_json::json;
 
 #[test]
 fn e2ee_late_recovery_access_kind_matches_sdk_wire_repr() {
-    let sdk_wire = serde_json::to_value(arkret_models_collaboration::AccessKind::E2EELateRecovery).unwrap();
+    let sdk_wire =
+        serde_json::to_value(arkret_models_collaboration::AccessKind::E2EELateRecovery).unwrap();
 
     assert_eq!(sdk_wire, json!("e2ee_late_recovery"));
 }
@@ -30,13 +31,15 @@ fn targeted_and_productivity_wakeup_kinds_match_sdk_allow_list() {
         "scheduled_send",
         "expiry_invalidation",
     ] {
-        arkret_models_integration::validate_push_notify_contract_shape(&notify_request_with_wakeup_kind(kind))
-            .unwrap();
+        arkret_models_integration::validate_push_notify_contract_shape(
+            &notify_request_with_wakeup_kind(kind),
+        )
+        .unwrap();
     }
 
-    let err = arkret_models_integration::validate_push_notify_contract_shape(&notify_request_with_wakeup_kind(
-        "custom_kind",
-    ))
+    let err = arkret_models_integration::validate_push_notify_contract_shape(
+        &notify_request_with_wakeup_kind("custom_kind"),
+    )
     .unwrap_err();
     assert!(err.contains("assignment"));
     assert!(err.contains("schedule"));
@@ -47,15 +50,16 @@ fn targeted_and_productivity_wakeup_kinds_match_sdk_allow_list() {
 
 #[test]
 fn notify_ingress_accepts_hardened_timing_profile_hint() {
-    let request = serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
-            "notification": {
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
-                "wakeup_kind": "message",
-                "timing_profile_hint": "traffic_metadata_hardened",
-                "devices": []
-            }
-    }))
-    .unwrap();
+    let request =
+        serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
+                "notification": {
+                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "wakeup_kind": "message",
+                    "timing_profile_hint": "traffic_metadata_hardened",
+                    "devices": []
+                }
+        }))
+        .unwrap();
     arkret_models_integration::validate_push_notify_contract_shape(&request).unwrap();
 
     assert_eq!(

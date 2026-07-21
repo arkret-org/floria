@@ -270,7 +270,9 @@ pub(super) fn finish_standard_notify_json(
     finish_json(res, status, standard_notify_outcome(response), started);
 }
 
-fn standard_notify_outcome(response: &PushNotifyOutcome) -> arkret_models_integration::PushNotifyOutcome {
+fn standard_notify_outcome(
+    response: &PushNotifyOutcome,
+) -> arkret_models_integration::PushNotifyOutcome {
     arkret_models_integration::PushNotifyOutcome {
         rejected: response
             .rejected

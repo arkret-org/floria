@@ -497,7 +497,9 @@ pub fn sanitized_provider_payload(
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
-    if let Err(err) = arkret_policy::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope) {
+    if let Err(err) =
+        arkret_policy::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope)
+    {
         return Err(ProviderPayloadRejection {
             field_path: err.field_path,
             reason_code: err.reason_code.as_str().to_owned(),
@@ -816,10 +818,12 @@ mod sanitize_tests {
                 arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
             ),
             message_id: Some(
-                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002").unwrap(),
+                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002")
+                    .unwrap(),
             ),
             strand_id: Some(
-                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000").unwrap(),
+                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000")
+                    .unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
@@ -831,7 +835,9 @@ mod sanitize_tests {
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
             counts: Some(crate::models::Counts {
-                badge: Some(arkret_models_integration::PushCountIndicator::Bucket("2-5".to_owned())),
+                badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
+                    "2-5".to_owned(),
+                )),
                 unread_increment: Some(2),
                 missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),

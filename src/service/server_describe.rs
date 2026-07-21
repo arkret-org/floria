@@ -217,7 +217,9 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         development_mode,
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
-        egress_network_policy: Some(arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults()),
+        egress_network_policy: Some(
+            arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults(),
+        ),
         resource_types: vec![],
         discovery_profiles: vec![],
         restricted_query_proof: None,
