@@ -26,6 +26,13 @@ pub(super) fn verify_message_signature(
     origin_did: &str,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
+    if req.header::<String>("content-encoding").is_some() {
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            message: "signed JSON requests must not use Content-Encoding".to_owned(),
+        });
+    }
     let key_id = principal.signature_key_id.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
@@ -262,7 +269,7 @@ pub(super) fn verified_content_digest(req: &Request, body: &[u8]) -> Result<Stri
         SignatureError::MalformedContentDigest => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
             code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
-            message: "Content-Digest must use sha-256 or sha-512".to_owned(),
+            message: "Content-Digest must use the sole Arkret v1 sha-256 token".to_owned(),
         },
         _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
@@ -270,20 +277,15 @@ pub(super) fn verified_content_digest(req: &Request, body: &[u8]) -> Result<Stri
             message: "Content-Digest header is invalid".to_owned(),
         },
     })?;
-    // floria has historically locked the wire profile to sha-256 — keep
-    // that policy here rather than relaxing it just because the SDK
-    // parser also accepts sha-512.
-    if parsed.algorithm != sdk_sig::ContentDigestAlgorithm::Sha256 {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
-            message: "Content-Digest must use sha-256".to_owned(),
-        });
-    }
     sdk_sig::verify_content_digest(&parsed, body).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
         message: "Content-Digest does not match request body".to_owned(),
+    })?;
+    arkret_wire::canonical::validate_canonical_bytes(body).map_err(|error| AuthFailure {
+        status: StatusCode::UNAUTHORIZED,
+        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        message: format!("signed request body is not canonical JSON: {error}"),
     })?;
     Ok(parsed.wire_value)
 }
