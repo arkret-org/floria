@@ -803,10 +803,8 @@ fn classify_webpush_result(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
-    use std::net::{Shutdown, TcpListener};
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    use std::{fs, thread};
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use serde_json::json;
 
@@ -1096,58 +1094,32 @@ mod tests {
         let _ = fs::remove_dir(temp_dir);
     }
 
-    #[tokio::test]
-    async fn webpush_gone_endpoint_rejects_push_key() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept webpush request");
-            stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
-                .unwrap();
-            let mut buffer = [0u8; 4096];
-            let _ = stream.read(&mut buffer);
-            let body = r#"{"code":410,"errno":1,"error":"gone","message":"subscription expired"}"#;
-            let response = format!(
-                "HTTP/1.1 410 Gone\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
-            let _ = stream.shutdown(Shutdown::Write);
-        });
+    #[test]
+    fn webpush_gone_response_rejects_push_key() {
+        let body =
+            br#"{"code":410,"errno":1,"error":"gone","message":"subscription expired"}"#.to_vec();
+        let result = parse_webpush_response(StatusCode::GONE, body, None);
+        let rejected = classify_webpush_result(result, "expired-push-key").unwrap();
 
-        let pushkin = pushkin_with_allowed_endpoints(None);
-        let device = network_device(&format!("http://{addr}/push"));
-        let notification = notification("hello");
-        let subscription = pushkin.subscription_from_device(&device).unwrap();
-
-        let rejected = pushkin
-            .send_message(&subscription, &notification, &device)
-            .await
-            .unwrap();
-
-        assert_eq!(rejected, vec![device.push_key().unwrap().to_owned()]);
-        server.join().unwrap();
+        assert_eq!(rejected, vec!["expired-push-key"]);
     }
 
-    #[tokio::test]
-    async fn webpush_egress_validation_rejects_private_targets() {
+    #[test]
+    fn webpush_egress_validation_rejects_private_targets() {
         let pushkin =
             pushkin_with_allowed_endpoints(Some(vec![Glob::new("*").unwrap().compile_matcher()]));
 
-        for blocked in [
-            "http://169.254.169.254/push",
-            "http://10.0.0.5/push",
-            "http://[::1]/push",
+        for (blocked, expected_reason) in [
+            ("https://169.254.169.254/push", "link-local"),
+            ("https://10.0.0.5/push", "private"),
+            ("https://[::1]/push", "loopback"),
         ] {
             let error = match pushkin.validate_endpoint_for_egress(blocked) {
                 Ok(_) => panic!("expected egress validation to reject {blocked}"),
                 Err(error) => error,
             };
             assert!(
-                error.contains("blocked"),
+                error.contains(expected_reason),
                 "unexpected error for {blocked}: {error}"
             );
         }

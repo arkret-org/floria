@@ -165,6 +165,7 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-collaboration",
  "arkret-models-crypto",
+ "arkret-models-identity",
  "arkret-models-integration",
  "arkret-wire",
  "chrono",
@@ -318,6 +319,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-wire",
