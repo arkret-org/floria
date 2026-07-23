@@ -8,7 +8,6 @@ use arkret_models_integration::{
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
 use salvo::prelude::*;
-use serde_json::Value;
 use uuid::Uuid;
 
 use super::MAX_REQUEST_SIZE;
@@ -410,76 +409,18 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             );
             return;
         }
-        let _parsed_access_kind = match serde_json::from_value::<
-            arkret_models_collaboration::AccessKind,
-        >(Value::String(access_kind.to_owned()))
-        {
-            Ok(kind) => kind,
-            Err(_) => {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                    "audit_envelope.access_kind is not a registered access kind",
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
-        };
-        let realm_id = match request.notification.realm_id() {
-            Some(realm_id) => realm_id,
-            None => {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                    "audit policy_access requires notification realm_id",
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
-        };
         let late_recovery_original_event_id = optional_owned_string(
             audit_envelope
                 .late_recovery_original_event_id
                 .as_ref()
                 .map(arkret_wire::EventId::as_str),
         );
-        let sdk_policy_access = serde_json::json!({
-            "realm_id": realm_id,
-            "actor": caller.origin_service_id.as_str(),
-            "access_kind": access_kind,
-            "late_recovery_original_event_id": late_recovery_original_event_id.as_deref(),
-            "observed_at": "1970-01-01T00:00:00.000Z",
-        });
-        let sdk_policy_access = match serde_json::from_value::<
-            arkret_models_collaboration::AuditPolicyAccessPayload,
-        >(sdk_policy_access)
-        {
-            Ok(payload) => payload,
-            Err(error) => {
-                finish_error(
-                    res,
-                    StatusCode::BAD_REQUEST,
-                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                    &format!("invalid audit policy_access payload: {error}"),
-                    None,
-                    Some(&request_id),
-                    started,
-                );
-                return;
-            }
-        };
-        if let Err(error) = sdk_policy_access.validate_minimal() {
+        if access_kind == "e2ee_late_recovery" && late_recovery_original_event_id.is_none() {
             finish_error(
                 res,
                 StatusCode::BAD_REQUEST,
                 arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                &error.to_string(),
+                "audit_envelope.late_recovery_original_event_id is required for e2ee_late_recovery",
                 None,
                 Some(&request_id),
                 started,

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use arkret_server::{FixedWindowConfig, MemoryFixedWindowRateLimiter};
+use arkret_rate_limit::{FixedWindowConfig, MemoryFixedWindowRateLimiter};
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;

@@ -498,7 +498,7 @@ pub fn sanitized_provider_payload(
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
     if let Err(err) =
-        arkret_policy::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope)
+        arkret_push_policy::blind_payload_sanitizer::sanitize_blind_payload_strict(&envelope)
     {
         return Err(ProviderPayloadRejection {
             field_path: err.field_path,
@@ -570,7 +570,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` as a boolean unread indicator, plus bucketed `unread_count`
 pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
-    use arkret_policy::blind_payload_sanitizer as sdk;
+    use arkret_push_policy::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
     if let Some(push_target_id) = notification.push_target_id.as_deref()

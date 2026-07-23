@@ -263,7 +263,7 @@ fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), Str
 // The blind-wakeup profile only permits coarse hints; actual reaction
 // emoji or other message content must never appear in `push_hint`.
 fn validate_push_hint(push_hint: &str) -> Result<(), String> {
-    if arkret_policy::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
+    if arkret_push_policy::blind_payload_sanitizer::is_valid_push_hint(push_hint) {
         return Ok(());
     }
     Err("Arkret blind wakeup push_hint must be one of new_message, incoming_call, mention_self, or l10n_key:<token>".to_owned())

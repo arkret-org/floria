@@ -1,11 +1,16 @@
 use serde_json::json;
 
 #[test]
-fn e2ee_late_recovery_access_kind_matches_sdk_wire_repr() {
-    let sdk_wire =
-        serde_json::to_value(arkret_models_collaboration::AccessKind::E2EELateRecovery).unwrap();
+fn e2ee_late_recovery_access_kind_matches_push_wire_repr() {
+    let metadata =
+        serde_json::from_value::<arkret_models_integration::PushAuditEnvelopeMetadata>(json!({
+            "access_kind": "e2ee_late_recovery",
+            "late_recovery_original_event_id":
+                "ak:event:0196441c-0000-7000-8000-000000000000"
+        }))
+        .unwrap();
 
-    assert_eq!(sdk_wire, json!("e2ee_late_recovery"));
+    assert_eq!(metadata.access_kind, "e2ee_late_recovery");
 }
 
 fn notify_request_with_wakeup_kind(kind: &str) -> arkret_models_integration::PushNotifyRequestBody {

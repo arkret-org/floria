@@ -15,14 +15,13 @@ aes-gcm = {workspace = true}
 base64 = {workspace = true}
 blake2 = {workspace = true}
 chacha20poly1305 = {workspace = true}
-arkret-models-collaboration = {workspace = true,default-features = false}
 arkret-models-discovery = {workspace = true,default-features = false}
 arkret-models-integration = {workspace = true,default-features = false}
-arkret-policy = {workspace = true,default-features = false}
+arkret-push-policy = {workspace = true,default-features = false}
+arkret-rate-limit.workspace = true
 arkret-wire = {workspace = true,default-features = false}
 arkret-signatures = {workspace = true,default-features = false}
 arkret-egress-policy = {workspace = true}
-arkret-server = {workspace = true}
 ed25519-dalek = {workspace = true}
 futures = {workspace = true,default-features = false,features = ["std"]}
 globset = {workspace = true}
@@ -82,14 +81,13 @@ aes-gcm = "0.10.3"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
-arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration",default-features = false}
 arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery",default-features = false}
 arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration",default-features = false}
-arkret-policy = {path = "../arkret-rust-sdk/crates/policy",default-features = false}
+arkret-push-policy = {path = "../arkret-rust-sdk/crates/push-policy",default-features = false}
+arkret-rate-limit = {path = "../arkret-rust-sdk/crates/rate-limit",default-features = false}
 arkret-wire = {path = "../arkret-rust-sdk/crates/wire",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false}
 arkret-egress-policy = {path = "../arkret-rust-sdk/crates/egress-policy",default-features = false}
-arkret-server = {path = "../arkret-rust-sdk/crates/server",default-features = false}
 ed25519-dalek = "2.2.0"
 futures = {version = "0.3.32",default-features = false}
 globset = "0.4.18"
