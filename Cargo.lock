@@ -318,10 +318,6 @@ name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-discovery",
- "arkret-models-identity",
  "arkret-wire",
  "base64",
  "chrono",
