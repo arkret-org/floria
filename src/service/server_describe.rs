@@ -183,6 +183,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         service_type: arkret_wire::ServiceType::PushGateway,
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
+        profile_bindings: Default::default(),
         supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],
         supported_bindings: vec![arkret_models_discovery::SupportedBinding::new("http")],
         supported_features: vec![
@@ -239,6 +240,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         snapshot_frontier: Vec::new(),
         reducer_profile: None,
         last_materialized_at: None,
+        extensions: Default::default(),
     };
 
     debug_assert!(

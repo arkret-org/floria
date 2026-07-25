@@ -230,7 +230,7 @@ pub struct NotifyRetryQueueConfig {
     /// a process restart. The in-memory ring stays authoritative for
     /// `dead_letter_snapshot()` — the PG overlay is operator-facing
     /// audit only. Field name on the wire is `deadletter_pg_url`.
-    #[serde(default, alias = "deadletter_pg_url")]
+    #[serde(default)]
     pub deadletter_pg_url: Option<String>,
     /// Override the PG table the deadletter overlay writes into.
     /// Defaults to `floria_retry_dead_letter`. Same shape rules as
