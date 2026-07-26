@@ -17,7 +17,7 @@ use crate::config::NotifyAuthConfig;
 /// extension keys — never as bespoke top-level fields. The product's
 /// private describe surface stays on `/_floria/*`.
 ///
-/// DEFERRED (SDK gap): the schema's `service_type=push_gateway` branch
+/// DEFERRED (SDK gap): the schema's `service_kind=push_gateway` branch
 /// additionally requires a top-level `privacy_derivation.push_target_id`
 /// block. The SDK `ServiceDescribe` struct has no `privacy_derivation`
 /// field and exposes no top-level `extra` flatten, so this gateway-only
@@ -180,7 +180,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         // field is wired in (see module doc / FLORIA-01 deferred items).
         trust_domain: arkret_wire::TypedTrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
-        service_type: arkret_wire::ServiceType::PushGateway,
+        service_kind: arkret_wire::ServiceKind::PushGateway,
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
@@ -211,7 +211,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         claimed_profiles,
         verified_profiles,
         experimental_features: vec![
-            "push.bridge.failure_codes".to_owned(),
+            "push.bridge.failure_reason_codes".to_owned(),
             "push.notify.retry_queue".to_owned(),
         ],
         compat_surfaces: vec![],
@@ -221,7 +221,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         egress_network_policy: Some(
             arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults(),
         ),
-        resource_types: vec![],
+        resource_kinds: vec![],
         discovery_profiles: vec![],
         restricted_query_proof: None,
         ingest_modes: vec![],

@@ -422,14 +422,14 @@ impl Pushkin for AcceptPushkin {
 
 fn blind_profile_service() -> salvo::Service {
     // Authenticated principal scoped to the BLIND profile: gives bearer
-    // credentials and a delegated service_type that is NOT in the
+    // credentials and a delegated service_kind that is NOT in the
     // plaintext-eligible kind list. allow_plaintext_metadata must
     // resolve to false at the auth layer regardless of how the operator
     // flipped the flag.
     let mut auth = NotifyAuthConfig::default();
     auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.service_type = Some("push".to_owned());
+    principal.service_kind = Some("push".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true; // operator flipped it on
     auth.service_principals
@@ -446,13 +446,13 @@ fn blind_profile_service() -> salvo::Service {
 
 fn visible_profile_service() -> salvo::Service {
     // Authenticated principal scoped to the VISIBLE profile: explicitly
-    // a plaintext-eligible service_type (`sync`) AND
+    // a plaintext-eligible service_kind (`sync`) AND
     // allow_plaintext_metadata is set, so the visible-notification
     // profile is in effect.
     let mut auth = NotifyAuthConfig::default();
     auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.service_type = Some("sync".to_owned());
+    principal.service_kind = Some("sync".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true;
     auth.service_principals

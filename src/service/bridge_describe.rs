@@ -101,7 +101,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         },
         provider_capabilities_version: Some(PROVIDER_CAPABILITIES_VERSION.to_owned()),
         provider_capabilities: state.registry.provider_capabilities(),
-        failure_codes: vec![
+        failure_reason_codes: vec![
             PushBridgeFailureCodeDescriptor::new(
                 arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
                 StatusCode::FORBIDDEN.as_u16(),

@@ -216,7 +216,7 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some("deadbeef".repeat(8));
-    principal.service_type = Some("sync".to_owned());
+    principal.service_kind = Some("sync".to_owned());
     config
         .service_principals
         .insert("did:web:sync.example.com".to_owned(), principal);

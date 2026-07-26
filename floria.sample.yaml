@@ -90,7 +90,7 @@ http:
     max_backoff_seconds: 900
     dead_letter_capacity: 1024
     poll_interval_ms: 1000
-    batch_size: 32
+    batch_item_count: 32
   # AKP-0007 Circle primitive — when true, the per-(provider, scope)
   # delivery counter `floria_notify_delivery_total` labels `scope_id`
   # with the `circle_id` instead of the parent `realm_id`. Default

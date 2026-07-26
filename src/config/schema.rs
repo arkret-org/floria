@@ -144,7 +144,7 @@ fn http_schema() -> Value {
                     "max_backoff_seconds": {"type": "integer", "minimum": 1, "default": 900},
                     "dead_letter_capacity": {"type": "integer", "minimum": 1, "default": 1024},
                     "poll_interval_ms": {"type": "integer", "minimum": 100, "default": 1000},
-                    "batch_size": {"type": "integer", "minimum": 1, "default": 32},
+                    "batch_item_count": {"type": "integer", "minimum": 1, "default": 32},
                     "encryption_key": {"type": "string", "default": ""},
                     "encryption_key_file": {"type": ["string", "null"]},
                     "grace_period_secs": {"type": "integer", "minimum": 1, "default": 30},
@@ -265,7 +265,7 @@ fn service_principal_schema() -> Value {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-            "service_type": {"type": ["string", "null"]},
+            "service_kind": {"type": ["string", "null"]},
             "allow_plaintext_metadata": {"type": "boolean", "default": false},
             "bearer_tokens": string_or_string_list_schema(),
             "bearer_token_hashes": string_or_string_list_schema(),

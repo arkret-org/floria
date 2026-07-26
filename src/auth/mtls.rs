@@ -7,13 +7,13 @@ use super::AuthFailure;
 use super::helpers::{is_truthy, required_header};
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 
-pub(super) fn verify_principal_service_type(
+pub(super) fn verify_principal_service_kind(
     principal: &NotifyServicePrincipalConfig,
     origin_did: &str,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
-    let Some(service_type) = principal
-        .service_type
+    let Some(service_kind) = principal
+        .service_kind
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -22,7 +22,7 @@ pub(super) fn verify_principal_service_type(
     };
 
     if matches!(
-        service_type.to_ascii_lowercase().as_str(),
+        service_kind.to_ascii_lowercase().as_str(),
         "push" | "push_service" | "principal" | "principal_service" | "sync" | "sync_service"
     ) {
         return Ok(());
@@ -31,7 +31,7 @@ pub(super) fn verify_principal_service_type(
     tracing::warn!(
         request_id,
         origin_service_id = %origin_did,
-        service_type,
+        service_kind,
         "rejecting /notify request from service type that is not delegated for push notify"
     );
     Err(AuthFailure {

@@ -381,7 +381,7 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("b".repeat(64)),
         allow_plaintext_metadata: true,
-        service_type: Some("external_pusher".to_owned()),
+        service_kind: Some("external_pusher".to_owned()),
         ..Default::default()
     };
     config
@@ -392,7 +392,7 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
 
     let error = config.validate().unwrap_err().to_string();
     assert!(
-        error.contains("rejects allow_plaintext_metadata for service_type"),
+        error.contains("rejects allow_plaintext_metadata for service_kind"),
         "unexpected error: {error}"
     );
 }
@@ -406,7 +406,7 @@ fn production_mode_accepts_signed_eligible_principal() {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("c".repeat(64)),
         allow_plaintext_metadata: true,
-        service_type: Some("sync".to_owned()),
+        service_kind: Some("sync".to_owned()),
         ..Default::default()
     };
     config

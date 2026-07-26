@@ -53,7 +53,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
     // FLORIA-01 — canonical ServiceDescribe shape. The push-gateway
     // matrix (operation id, providers, plaintext class, auth modes) is
     // folded into `limits` under `x_floria_*` extension keys.
-    assert_eq!(body["service_type"], json!("push_gateway"));
+    assert_eq!(body["service_kind"], json!("push_gateway"));
     assert_eq!(
         body["limits"]["x_floria_operation_id"],
         json!(NOTIFY_OPERATION_ID)
@@ -229,7 +229,7 @@ async fn gateway_describe_lives_at_root_meta_position() {
         .await;
     assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
     let server_body = server_response.take_json::<Value>().await.unwrap();
-    assert_eq!(server_body["service_type"], json!("push_gateway"));
+    assert_eq!(server_body["service_kind"], json!("push_gateway"));
     assert_eq!(
         server_body["limits"]["x_floria_operation_id"],
         json!(NOTIFY_OPERATION_ID)
@@ -290,7 +290,7 @@ async fn integration_describe_lists_operational_surfaces() {
 }
 
 #[tokio::test]
-async fn bridge_describe_lists_failure_codes() {
+async fn bridge_describe_lists_failure_reason_codes() {
     let service = test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
@@ -302,25 +302,25 @@ async fn bridge_describe_lists_failure_codes() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
-    let failure_codes = body["failure_codes"]
+    let failure_reason_codes = body["failure_reason_codes"]
         .as_array()
-        .expect("failure_codes array");
+        .expect("failure_reason_codes array");
     assert!(
-        failure_codes
+        failure_reason_codes
             .iter()
             .any(|entry| entry["code"] == json!("capability_denied")
                 && entry["http_status"] == json!(403)
                 && entry["retryable"] == json!(false))
     );
     assert!(
-        failure_codes
+        failure_reason_codes
             .iter()
             .any(|entry| entry["code"] == json!("rate_limited")
                 && entry["http_status"] == json!(429)
                 && entry["retryable"] == json!(true))
     );
     assert!(
-        failure_codes
+        failure_reason_codes
             .iter()
             .any(|entry| entry["code"] == json!("temporarily_unavailable")
                 && entry["http_status"] == json!(503)

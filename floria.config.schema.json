@@ -356,7 +356,7 @@
                       "null"
                     ]
                   },
-                  "service_type": {
+                  "service_kind": {
                     "type": [
                       "string",
                       "null"
@@ -523,7 +523,7 @@
               ],
               "type": "string"
             },
-            "batch_size": {
+            "batch_item_count": {
               "default": 32,
               "minimum": 1,
               "type": "integer"

@@ -209,18 +209,18 @@ impl NotifyAuthConfig {
             }
             if principal.allow_plaintext_metadata {
                 let kind = principal
-                    .service_type
+                    .service_kind
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty());
                 let Some(kind) = kind else {
                     bail!(
-                        "http.notify_auth.production_mode requires service_principals.{did}.service_type when allow_plaintext_metadata is true"
+                        "http.notify_auth.production_mode requires service_principals.{did}.service_kind when allow_plaintext_metadata is true"
                     );
                 };
                 if !is_plaintext_eligible_service_kind(kind) {
                     bail!(
-                        "http.notify_auth.production_mode rejects allow_plaintext_metadata for service_type `{kind}` on service_principals.{did}"
+                        "http.notify_auth.production_mode rejects allow_plaintext_metadata for service_kind `{kind}` on service_principals.{did}"
                     );
                 }
             }
@@ -234,7 +234,7 @@ impl NotifyAuthConfig {
     }
 }
 
-/// Caller `service_type` values that are allowed to send plaintext
+/// Caller `service_kind` values that are allowed to send plaintext
 /// metadata (sender/realm/strand names, DID literals, etc.).
 ///
 /// Active service kinds — kept in sync with `ak.profile.*` artifacts in
@@ -366,7 +366,7 @@ impl NotifyNonceStoreConfig {
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyServicePrincipalConfig {
-    pub service_type: Option<String>,
+    pub service_kind: Option<String>,
     pub allow_plaintext_metadata: bool,
     #[serde(default, deserialize_with = "string_or_vec")]
     pub bearer_tokens: Vec<String>,
@@ -399,7 +399,7 @@ impl fmt::Debug for NotifyServicePrincipalConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let bearer_tokens = format!("<redacted:{}>", self.bearer_tokens.len());
         f.debug_struct("NotifyServicePrincipalConfig")
-            .field("service_type", &self.service_type)
+            .field("service_kind", &self.service_kind)
             .field("allow_plaintext_metadata", &self.allow_plaintext_metadata)
             .field("bearer_tokens", &bearer_tokens)
             .field("bearer_token_hashes", &self.bearer_token_hashes.len())
@@ -418,7 +418,7 @@ impl fmt::Debug for NotifyServicePrincipalConfig {
 impl Default for NotifyServicePrincipalConfig {
     fn default() -> Self {
         Self {
-            service_type: None,
+            service_kind: None,
             allow_plaintext_metadata: false,
             bearer_tokens: Vec::new(),
             bearer_token_hashes: Vec::new(),

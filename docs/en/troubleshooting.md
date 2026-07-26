@@ -59,7 +59,7 @@ through the configured PG overlay or dead-letter snapshot).
 - If the queue is stuck behind a permanently-broken provider, use the
   dead-letter snapshot to extract envelopes for manual replay; the
   retry worker eventually dead-letters them after `max_attempts`.
-- Increase `batch_size` on the retry worker (it polls every
+- Increase `batch_item_count` on the retry worker (it polls every
   `poll_interval_ms`) if the backlog is caused by burstiness rather
   than provider failure.
 

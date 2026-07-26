@@ -507,7 +507,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     principal.allow_plaintext_metadata = true;
     // `push` is a delegated push service (so the request is accepted)
     // but is NOT plaintext-eligible (so plaintext metadata is rejected).
-    principal.service_type = Some("push".to_owned());
+    principal.service_kind = Some("push".to_owned());
     config
         .service_principals
         .insert("did:web:sync.example.com".to_owned(), principal);
@@ -531,7 +531,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
         .send(&service)
         .await;
 
-    // The principal is allowed to push, but its declared service_type is not in
+    // The principal is allowed to push, but its declared service_kind is not in
     // the plaintext-eligible kind list, so the plaintext metadata in the
     // payload (sender_actor_display_name etc.) is rejected as a
     // `failed_precondition` — the caller is on the default blind

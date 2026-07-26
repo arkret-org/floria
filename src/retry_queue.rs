@@ -778,9 +778,9 @@ async fn pending_len_for_worker(queue: &std::sync::Arc<RetryQueue>) -> usize {
 
 async fn dequeue_due_for_worker(
     queue: &std::sync::Arc<RetryQueue>,
-    batch_size: usize,
+    batch_item_count: usize,
 ) -> Vec<RetryEnvelope> {
-    queue_operation(queue, move |queue| queue.dequeue_due(batch_size))
+    queue_operation(queue, move |queue| queue.dequeue_due(batch_item_count))
         .await
         .unwrap_or_default()
 }
@@ -803,7 +803,7 @@ pub async fn run_worker(
     queue: std::sync::Arc<RetryQueue>,
     registry: std::sync::Arc<crate::pushkin::PushkinRegistry>,
     poll_interval: Duration,
-    batch_size: usize,
+    batch_item_count: usize,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
     use std::time::Instant;
@@ -836,7 +836,7 @@ pub async fn run_worker(
                 depth as i64,
             );
         }
-        let due = dequeue_due_for_worker(&queue, batch_size.max(1)).await;
+        let due = dequeue_due_for_worker(&queue, batch_item_count.max(1)).await;
         if due.is_empty() {
             tokio::select! {
                 _ = tokio::time::sleep(poll_interval) => {}

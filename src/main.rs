@@ -220,7 +220,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let registry_clone = state.registry.clone();
         let poll_interval = std::time::Duration::from_millis(queue_config.poll_interval_ms.max(50));
-        let batch_size = queue_config.batch_size.max(1) as usize;
+        let batch_item_count = queue_config.batch_item_count.max(1) as usize;
         let grace = queue_config.grace_period();
         retry_worker_handle = Some((
             shutdown_tx,
@@ -229,7 +229,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
                     queue,
                     registry_clone,
                     poll_interval,
-                    batch_size,
+                    batch_item_count,
                     shutdown_rx,
                 )
                 .await;

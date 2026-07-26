@@ -19,7 +19,7 @@ pub use bearer::bearer_token_sha256_hex;
 pub(crate) use bearer::{BearerState, bearer_state};
 use helpers::{optional_header, reject_query_string_auth};
 pub use helpers::{redact_url_credentials, signature_public_key_hex};
-use mtls::{verify_destination_service_id, verify_mtls_profile, verify_principal_service_type};
+use mtls::{verify_destination_service_id, verify_mtls_profile, verify_principal_service_kind};
 use signature::{
     has_signature_headers, verified_content_digest, verify_message_signature,
     verify_nonce_freshness,
@@ -38,7 +38,7 @@ pub struct AuthenticatedNotifyCaller {
     /// profile (`ak.profile.push_gateway.visible_notification.v1`).
     ///
     /// Set ONLY when the principal has both `allow_plaintext_metadata`
-    /// flipped on AND a `service_type` that is on the plaintext-eligible
+    /// flipped on AND a `service_kind` that is on the plaintext-eligible
     /// allow-list (see [`crate::config::is_plaintext_eligible_service_kind`]).
     /// Anonymous callers (auth disabled) stay on the blind-wakeup
     /// profile. Development deployments may still exercise blind
@@ -86,7 +86,7 @@ pub async fn authenticate_notify_request(
     if let Some(origin_did) = origin_did.as_deref()
         && let Some(principal) = auth.service_principals.get(origin_did)
     {
-        verify_principal_service_type(principal, origin_did, request_id)?;
+        verify_principal_service_kind(principal, origin_did, request_id)?;
         verify_destination_service_id(req, auth, origin_did, request_id)?;
         if let Some(expected_endpoint) = principal.service_endpoint.as_deref() {
             let target_uri = helpers::target_uri(req)?;
@@ -196,7 +196,7 @@ pub async fn authenticate_notify_request(
 
 fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> bool {
     let Some(kind) = principal
-        .service_type
+        .service_kind
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())

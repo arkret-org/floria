@@ -69,12 +69,12 @@ static FCM_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| 
 
 static FCM_BATCH_SIZE: LazyLock<prometheus::HistogramVec> = LazyLock::new(|| {
     prometheus::register_histogram_vec!(
-        "floria_fcm_batch_size",
+        "floria_fcm_batch_item_count",
         "Batch size observed when FCM multicast dispatch is invoked",
         &["pushkin"],
         vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 500.0]
     )
-    .expect("register floria_fcm_batch_size")
+    .expect("register floria_fcm_batch_item_count")
 });
 
 static FCM_BATCH_OUTCOMES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {

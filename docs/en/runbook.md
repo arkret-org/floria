@@ -147,7 +147,7 @@ Rules:
 
 Privacy boundary: visible notifications are provider- and OS-visible by
 design. Only callers with `allow_plaintext_metadata=true` and a reviewed
-eligible `service_type` may supply displayable title/body metadata. Any
+eligible `service_kind` may supply displayable title/body metadata. Any
 change to `is_plaintext_eligible_service_kind` or any newly accepted
 visible plaintext field needs a fresh privacy review before rollout.
 

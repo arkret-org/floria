@@ -208,7 +208,7 @@ pub struct NotifyRetryQueueConfig {
     pub max_backoff_seconds: u64,
     pub dead_letter_capacity: u32,
     pub poll_interval_ms: u64,
-    pub batch_size: u32,
+    pub batch_item_count: u32,
     /// AEAD key (ChaCha20-Poly1305) for envelopes persisted on a Redis
     /// retry queue. The key material is hashed with SHA-256, so any
     /// non-empty string is acceptable; rotating the key invalidates
@@ -257,7 +257,7 @@ impl Default for NotifyRetryQueueConfig {
             max_backoff_seconds: 15 * 60,
             dead_letter_capacity: 1024,
             poll_interval_ms: 1_000,
-            batch_size: 32,
+            batch_item_count: 32,
             encryption_key: String::new(),
             encryption_key_file: None,
             grace_period_secs: 30,
