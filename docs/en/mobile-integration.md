@@ -36,7 +36,7 @@ Expected blind-wakeup fields:
 | Field | Meaning |
 |-------|---------|
 | `push_target_id` | Opaque server-issued target pseudonym |
-| `wakeup_kind` | Closed wakeup type: `message`, `mention`, `reaction`, or `call_invite` |
+| `wakeup_kind` | Closed wakeup type registered by the Arkret push contract |
 | `push_hint` | Optional body-free hint for local routing |
 | `badge` / `unread_count` | Optional platform count hints |
 
@@ -51,9 +51,10 @@ Forbidden mobile assumptions:
 ## Token Rotation
 
 The app should report token refreshes immediately through chime. The principal
-server should retire the old push route after the new route is confirmed. floria
-returns rejected token hashes to the server so stale routes can be cleaned up
-without exposing raw provider tokens.
+server should retire the old push route after the new route is confirmed.
+Floria identifies a stale route only by the canonical
+`(push_target_id, device_id)` pair and a registered rejection reason; raw tokens
+and token hashes never appear in the notify response.
 
 ## Local Development
 

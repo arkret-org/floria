@@ -13,7 +13,10 @@ async fn accepted_devices_are_not_rejected() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
-        .json(&payload(vec![device("com.example.app", "accept")]))
+        .json(&payload(vec![device(
+            "com.example.app",
+            "plaintext-token-should-not-leak",
+        )]))
         .send(&service)
         .await;
 
@@ -407,10 +410,49 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert!(body.rejected.is_empty());
+    assert_eq!(body.outcomes.len(), 1);
+    assert_eq!(
+        body.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+    );
     let encoded = serde_json::to_string(&body).unwrap();
-    assert!(!encoded.contains("accept"));
+    assert!(!encoded.contains("plaintext-token-should-not-leak"));
+    assert!(!encoded.contains("push_key"));
     assert!(!encoded.contains("delivery_receipts"));
+}
+
+#[tokio::test]
+async fn notify_response_conserves_every_requested_device_id() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+    let devices = vec![
+        device("com.example.app", "token-a"),
+        device("com.example.app", "token-b"),
+    ];
+    let requested_device_ids = devices
+        .iter()
+        .map(|device| device["device_id"].as_str().unwrap().to_owned())
+        .collect::<std::collections::HashSet<_>>();
+
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .json(&payload(devices))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    let outcome_device_ids = body
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.device_id.as_str().to_owned())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(outcome_device_ids, requested_device_ids);
+    assert_eq!(body.outcomes.len(), requested_device_ids.len());
 }
 
 #[tokio::test]

@@ -336,19 +336,34 @@ impl NotifyDeduplicator {
         } else {
             (response.provider_retries.len() as u32).saturating_add(1)
         };
-        let status = if response.rejected.is_empty() && response.accepted > 0 {
+        let accepted = response.accepted();
+        let rejected = response
+            .outcomes
+            .iter()
+            .filter(|outcome| {
+                outcome.gateway_status
+                    == arkret_models_integration::PushNotifyGatewayStatus::Rejected
+            })
+            .count();
+        let status = if rejected == 0 && accepted > 0 {
             "completed"
-        } else if !response.rejected.is_empty() && response.accepted > 0 {
+        } else if rejected > 0 && accepted > 0 {
             "partial"
-        } else if response.accepted == 0 && !response.rejected.is_empty() {
+        } else if accepted == 0 && rejected > 0 {
             "rejected"
         } else {
             "unknown"
         };
         let last_error = response
-            .rejected
+            .outcomes
             .iter()
-            .find_map(|rejected| rejected.reason_code.clone());
+            .find_map(|outcome| outcome.reason_code.map(|reason| reason.as_str().to_owned()))
+            .or_else(|| {
+                response
+                    .rejected
+                    .iter()
+                    .find_map(|rejected| rejected.reason_code.clone())
+            });
         Some(NotifyStatus {
             idempotency_key: key.to_owned(),
             status,
@@ -704,7 +719,8 @@ mod tests {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
         let response = PushNotifyOutcome {
             request_id: "request-1".to_owned(),
-            accepted: 1,
+            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
+            outcomes: vec![],
             rejected: vec![RejectedDevice::new(Some("com.example.app"), "push_key")],
             provider_retries: vec![],
             delivery_receipts: vec![],
@@ -728,7 +744,8 @@ mod tests {
             &key,
             PushNotifyOutcome {
                 request_id: "request-1".to_owned(),
-                accepted: 0,
+                push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
+                outcomes: vec![],
                 rejected: vec![],
                 provider_retries: vec![],
                 delivery_receipts: vec![],
@@ -761,7 +778,8 @@ mod tests {
             &first_fingerprint,
             PushNotifyOutcome {
                 request_id: "request-1".to_owned(),
-                accepted: 1,
+                push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
+                outcomes: vec![],
                 rejected: vec![],
                 provider_retries: vec![],
                 delivery_receipts: vec![],
@@ -833,7 +851,8 @@ mod tests {
     fn sample_response(index: usize) -> PushNotifyOutcome {
         PushNotifyOutcome {
             request_id: format!("request-{index}"),
-            accepted: 1,
+            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
+            outcomes: vec![],
             rejected: vec![],
             provider_retries: vec![],
             delivery_receipts: vec![],

@@ -122,15 +122,16 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "timing_profile_hint": "default",
                 "push_hint": "new_message",
                 "devices": [
-                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"},
-                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached"}
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached-1"},
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000002", "app_id": "com.example.app", "push_key": "cached-2"}
                 ]
             }
         }"#;
     let second = r#"{
             "notification": {
                 "devices": [
-                    {"push_key": "cached", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"}
+                    {"push_key": "cached-2", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000002"},
+                    {"push_key": "cached-1", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"}
                 ],
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
@@ -154,5 +155,5 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
         assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     }
 
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 }

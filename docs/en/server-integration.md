@@ -33,19 +33,17 @@ The caller should set:
 | `Idempotency-Key` | Recommended | Stable key for retry-safe `/notify` calls |
 | `Authorization: Bearer ...` | Conditional | Only when bearer fallback is configured |
 | HTTP Message Signature headers | Conditional | Required when the caller principal requires signatures |
-| `X-Origin-Service-ID` | Recommended | Must match `origin_service_id` when present |
+| `X-Origin-Service-ID` | Recommended | Must match the authenticated caller service |
 | `X-Destination-Service-ID` | Recommended | Must match the gateway DID when configured |
 
 ## Notify Request
 
-`POST /_arkret/edge/push/notify` accepts `ak.edge.push.command.notify` envelopes:
+`POST /_arkret/edge/push/notify` accepts the body for
+`ak.edge.push.command.notify`. The operation and transport identity are selected
+by the URL and headers, not repeated in the body:
 
 ```json
 {
-  "operation_id": "ak.edge.push.command.notify",
-  "idempotency_key": "notify-01J...",
-  "origin_service_id": "did:web:sync.example.com",
-  "destination_service_id": "did:web:push.example.com",
   "notification": {
     "event_id": "ak:event:01JS0EV000000000000000000",
     "message_id": "ak:message:01JS0MSG0000000000000000",
@@ -57,6 +55,7 @@ The caller should set:
     "push_hint": "new_message",
     "devices": [
       {
+        "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
         "app_id": "com.example.mobile",
         "push_key": "provider-token-or-endpoint"
       }
@@ -76,32 +75,34 @@ caches the response for `http.notify_dedup_ttl_seconds` when dedup is enabled.
 Retries with the same body return the cached response. Reusing the same key with
 a different body returns `duplicate_conflict`.
 
-Temporary provider failures return a successful JSON envelope when at least one
-device was accepted, with retry hints in `provider_retries`. Gateway-level
-temporary failures use HTTP 503 and may include `Retry-After`.
+`accepted` and `duplicate` both mean the gateway owns the route and the caller
+must not resend it. A `rejected` route remains caller-owned; the caller may retry
+only when that device outcome carries `retry_after_ms`. Provider retry and
+terminal delivery state remain gateway-private and never change the original
+gateway outcome.
 
 ## Response Shape
 
-Successful responses are minimized and redact raw push tokens:
+Successful responses conserve the requested device set and contain no provider
+or token metadata:
 
 ```json
 {
-  "request_id": "01J...",
-  "accepted": 1,
-  "rejected": [],
-  "provider_retries": [],
-  "delivery_receipts": [
+  "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+  "outcomes": [
     {
-      "provider": "fcm",
-      "status": "accepted",
-      "push_key_hash": "..."
+      "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
+      "gateway_status": "accepted"
     }
   ]
 }
 ```
 
-Rejected devices contain app id and token hash metadata, never raw provider
-tokens. Error responses use the standard `ok=false` envelope with
+Every requested `device_id` appears exactly once. A target-level failure is
+expanded into one same-reason rejected outcome for every requested device.
+Raw tokens, token hashes, app ids, provider ids, provider retries, delivery
+receipts, and private provider errors never appear in this response. Transport
+or malformed-request errors use the standard `ok=false` envelope with
 `error.code`, `error.message`, and a request id when available.
 
 ## Broadcast Endpoints

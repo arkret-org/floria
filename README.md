@@ -138,13 +138,13 @@ Quick notes:
 
 ## Arkret notify semantics
 
-- `/_arkret/edge/push/notify` accepts authenticated service calls and supports `Idempotency-Key` or body `idempotency_key`
+- `/_arkret/edge/push/notify` accepts authenticated service calls and supports the `Idempotency-Key` header
 - `ak.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_id`, destination gateway DID, priority/TTL/collapse hints, and target device references
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `strand_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
 - notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model
-- rejected push tokens are returned as hashes, not raw platform tokens
+- notify responses conserve `(push_target_id, device_id)` outcomes and expose neither raw push tokens nor token hashes
 - response delivery receipt refs contain provider/status/token hash metadata only, never plaintext payloads
 - bearer fallback is header-only; query string auth material is rejected
 - WebPush endpoints must match the configured allowlist and must not include query strings

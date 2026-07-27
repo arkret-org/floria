@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arkret_models_integration::{
-    AgentEventRouting, classify_agent_event_kind, validate_push_notify_contract_shape,
+    AgentEventRouting, PushNotifyDeviceOutcome, PushNotifyReasonCode, classify_agent_event_kind,
+    validate_push_notify_contract_shape,
 };
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
@@ -12,8 +13,7 @@ use uuid::Uuid;
 
 use super::MAX_REQUEST_SIZE;
 use super::metrics::{
-    finish_error, record_delivery_receipt_outcomes, record_notify_delivery_by_scope,
-    record_notify_delivery_outcomes,
+    finish_error, record_notify_delivery_by_scope, record_notify_delivery_outcomes,
 };
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
@@ -44,11 +44,11 @@ use validation::{
 
 /// Round 4 — `reason_code=historical_only` short-circuits soland's
 /// diagnostic replay. floria MUST NOT fan the request out a second
-/// time; it answers 200 with an empty rejected list and no provider
-/// retries. The wire constant comes from the SDK.
+/// time; it answers 200 with one accepted gateway outcome per input
+/// device and no provider retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = arkret_wire::ErrorCode::HISTORICAL_ONLY;
 
-/// Round 4 — wire reason floria attaches to a RejectedDevice when the
+/// Round 4 — private audit reason floria attaches to a RejectedDevice when the
 /// device's `target_route_token` is not present in the
 /// `mention_redirect_target_route_tokens` allow-list. Used by both the
 /// device-loop reject path and the per-device dedup test that the
@@ -114,6 +114,34 @@ fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
         return Duration::ZERO;
     }
     Duration::from_nanos((bucket_nanos - elapsed_in_bucket).min(u64::MAX as u128) as u64)
+}
+
+fn push_target_id(notification: &PushNotification) -> String {
+    notification.push_target_id.clone().unwrap_or_default()
+}
+
+fn accepted_outcomes(notification: &PushNotification) -> Vec<PushNotifyDeviceOutcome> {
+    notification
+        .devices
+        .iter()
+        .map(|device| PushNotifyDeviceOutcome::accepted(device.device_id.clone()))
+        .collect()
+}
+
+fn duration_millis(duration: Duration) -> u64 {
+    duration.as_millis().clamp(1, u64::MAX as u128) as u64
+}
+
+fn no_fanout_response(request_id: &str, notification: &PushNotification) -> PushNotifyOutcome {
+    let outcomes = accepted_outcomes(notification);
+    PushNotifyOutcome {
+        request_id: request_id.to_owned(),
+        push_target_id: push_target_id(notification),
+        outcomes,
+        rejected: Vec::new(),
+        provider_retries: Vec::new(),
+        delivery_receipts: Vec::new(),
+    }
 }
 
 fn circuit_breaker_key(
@@ -317,13 +345,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 request_id = %request_id,
                 "answering 200 no-fanout ack for reason_code=historical_only"
             );
-            let response = PushNotifyOutcome {
-                request_id: request_id.clone(),
-                accepted: 0,
-                rejected: Vec::new(),
-                provider_retries: Vec::new(),
-                delivery_receipts: Vec::new(),
-            };
+            let response = no_fanout_response(&request_id, &request.notification);
             finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
@@ -354,8 +376,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.
     //
-    // Either case answers 200 so the caller's pipeline advances; the
-    // `accepted` count is 0 and the rejected list is empty.
+    // Either case answers 200 so the caller's pipeline advances, with
+    // one accepted gateway outcome per input device and no provider fanout.
     if let Some(kind) = request.event_kind.as_deref()
         && let Some(routing) = classify_agent_event_kind(kind.trim())
     {
@@ -379,13 +401,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 );
             }
         }
-        let response = PushNotifyOutcome {
-            request_id: request_id.clone(),
-            accepted: 0,
-            rejected: Vec::new(),
-            provider_retries: Vec::new(),
-            delivery_receipts: Vec::new(),
-        };
+        let response = no_fanout_response(&request_id, &request.notification);
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
@@ -455,13 +471,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             access_kind = %access_kind,
             "answering 200 audit-pipeline ack after audit sink write; SKIPPING push fanout"
         );
-        let response = PushNotifyOutcome {
-            request_id: request_id.clone(),
-            accepted: 0,
-            rejected: Vec::new(),
-            provider_retries: Vec::new(),
-            delivery_receipts: Vec::new(),
-        };
+        let response = no_fanout_response(&request_id, &request.notification);
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
@@ -627,15 +637,27 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 retry_after_secs = rejection.retry_after.as_secs(),
                 "rejecting /notify request due to rate limit"
             );
-            finish_error(
-                res,
-                StatusCode::TOO_MANY_REQUESTS,
-                arkret_wire::error_codes::ErrorCode::RATE_LIMITED,
-                &format!("notify rate limit exceeded for {}", rejection.scope),
-                Some(rejection.retry_after),
-                Some(&request_id),
-                started,
-            );
+            let outcomes = notification
+                .devices
+                .iter()
+                .map(|device| {
+                    PushNotifyDeviceOutcome::rejected(
+                        device.device_id.clone(),
+                        PushNotifyReasonCode::RateLimited,
+                        Some(duration_millis(rejection.retry_after)),
+                    )
+                })
+                .collect();
+            let response = PushNotifyOutcome {
+                request_id: request_id.clone(),
+                push_target_id: push_target_id(&notification),
+                outcomes,
+                rejected: Vec::new(),
+                provider_retries: Vec::new(),
+                delivery_receipts: Vec::new(),
+            };
+            cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
+            finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
         }
     }
@@ -647,11 +669,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     };
 
     let mut rejected = Vec::new();
+    let mut outcomes = Vec::with_capacity(notification.devices.len());
     let mut delivered_now = 0usize;
     let mut skipped_delivered = 0usize;
     let mut provider_retries = Vec::new();
     let mut delivery_receipts = Vec::new();
-    let mut seen_devices = HashSet::new();
+    let mut taken_over_this_request = HashSet::new();
     let mut first_remote_error: Option<String> = None;
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
     let mut first_internal_error: Option<String> = None;
@@ -668,6 +691,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 "rejecting device with empty app_id or push_key"
             );
             rejected.push(rejected_device(device, device.push_key()));
+            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                device.device_id.clone(),
+                PushNotifyReasonCode::PushTokenInvalid,
+                None,
+            ));
             delivery_receipts.push(delivery_receipt(
                 None,
                 push_key,
@@ -675,16 +703,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 None,
                 &context.request_id,
             ));
-            continue;
-        }
-
-        if !seen_devices.insert((app_id.to_owned(), push_key.to_owned())) {
-            tracing::info!(
-                request_id = %context.request_id,
-                app_id,
-                push_key_hash = %device.redacted_push_key(),
-                "skipping duplicate device entry"
-            );
             continue;
         }
 
@@ -718,6 +736,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     rejected_device(device, device.push_key())
                         .with_reason_code(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
                 );
+                outcomes.push(PushNotifyDeviceOutcome::rejected(
+                    device.device_id.clone(),
+                    PushNotifyReasonCode::DeliveryBindingStale,
+                    None,
+                ));
                 delivery_receipts.push(delivery_receipt(
                     None,
                     push_key,
@@ -735,6 +758,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             [] => {
                 tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "unknown app id");
                 rejected.push(rejected_device(device, device.push_key()));
+                outcomes.push(PushNotifyDeviceOutcome::rejected(
+                    device.device_id.clone(),
+                    PushNotifyReasonCode::ProfileUnsupported,
+                    None,
+                ));
                 delivery_receipts.push(delivery_receipt(
                     None,
                     push_key,
@@ -749,10 +777,12 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     .notify_deduplicator
                     .as_ref()
                     .is_some_and(|deduplicator| {
-                        deduplicator.contains_delivered_device(&dedup_key, app_id, push_key)
+                        !taken_over_this_request.contains(&(app_id.to_owned(), push_key.to_owned()))
+                            && deduplicator.contains_delivered_device(&dedup_key, app_id, push_key)
                     })
                 {
                     skipped_delivered += 1;
+                    outcomes.push(PushNotifyDeviceOutcome::duplicate(device.device_id.clone()));
                     app_metrics::notify_device_skip_hit(1);
                     app_metrics::notify_device_skip_by_pushkin(pushkin.name(), 1);
                     delivery_receipts.push(delivery_receipt(
@@ -812,6 +842,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             Some(CIRCUIT_BREAKER_RETRY_AFTER),
                         )
                     });
+                    outcomes.push(PushNotifyDeviceOutcome::rejected(
+                        device.device_id.clone(),
+                        PushNotifyReasonCode::PushGatewayUnreachable,
+                        Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
+                    ));
                     app_metrics::notify_delivery_outcome_by_app(app_id, "retryable", 1);
                     continue;
                 }
@@ -872,6 +907,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 app_metrics::notify_delivery_outcome_by_app(app_id, dispatch_outcome, 1);
                 match dispatch_result {
                     Ok(mut pushkin_rejected) => {
+                        outcomes.push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
                         let rejected_set = pushkin_rejected
                             .iter()
                             .cloned()
@@ -893,6 +929,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                                 ));
                             }
                             mark_delivered_devices(&state, &dedup_key, delivered_targets).await;
+                            taken_over_this_request
+                                .insert((app_id.to_owned(), push_key.to_owned()));
                         }
                         rejected.extend(pushkin_rejected.drain(..).map(|push_key| {
                             delivery_receipts.push(delivery_receipt(
@@ -934,10 +972,23 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             )
                             .await;
                         }
+                        if state.notify_retry_queue.is_some() {
+                            outcomes
+                                .push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
+                        } else {
+                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                                device.device_id.clone(),
+                                PushNotifyReasonCode::PushGatewayUnreachable,
+                                Some(duration_millis(
+                                    retry_after.unwrap_or(CIRCUIT_BREAKER_RETRY_AFTER),
+                                )),
+                            ));
+                        }
                         first_temporary_error
                             .get_or_insert_with(|| (error.to_string(), retry_after));
                     }
                     Err(error) if error.is_remote() => {
+                        outcomes.push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
                         tracing::warn!(
                             error = %error,
                             request_id = %context.request_id,
@@ -957,6 +1008,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         first_remote_error.get_or_insert_with(|| error.to_string());
                     }
                     Err(error) => {
+                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            device.device_id.clone(),
+                            PushNotifyReasonCode::PushGatewayUnreachable,
+                            Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
+                        ));
                         tracing::error!(
                             error = %error,
                             request_id = %context.request_id,
@@ -980,6 +1036,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             _ => {
                 tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "ambiguous app id");
                 rejected.push(rejected_device(device, device.push_key()));
+                outcomes.push(PushNotifyDeviceOutcome::rejected(
+                    device.device_id.clone(),
+                    PushNotifyReasonCode::ProfileUnsupported,
+                    None,
+                ));
                 delivery_receipts.push(delivery_receipt(
                     None,
                     push_key,
@@ -1044,7 +1105,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
         let response = PushNotifyOutcome {
             request_id: context.request_id.clone(),
-            accepted: delivered_now + skipped_delivered,
+            push_target_id: push_target_id(&notification),
+            outcomes,
             rejected,
             provider_retries,
             delivery_receipts,
@@ -1062,9 +1124,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         {
             return;
         }
-        if fully_settled {
-            cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
-        }
+        cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
         record_notify_delivery_outcomes(&response);
         record_notify_delivery_by_scope(
             &notification,
@@ -1094,102 +1154,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
     }
 
-    if let Some(message) = first_internal_error {
-        if !record_rejected_devices_audit_or_finish(
-            &state,
-            &context.request_id,
-            &caller,
-            &notification,
-            &rejected,
-            res,
-            started,
-        )
-        .await
-        {
-            return;
-        }
-        record_delivery_receipt_outcomes(
-            &delivery_receipts,
-            delivered_now + skipped_delivered,
-            rejected.len(),
-        );
-        finish_error(
-            res,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
-            &message,
-            None,
-            Some(&context.request_id),
-            started,
-        );
-        return;
-    }
-
-    if let Some((message, retry_after)) = first_temporary_error {
-        if !record_rejected_devices_audit_or_finish(
-            &state,
-            &context.request_id,
-            &caller,
-            &notification,
-            &rejected,
-            res,
-            started,
-        )
-        .await
-        {
-            return;
-        }
-        record_delivery_receipt_outcomes(
-            &delivery_receipts,
-            delivered_now + skipped_delivered,
-            rejected.len(),
-        );
-        finish_error(
-            res,
-            StatusCode::SERVICE_UNAVAILABLE,
-            arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,
-            &message,
-            retry_after,
-            Some(&context.request_id),
-            started,
-        );
-        return;
-    }
-
-    if let Some(message) = first_remote_error {
-        if !record_rejected_devices_audit_or_finish(
-            &state,
-            &context.request_id,
-            &caller,
-            &notification,
-            &rejected,
-            res,
-            started,
-        )
-        .await
-        {
-            return;
-        }
-        record_delivery_receipt_outcomes(
-            &delivery_receipts,
-            delivered_now + skipped_delivered,
-            rejected.len(),
-        );
-        finish_error(
-            res,
-            StatusCode::BAD_GATEWAY,
-            arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,
-            &message,
-            None,
-            Some(&context.request_id),
-            started,
-        );
-        return;
-    }
-
     let response = PushNotifyOutcome {
         request_id: context.request_id.clone(),
-        accepted: delivered_now + skipped_delivered,
+        push_target_id: push_target_id(&notification),
+        outcomes,
         rejected,
         provider_retries,
         delivery_receipts,
@@ -1207,9 +1175,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     {
         return;
     }
-    if fully_settled {
-        cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
-    }
+    cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
     record_notify_delivery_outcomes(&response);
     record_notify_delivery_by_scope(
         &notification,

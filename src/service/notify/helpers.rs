@@ -274,19 +274,8 @@ fn standard_notify_outcome(
     response: &PushNotifyOutcome,
 ) -> arkret_models_integration::PushNotifyOutcome {
     arkret_models_integration::PushNotifyOutcome {
-        rejected: response
-            .rejected
-            .iter()
-            .map(|device| arkret_models_integration::PushNotifyRejection {
-                push_target_id: device.push_key.clone(),
-                device_id: None,
-                reason_code: device
-                    .reason_code
-                    .clone()
-                    .unwrap_or_else(|| "provider_rejected".to_owned()),
-                retry_after_ms: None,
-            })
-            .collect(),
+        push_target_id: response.push_target_id.clone(),
+        outcomes: response.outcomes.clone(),
     }
 }
 
@@ -463,6 +452,10 @@ pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Op
         .iter()
         .map(|device| {
             let mut normalized = Map::new();
+            normalized.insert(
+                "device_id".to_owned(),
+                Value::String(device.device_id.as_str().to_owned()),
+            );
             normalized.insert(
                 "app_id".to_owned(),
                 Value::String(device.app_id().unwrap_or_default().to_owned()),

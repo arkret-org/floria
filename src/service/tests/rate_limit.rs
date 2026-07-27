@@ -2,13 +2,33 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use salvo::test::TestClient;
-use serde_json::json;
+use salvo::test::{ResponseExt, TestClient};
 
 use super::*;
 
+async fn assert_rate_limited(response: &mut salvo::Response, expected_devices: usize) {
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    assert!(response.headers().get("retry-after").is_none());
+    let body = response
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert_eq!(body.outcomes.len(), expected_devices);
+    for outcome in body.outcomes {
+        assert_eq!(
+            outcome.gateway_status,
+            arkret_models_integration::PushNotifyGatewayStatus::Rejected
+        );
+        assert_eq!(
+            outcome.reason_code,
+            Some(arkret_models_integration::PushNotifyReasonCode::RateLimited)
+        );
+        assert!(outcome.retry_after_ms.is_some_and(|value| value >= 1_000));
+    }
+}
+
 #[tokio::test]
-async fn notify_rate_limit_returns_429_with_retry_after() {
+async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
     let service = test_service_with_rate_limits(
         vec![(
             "com.example.app",
@@ -31,28 +51,13 @@ async fn notify_rate_limit_returns_429_with_retry_after() {
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
-        .json(&payload(vec![device("com.example.app", "two")]))
+        .json(&payload(vec![
+            device("com.example.app", "two"),
+            device("com.example.app", "three"),
+        ]))
         .send(&service)
         .await;
-    assert_eq!(second.status_code.unwrap(), StatusCode::TOO_MANY_REQUESTS);
-    assert!(
-        second
-            .headers()
-            .get("retry-after")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-            .is_some_and(|value| value >= 1)
-    );
-    let body = assert_notify_error(&mut second, "rate_limited", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("notify rate limit exceeded for origin_service")
-    );
-    assert!(
-        body["error"]["retry_after_ms"]
-            .as_u64()
-            .is_some_and(|value| value >= 1000)
-    );
+    assert_rate_limited(&mut second, 2).await;
 }
 
 #[tokio::test]
@@ -80,12 +85,7 @@ async fn notify_rate_limit_can_apply_per_app_id() {
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
-    assert_eq!(second.status_code.unwrap(), StatusCode::TOO_MANY_REQUESTS);
-    let body = assert_notify_error(&mut second, "rate_limited", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("notify rate limit exceeded for app_id")
-    );
+    assert_rate_limited(&mut second, 1).await;
 }
 
 #[tokio::test]
@@ -113,12 +113,7 @@ async fn notify_rate_limit_can_apply_per_provider() {
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
-    assert_eq!(second.status_code.unwrap(), StatusCode::TOO_MANY_REQUESTS);
-    let body = assert_notify_error(&mut second, "rate_limited", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("notify rate limit exceeded for provider")
-    );
+    assert_rate_limited(&mut second, 1).await;
 }
 
 #[tokio::test]
@@ -146,12 +141,7 @@ async fn notify_rate_limit_can_apply_per_push_key_hash() {
         .json(&payload(vec![device("com.example.app", "same-push-key")]))
         .send(&service)
         .await;
-    assert_eq!(second.status_code.unwrap(), StatusCode::TOO_MANY_REQUESTS);
-    let body = assert_notify_error(&mut second, "rate_limited", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("notify rate limit exceeded for push_key_hash")
-    );
+    assert_rate_limited(&mut second, 1).await;
 }
 
 #[tokio::test]
@@ -179,12 +169,7 @@ async fn notify_rate_limit_can_apply_per_endpoint() {
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
-    assert_eq!(second.status_code.unwrap(), StatusCode::TOO_MANY_REQUESTS);
-    let body = assert_notify_error(&mut second, "rate_limited", true).await;
-    assert_eq!(
-        body["error"]["message"],
-        json!("notify rate limit exceeded for endpoint")
-    );
+    assert_rate_limited(&mut second, 1).await;
 }
 
 #[tokio::test]

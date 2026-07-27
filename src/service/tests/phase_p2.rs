@@ -39,7 +39,10 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert!(resp.rejected.is_empty());
+    assert_eq!(
+        resp.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+    );
     // Critical: durable agent lifecycle event MUST NOT trigger a
     // user-device push fanout. Capability cache invalidation strands
     // through `/internal/consent_revoke` with `reason=agent_paused`.
@@ -65,7 +68,10 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert!(resp.rejected.is_empty());
+    assert_eq!(
+        resp.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -88,7 +94,10 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert!(resp.rejected.is_empty());
+    assert_eq!(
+        resp.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -121,9 +130,10 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
             .take_json::<arkret_models_integration::PushNotifyOutcome>()
             .await
             .unwrap();
-        assert!(
-            resp.rejected.is_empty(),
-            "kind {kind} unexpectedly returned rejected devices"
+        assert_eq!(
+            resp.outcomes[0].gateway_status,
+            arkret_models_integration::PushNotifyGatewayStatus::Accepted,
+            "kind {kind} did not return a conserved accepted outcome"
         );
         assert_eq!(
             calls.load(Ordering::SeqCst),
@@ -155,7 +165,10 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert!(resp.rejected.is_empty());
+    assert_eq!(
+        resp.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 

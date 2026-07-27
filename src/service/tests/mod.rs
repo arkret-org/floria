@@ -263,8 +263,13 @@ pub(super) fn with_operation_id(mut request_body: Value, operation_id: &str) -> 
 }
 
 pub(super) fn device(app_id: &str, push_key: &str) -> Value {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    (app_id, push_key).hash(&mut hasher);
+    let suffix = hasher.finish() & 0x0000_ffff_ffff_ffff;
     json!({
-        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
+        "device_id": format!("ak:device:0196419b-0000-7000-8000-{suffix:012x}"),
         "app_id": app_id,
         "push_key": push_key,
         "visible_notification_opt_in": true
@@ -301,16 +306,31 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
         .take_json::<arkret_models_integration::PushNotifyOutcome>()
         .await
         .unwrap();
-    assert_eq!(body.rejected.len(), rejected_devices.len());
-    for (actual, expected) in body.rejected.iter().zip(rejected_devices) {
-        assert_eq!(actual.push_target_id, expected.push_key);
-        assert!(actual.device_id.is_none());
-        assert_eq!(
-            actual.reason_code,
-            expected
-                .reason_code
-                .unwrap_or_else(|| "provider_rejected".to_owned())
-        );
-        assert!(actual.retry_after_ms.is_none());
+    assert_eq!(
+        body.push_target_id,
+        "ak:pseudonym:push:01HYZ8Z000000000000000"
+    );
+    assert!(!body.outcomes.is_empty());
+    assert_eq!(
+        body.outcomes
+            .iter()
+            .filter(|outcome| {
+                outcome.gateway_status
+                    == arkret_models_integration::PushNotifyGatewayStatus::Rejected
+            })
+            .count(),
+        rejected_devices.len()
+    );
+    let unique_device_ids = body
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.device_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(unique_device_ids.len(), body.outcomes.len());
+    let encoded = serde_json::to_string(&body).unwrap();
+    for rejected in rejected_devices {
+        assert!(!encoded.contains(&rejected.push_key));
     }
+    assert!(!encoded.contains("provider_retries"));
+    assert!(!encoded.contains("delivery_receipts"));
 }

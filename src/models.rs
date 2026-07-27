@@ -12,7 +12,8 @@ pub type RouteTokens = arkret_models_integration::PushRouteTokens;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
     pub request_id: String,
-    pub accepted: usize,
+    pub push_target_id: String,
+    pub outcomes: Vec<arkret_models_integration::PushNotifyDeviceOutcome>,
     pub rejected: Vec<RejectedDevice>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub provider_retries: Vec<ProviderRetry>,
@@ -25,6 +26,16 @@ impl FloriaPushNotifyOutcome {
         let mut cloned = self.clone();
         cloned.request_id = request_id.into();
         cloned
+    }
+
+    pub fn accepted(&self) -> usize {
+        self.outcomes
+            .iter()
+            .filter(|outcome| {
+                outcome.gateway_status
+                    != arkret_models_integration::PushNotifyGatewayStatus::Rejected
+            })
+            .count()
     }
 }
 
@@ -382,7 +393,13 @@ mod tests {
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
         let response = PushNotifyOutcome {
             request_id: "ak:request:123".to_owned(),
-            accepted: 1,
+            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
+            outcomes: vec![
+                arkret_models_integration::PushNotifyDeviceOutcome::accepted(
+                    arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000004")
+                        .unwrap(),
+                ),
+            ],
             rejected: vec![super::RejectedDevice::new(
                 Some("app.example.android"),
                 "token-123",

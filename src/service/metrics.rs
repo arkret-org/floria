@@ -115,7 +115,7 @@ fn record_realm_and_check_guard(realm_id: &str) -> bool {
 pub(super) fn record_notify_delivery_outcomes(response: &PushNotifyOutcome) {
     record_delivery_receipt_outcomes(
         &response.delivery_receipts,
-        response.accepted,
+        response.accepted(),
         response.rejected.len(),
     );
 }

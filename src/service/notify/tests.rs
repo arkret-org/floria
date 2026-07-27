@@ -19,6 +19,17 @@ fn notify_request_with_wakeup_kind(kind: &str) -> arkret_models_integration::Pus
             push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
             wakeup_kind: Some(kind.to_owned()),
             timing_profile_hint: Some(arkret_models_integration::PushTimingProfileHint::Default),
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: arkret_wire::DeviceId::new(
+                    "ak:device:0196419b-0000-7000-8000-000000000001",
+                )
+                .unwrap(),
+                push_key: Some("token-1".to_owned()),
+                app_id: Some("com.example.app".to_owned()),
+                platform: None,
+                target_route_token: None,
+                visible_notification_opt_in: false,
+            }],
             ..arkret_models_integration::PushNotificationEnvelope::default()
         },
         event_kind: None,
@@ -61,7 +72,9 @@ fn notify_ingress_accepts_hardened_timing_profile_hint() {
                     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "traffic_metadata_hardened",
-                    "devices": []
+                    "devices": [{
+                        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
+                    }]
                 }
         }))
         .unwrap();
