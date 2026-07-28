@@ -65,9 +65,9 @@ consent_revoke` (T17) consumed from soland. See
 normative source. Signal kinds (`ak.presence`, `ak.typing`,
 `ak.receipt.read`, `ak.call.signal`) are confirmed to bypass floria
 entirely; they ride the encrypted `SignalEnvelope` rail in the Sync
-Service (`spec/v1/zh/sync/signal.md`). There is no plaintext ephemeral
-rail: `EphemeralEnvelope` and the `ephemeral` transaction-body field are
-gone, superseded by `SignalEnvelope` / `signals`.
+Service (`spec/v1/zh/sync/signal.md`). The former plaintext realtime rail
+and transaction-body field are gone, superseded by `SignalEnvelope` /
+`signals`.
 
 ## Cross-project task tracking
 
