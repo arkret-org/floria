@@ -14,7 +14,7 @@ use super::server_describe::{
 };
 use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
-use crate::auth::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER};
+use crate::auth::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER};
 use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
 
 fn owned(items: Vec<&'static str>) -> Vec<String> {
@@ -81,7 +81,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             operation_id: NOTIFY_OPERATION_ID.to_owned(),
             request_id_header: "X-Arkret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
-            origin_service_id_header: ORIGIN_SERVICE_ID_HEADER.to_owned(),
+            source_service_id_header: SOURCE_SERVICE_ID_HEADER.to_owned(),
             destination_service_id_header: DESTINATION_SERVICE_ID_HEADER.to_owned(),
             max_request_size_bytes: MAX_REQUEST_SIZE,
             dedup_backend: dedup_backend.map(str::to_owned),

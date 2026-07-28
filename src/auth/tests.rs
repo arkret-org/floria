@@ -10,7 +10,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::helpers::{signature_public_key_hex, unix_now_secs};
-use super::{DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER, redact_url_credentials};
+use super::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER, redact_url_credentials};
 use crate::AppState;
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use crate::nonce_store::NonceStore;
@@ -79,7 +79,7 @@ fn sign_request(
     );
     let now = unix_now_secs();
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -88,10 +88,10 @@ fn sign_request(
         format!("\"@target-uri\": {target_uri}"),
         format!("\"@authority\": {authority}"),
         format!("\"content-digest\": {digest}"),
-        "\"x-arkret-origin-service-id\": did:web:sync.example.com".to_owned(),
-        "\"x-arkret-destination-service-id\": did:web:push.example.com".to_owned(),
+        "\"source-service-id\": did:web:sync.example.com".to_owned(),
+        "\"destination-service-id\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -146,7 +146,7 @@ async fn http_message_signature_authenticates_notify_request() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -204,7 +204,7 @@ async fn mtls_profile_authenticates_notify_request() {
         .add_header("signature", signature, true)
         .add_header("x-client-certificate-verified", "true", true)
         .add_header("x-client-certificate-sha256", "aa:bb:cc", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -259,7 +259,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -329,7 +329,7 @@ async fn rejects_tampered_body() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -372,7 +372,7 @@ async fn rejects_signature_missing_required_components() {
     // Intentionally omit `@authority` from the covered components —
     // floria's required-component policy must still trip this.
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -380,10 +380,10 @@ async fn rejects_signature_missing_required_components() {
         "\"@method\": POST".to_owned(),
         "\"@target-uri\": http://127.0.0.1/_arkret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
-        "\"x-arkret-origin-service-id\": did:web:sync.example.com".to_owned(),
-        "\"x-arkret-destination-service-id\": did:web:push.example.com".to_owned(),
+        "\"source-service-id\": did:web:sync.example.com".to_owned(),
+        "\"destination-service-id\": did:web:push.example.com".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"x-arkret-origin-service-id\" \"x-arkret-destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -400,7 +400,7 @@ async fn rejects_signature_missing_required_components() {
         .add_header("content-digest", digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",

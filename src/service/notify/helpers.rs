@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 use super::super::metrics::{finish_error, finish_json};
 use crate::audit::AuditEvent;
 use crate::auth::{
-    AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER,
+    AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER,
 };
 use crate::dedup::request_hash;
 use crate::models::{
@@ -64,7 +64,7 @@ pub(super) fn notify_rate_limit_checks(
 
     if let Some(limit) = config.per_origin_service.filter(|limit| *limit > 0) {
         let subject = req
-            .header::<String>(ORIGIN_SERVICE_ID_HEADER)
+            .header::<String>(SOURCE_SERVICE_ID_HEADER)
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "<missing>".to_owned());

@@ -9,8 +9,8 @@ use sha2::{Digest, Sha256};
 
 use super::helpers::{authority, target_uri, unix_now_secs};
 use super::{
-    AuthFailure, CONTENT_DIGEST_HEADER, DESTINATION_SERVICE_ID_HEADER, ORIGIN_SERVICE_ID_HEADER,
-    SIGNATURE_HEADER, SIGNATURE_INPUT_HEADER,
+    AuthFailure, CONTENT_DIGEST_HEADER, DESTINATION_SERVICE_ID_HEADER, SIGNATURE_HEADER,
+    SIGNATURE_INPUT_HEADER, SOURCE_SERVICE_ID_HEADER,
 };
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use crate::nonce_store::{NonceCheck, NonceStore};
@@ -118,7 +118,7 @@ pub(super) fn verify_message_signature(
         Component::TargetUri,
         Component::Authority,
         Component::Header(CONTENT_DIGEST_HEADER.to_owned()),
-        Component::Header(ORIGIN_SERVICE_ID_HEADER.to_owned()),
+        Component::Header(SOURCE_SERVICE_ID_HEADER.to_owned()),
         Component::Header(DESTINATION_SERVICE_ID_HEADER.to_owned()),
     ];
     if !signature_input.covers_all(&required_components) {

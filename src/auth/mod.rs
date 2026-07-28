@@ -25,8 +25,8 @@ use signature::{
     verify_nonce_freshness,
 };
 
-pub const ORIGIN_SERVICE_ID_HEADER: &str = "x-arkret-origin-service-id";
-pub const DESTINATION_SERVICE_ID_HEADER: &str = "x-arkret-destination-service-id";
+pub const SOURCE_SERVICE_ID_HEADER: &str = "source-service-id";
+pub const DESTINATION_SERVICE_ID_HEADER: &str = "destination-service-id";
 const CONTENT_DIGEST_HEADER: &str = "content-digest";
 const SIGNATURE_INPUT_HEADER: &str = "signature-input";
 const SIGNATURE_HEADER: &str = "signature";
@@ -81,7 +81,7 @@ pub async fn authenticate_notify_request(
         });
     }
 
-    let origin_did = optional_header(req, ORIGIN_SERVICE_ID_HEADER);
+    let origin_did = optional_header(req, SOURCE_SERVICE_ID_HEADER);
 
     if let Some(origin_did) = origin_did.as_deref()
         && let Some(principal) = auth.service_principals.get(origin_did)

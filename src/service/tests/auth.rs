@@ -17,7 +17,7 @@ async fn notify_accepts_authenticated_allowlisted_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -93,7 +93,7 @@ async fn notify_accepts_hashed_bearer_token() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -120,7 +120,7 @@ async fn notify_rejects_query_string_auth_material() {
     let mut response =
         TestClient::post("http://127.0.0.1/_arkret/edge/push/notify?access_token=secret-token")
             .add_header("authorization", "Bearer secret-token", true)
-            .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+            .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
             .add_header(
                 DESTINATION_SERVICE_ID_HEADER,
                 "did:web:push.example.com",
@@ -174,7 +174,7 @@ async fn notify_rejects_non_allowlisted_origin_service_id() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -204,7 +204,7 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -277,7 +277,7 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -310,7 +310,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -352,7 +352,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -385,7 +385,7 @@ async fn notify_rejects_mismatched_destination_service_id() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:other-gateway.example.com",
@@ -447,7 +447,7 @@ async fn production_mode_rejects_bearer_only_principal() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -479,7 +479,7 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer gateway-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",
@@ -521,7 +521,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(ORIGIN_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
             "did:web:push.example.com",

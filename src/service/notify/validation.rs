@@ -6,7 +6,7 @@ use crate::config::NotifyAuthConfig;
 use crate::models::{DeviceExt, PushNotification};
 
 /// SPEC-CR-016: the originating service DID rides the `Source-Service-ID`
-/// transport header (`ORIGIN_SERVICE_ID_HEADER`), which the auth layer
+/// transport header (`SOURCE_SERVICE_ID_HEADER`), which the auth layer
 /// already resolved into `caller.origin_service_id`. We keep a
 /// defense-in-depth check that the header is present and consistent with
 /// the authenticated caller rather than reading a (now removed) body field.
@@ -19,7 +19,7 @@ pub(super) fn validate_origin_service_id(
         return Ok(());
     }
     let Some(origin_service_id) = req
-        .header::<String>(crate::auth::ORIGIN_SERVICE_ID_HEADER)
+        .header::<String>(crate::auth::SOURCE_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
     else {
