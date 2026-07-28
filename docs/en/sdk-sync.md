@@ -3,8 +3,8 @@
 floria still carries a local provider-payload sweep for forbidden egress
 fields that are stricter than the SDK's generic blind-payload helper. The
 SDK exposes `arkret::blind_payload_sanitizer::is_forbidden_payload_key`,
-but the exported list is not yet sufficient for realm, appeal, attestation,
-policy-frontier, cross-signing-reset, and Circle field names.
+but the exported list is not yet sufficient for appeal, attestation,
+policy-frontier, and cross-signing-reset field names.
 
 ## Local Sweep
 
@@ -27,13 +27,23 @@ Realm/Space/Circle identifiers stay off the provider wire.
 | `policy_frontier_digest` | R3 | Stable policy frontier correlator — same linkability class as the audit policy version |
 | `trust_domain` | R3 | Deployment-scope leakage — exposes whether the principal is on a federation edge |
 | `reset_event_id` | R3 | Links a push to a cross-signing reset event, exposing key-rotation timing |
-| `circle_id` | AKP-0007 | Encryption sub-boundary id — would tell an observer which Circle inside a Realm a push is destined for |
-| `effective_scope` | AKP-0007 | Reveals the realm/circle binding the principal server stamped on the request |
-| `scope_circle_id` | AKP-0007 | Same class as `circle_id`; an alias used by some draft schemas |
 
 The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
 `data.payload`).
+
+### Circle identifiers are structurally impossible, not stripped
+
+`circle_id`, `effective_scope` and `scope_circle_id` are **not** on the
+sweep list and must not be added back. The v1 push wire model has no
+Circle identifier and no scope field at all: `push-notifications.md` §5.1
+keeps raw Realm ids, Circle ids and `effective_scope` off
+`/_arkret/edge/push/notify`, and `PushNotificationEnvelope` is
+`serde(deny_unknown_fields)`, so such a name cannot even deserialize into
+floria's typed model. The security scope of an Event lives in its
+producer-signed `scope_ref` and never reaches a gateway. The negative
+assertions in the Android / FCM / WebPush adapters stay as regression
+guards on the allow-list builder.
 
 ## Mention Reference v2 N/A
 

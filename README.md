@@ -62,9 +62,12 @@ account_deactivate_fanout` (T07) and `POST /_floria/internal/
 consent_revoke` (T17) consumed from soland. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../arkret-spec/CHANGELOG.md`](../arkret-spec/CHANGELOG.md) for the
-normative source. Ephemeral kinds (`ak.presence`, `ak.typing`,
+normative source. Signal kinds (`ak.presence`, `ak.typing`,
 `ak.receipt.read`, `ak.call.signal`) are confirmed to bypass floria
-entirely; they ride dedicated ephemeral channels in the Sync Service.
+entirely; they ride the encrypted `SignalEnvelope` rail in the Sync
+Service (`spec/v1/zh/sync/signal.md`). There is no plaintext ephemeral
+rail: `EphemeralEnvelope` and the `ephemeral` transaction-body field are
+gone, superseded by `SignalEnvelope` / `signals`.
 
 ## Cross-project task tracking
 

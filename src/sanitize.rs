@@ -20,9 +20,8 @@ use arkret_push_policy::blind_payload_sanitizer as sdk;
 /// Names accepted inbound but silently stripped before a provider sees
 /// them. Matched case-insensitively.
 ///
-///   * AKP-0007 Circle primitive (`circle_id` / `effective_scope` / `scope_circle_id`) — drives
-///     gateway-internal routing & dedup normalization; leaking it would disclose the encryption
-///     sub-boundary / realm binding.
+///   * SPEC-CR-016 gateway-internal routing fragment (`route_tokens` and its leaves) — consumed by
+///     floria for routing/dedup, opaque by construction, never forwarded.
 ///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,
 ///     cross-signing reset, policy-frontier hash) — meaningful to the audit pipeline, a stable
 ///     correlator on the provider wire.

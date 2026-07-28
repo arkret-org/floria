@@ -112,11 +112,8 @@ pub(super) fn validate_notification_contract(
         ));
     }
 
-    // AKP-0007 — `effective_scope` must agree with the routing fields
-    // when set. This catches operator misconfigurations (caller
-    // updated `realm_id` but forgot `circle_id`, or stamped a Circle
-    // scope on the envelope but kept `circle_id` blank in the push
-    // wire model).
+    // Visible metadata is per-device opt-in even for a caller that is
+    // allowed the visible-notification profile.
     validate_visible_notification_device_opt_in(notification, caller)?;
 
     if let Some(push_hint) = notification.push_hint.as_deref() {

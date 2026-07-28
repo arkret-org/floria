@@ -26,8 +26,14 @@ Out-of-scope:
 
 Per spec, Circle is an intra-Realm cryptographic sub-boundary:
 - Circle member lists MUST NOT leak to directory services or push gateways in plaintext
-- `effective_scope` MUST match the encryption scope of the payload
-- `discussion_realm_ref` is hard-rejected on the wire (forbidden field)
+- The security scope of an Event lives in its producer-signed `scope_ref`
+  (`models/circle.md` §6.2 — the Event wire has exactly one scope field).
+  Object read projections MAY materialize `effective_scope`, which must equal
+  the creating Event's `scope_ref`; neither name may reach a push gateway.
+- Raw Realm ids, Circle ids and `effective_scope` MUST NOT enter the
+  `/_arkret/edge/push/notify` wire (`discovery/push-notifications.md` §5.1).
+  Routing is expressed only through `route_tokens` and
+  `devices[].target_route_token`.
 
 Violations of these invariants are treated as security issues.
 

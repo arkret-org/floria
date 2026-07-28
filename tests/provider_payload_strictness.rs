@@ -245,12 +245,12 @@ fn sanitizer_strips_private_notification_preferences() {
 // ---------------------------------------------------------------------------
 // AKP-0007 Circle primitive — privacy invariants.
 //
-// Circle routing metadata (`circle_id`, `effective_scope`,
-// `scope_circle_id`) drives gateway-internal routing only. It MUST
-// NOT surface in any provider plaintext payload, regardless of which
-// profile (blind / visible) the caller is on — Circle identifiers
-// reveal the encryption sub-boundary an observer is looking at and
-// the reducer-stamped realm/circle binding.
+// Scope routing rides opaque `route_tokens` only. Per
+// `push-notifications.md` §5.1 no raw Circle id, Realm id or
+// `effective_scope` may enter `/_arkret/edge/push/notify` at all, and the
+// route tokens that do ride it MUST NOT surface in any provider plaintext
+// payload, regardless of which profile (blind / visible) the caller is on
+// — they reveal the encryption sub-boundary an observer is looking at.
 // ---------------------------------------------------------------------------
 
 #[test]
