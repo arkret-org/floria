@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use arkret_wire::{ProfileId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
 
-use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
+use super::MAX_REQUEST_SIZE;
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
@@ -88,7 +89,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         .iter()
         .map(|&profile_id| {
             let mut entry = arkret_models_discovery::ClaimedProfileEntry::self_claimed(profile_id);
-            if profile_id == PROFILE_PUSH_GATEWAY {
+            if profile_id == ProfileId::PUSH_GATEWAY_V1 {
                 entry.notes = Some(
                     "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)"
                         .to_owned(),
@@ -110,7 +111,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     limits.insert("max_request_size_bytes".to_owned(), json!(MAX_REQUEST_SIZE));
     limits.insert(
         "x_floria_operation_id".to_owned(),
-        json!(NOTIFY_OPERATION_ID),
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY),
     );
     limits.insert(
         "x_floria_supported_providers".to_owned(),
@@ -184,7 +185,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
-        supported_operations: vec![NOTIFY_OPERATION_ID.to_owned()],
+        supported_operations: vec![ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned()],
         supported_bindings: vec![arkret_models_discovery::SupportedBinding::new("http")],
         supported_features: vec![
             "push.notify".to_owned(),
@@ -257,16 +258,12 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
 }
 
 /// Base push-gateway profile id.
-pub(super) const PROFILE_PUSH_GATEWAY: &str = "ak.profile.push_gateway.v1";
 /// Mandatory default-interop privacy baseline. Spec (push-notifications.md
 /// §0, conformance-profiles.json) — any implementation claiming
 /// `ak.profile.push_gateway.v1` MUST also claim this profile.
-pub(super) const PROFILE_BLIND_WAKEUP: &str = "ak.profile.push_gateway.blind_wakeup.v1";
 /// Opt-in visible-payload profile. Only advertised when the gateway is
 /// configured with a plaintext-eligible service surface
 /// (`describe_plaintext_visibility == "service-gated"`).
-pub(super) const PROFILE_VISIBLE_NOTIFICATION: &str =
-    "ak.profile.push_gateway.visible_notification.v1";
 
 /// Profiles the gateway actually supports and gates on, in claim order.
 /// The base profile and its mandatory blind-wakeup baseline are always
@@ -274,9 +271,12 @@ pub(super) const PROFILE_VISIBLE_NOTIFICATION: &str =
 /// plaintext-eligible service surface is configured (matching the
 /// internal `allow_plaintext_metadata` gate in `notify.rs`).
 pub(super) fn describe_supported_profiles(auth: &NotifyAuthConfig) -> Vec<&'static str> {
-    let mut profiles = vec![PROFILE_PUSH_GATEWAY, PROFILE_BLIND_WAKEUP];
+    let mut profiles = vec![
+        ProfileId::PUSH_GATEWAY_V1,
+        ProfileId::PUSH_GATEWAY_BLIND_WAKEUP_V1,
+    ];
     if describe_plaintext_visibility(auth) == "service-gated" {
-        profiles.push(PROFILE_VISIBLE_NOTIFICATION);
+        profiles.push(ProfileId::PUSH_GATEWAY_VISIBLE_NOTIFICATION_V1);
     }
     profiles
 }

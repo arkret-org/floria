@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use arkret_wire::ServiceOperationId;
 use salvo::test::{ResponseExt, TestClient};
 use serde_json::{Value, json};
 
@@ -59,7 +60,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(body["service_kind"], json!("push_gateway"));
     assert_eq!(
         body["limits"]["x_floria_operation_id"],
-        json!(NOTIFY_OPERATION_ID)
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY)
     );
     // The mandatory blind-wakeup baseline is always advertised alongside
     // the base profile; the visible-notification profile is only added
@@ -235,7 +236,7 @@ async fn gateway_describe_lives_at_root_meta_position() {
     assert_eq!(server_body["service_kind"], json!("push_gateway"));
     assert_eq!(
         server_body["limits"]["x_floria_operation_id"],
-        json!(NOTIFY_OPERATION_ID)
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY)
     );
 
     // The self-made /_arkret/edge/push/describe path MUST NOT exist;

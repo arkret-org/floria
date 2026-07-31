@@ -5,14 +5,15 @@ use arkret_models_integration::push::{
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
     PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
 };
+use arkret_wire::ServiceOperationId;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
+use super::MAX_REQUEST_SIZE;
 use super::server_describe::{
     describe_auth_modes, describe_plaintext_visibility, describe_rate_limit_scopes,
     describe_supported_profiles,
 };
-use super::{MAX_REQUEST_SIZE, NOTIFY_OPERATION_ID};
 use crate::AppState;
 use crate::auth::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER};
 use crate::pushkin::PROVIDER_CAPABILITIES_VERSION;
@@ -78,7 +79,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         },
         notify: PushBridgeDescribeNotifyDescriptor {
             notify_path: "/_arkret/edge/push/notify".to_owned(),
-            operation_id: NOTIFY_OPERATION_ID.to_owned(),
+            operation_id: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned(),
             request_id_header: "X-Arkret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
             source_service_id_header: SOURCE_SERVICE_ID_HEADER.to_owned(),
