@@ -72,7 +72,7 @@ jobs:
       - name: Install MSRV Rust toolchain
         # Must match `rust-version` in Cargo.toml so this job actually
         # verifies the declared floor.
-        uses: dtolnay/rust-toolchain@1.96
+        uses: dtolnay/rust-toolchain@1.97
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2

@@ -2,7 +2,7 @@
 name = "floria"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.97"
 license = "Apache-2.0"
 description = "arkret-compatible push gateway service with APNS, FCM, WebPush, and domestic Android OEM providers."
 

@@ -8,7 +8,7 @@
 # layer until either manifest changes — typical incremental builds touch only
 # the source-build stage.
 # ---------------------------------------------------------------------------
-FROM rust:1.92-bookworm AS deps
+FROM rust:1.97-bookworm AS deps
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # crate. The `target/` directory is mounted as a cache so dirty rebuilds stay
 # incremental between Docker invocations.
 # ---------------------------------------------------------------------------
-FROM rust:1.92-bookworm AS builder
+FROM rust:1.97-bookworm AS builder
 
 WORKDIR /app
 
