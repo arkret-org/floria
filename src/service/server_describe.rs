@@ -193,6 +193,10 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "push.rate_limit".to_owned(),
             "push.provider_matrix".to_owned(),
         ],
+        // A push gateway claims no Calendar profile, so it advertises no
+        // executable TZDB release set. `service-describe.schema.json` requires
+        // this field only for a service that claims one.
+        calendar_tzdb_versions: Vec::new(),
         auth_metadata,
         limits: arkret_models_discovery::ServerLimits {
             max_get_query_selectors: None,
