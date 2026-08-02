@@ -4,6 +4,16 @@ All notable changes to floria (Arkret push gateway) will be documented in this
 file. The format is loosely based on [Keep a Changelog]; floria follows the
 parent Arkret spec's round-numbering for grouping wire-breaking changes.
 
+## Current protocol alignment (2026-08-03)
+
+- Removed the obsolete T17 push-contact PSI cache, its custom
+  `consent_revoke` broadcast DTO and internal endpoint. Contact and Personal DM
+  admission now depend only on upstream directional Contact heads; Floria does
+  not maintain a second Consent-based authority model.
+- Agent lifecycle events retain the SDK-typed no-fanout behavior. Current
+  lifecycle and participation gates remain upstream of the closed push-notify
+  envelope.
+
 ## R3.4 — Spec sync 2026-05-31 (arkret-spec @ c2848a4)
 
 - Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ak:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.

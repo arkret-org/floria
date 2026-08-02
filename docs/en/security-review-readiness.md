@@ -13,7 +13,7 @@ Review focus:
    and dedup collision handling.
 3. Multi-tenant isolation: provider app matching, plaintext metadata gates,
    blind payload sanitizer, and token redaction.
-4. Internal broadcast paths for deactivation fanout and consent revocation.
+4. The internal account-deactivation fanout path.
 5. Supply-chain controls: audit, deny, typos, Trivy, SBOM, and local provenance.
 
 Out of scope for this local readiness record:

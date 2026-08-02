@@ -151,33 +151,9 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 false,
                 "The caller requested a non-canonical notify operation or unsupported contract feature.",
             ),
-            // CARD-1 (R3 spec-sync 2026-05-27, `_before_todos.md` §0.7,
-            // AKP-0008 / AKP-0009 / AKP-0010) — push surface
-            // failure codes for Personal Agent lifecycle state and the
-            // recording-artifact pipeline. Floria's notify pipeline
-            // already silently consumes the durable `ak.agent.*` event
-            // kinds and flushes the PSI cache when soland broadcasts
-            // `consent_revoke{reason=agent_paused|agent_deactivated}`;
-            // these descriptors expose the wire-form error codes so
-            // operator dashboards and SDK callers can surface the
-            // fail-closed shape in the rare path where floria itself
-            // emits the code (e.g. a future push policy gate that
-            // rejects fan-out for a deactivated controller, or the
-            // recording-artifact destination check on a token-exchange
-            // proxy hop). The strings are pinned to the SDK error-code
-            // constants so a spec-side rename forces a recompile here.
-            PushBridgeFailureCodeDescriptor::new(
-                "agent_paused",
-                StatusCode::FORBIDDEN.as_u16(),
-                false,
-                "The notification references a Personal Agent principal whose runtime is paused; floria fails closed so a paused agent does not pump pushes from a stale capability cache.",
-            ),
-            PushBridgeFailureCodeDescriptor::new(
-                "agent_deactivated",
-                StatusCode::FORBIDDEN.as_u16(),
-                false,
-                "The notification references a Personal Agent principal that has been deactivated (terminal state). The push is rejected; controllers must provision a new agent before retrying.",
-            ),
+            // Recording-artifact routing is an independent media pipeline
+            // constraint. Agent lifecycle and participation are upstream
+            // admission gates and are not advertised as Floria failures.
             PushBridgeFailureCodeDescriptor::new(
                 arkret_wire::error_codes::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED,
                 StatusCode::FORBIDDEN.as_u16(),

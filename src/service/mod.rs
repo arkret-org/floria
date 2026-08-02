@@ -39,16 +39,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("_arkret/describe").get(server_describe::describe))
-        // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
+        // Internal account-lifecycle broadcast endpoint.
         .push(
             Router::with_path("_floria/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
-        )
-        .push(
-            Router::with_path("_floria/internal/consent_revoke")
-                .hoop(internal::require_internal_auth)
-                .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(
@@ -80,16 +75,11 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
                 .get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("_arkret/describe").get(server_describe::describe))
-        // Round R2/R3 (T07/T17) — internal soland broadcast endpoints.
+        // Internal account-lifecycle broadcast endpoint.
         .push(
             Router::with_path("_floria/internal/account_deactivate_fanout")
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
-        )
-        .push(
-            Router::with_path("_floria/internal/consent_revoke")
-                .hoop(internal::require_internal_auth)
-                .post(internal::consent_revoke),
         )
         // Phase B.4 — status lookup + internal device unregister.
         .push(

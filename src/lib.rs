@@ -12,7 +12,6 @@ pub mod models;
 pub mod nonce_store;
 pub mod observability;
 pub mod postgres_support;
-pub mod push_contact_cache;
 pub mod pushkin;
 pub mod rate_limit;
 pub(crate) mod redis_support;
@@ -46,25 +45,24 @@ use config::{InternalAuthConfig, NotifyAuthConfig};
 use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
 use nonce_store::NonceStore;
-use push_contact_cache::PushContactCache;
 use pushkin::PushkinRegistry;
 use rate_limit::NotifyRateLimiter;
 use retry_queue::RetryQueue;
 
-// Round R2/R3 (T07/T17) — broadcast-channel surfaces:
+// Account-deactivation broadcast state is independent from Contact,
+// Direct Conversation, participation, Sidecar and operation-control admission.
+// Those gates are evaluated by the upstream Sync / notification service before
+// it constructs the closed push-notify envelope.
 //
-//   * `deactivation_ledger` accepts `account_deactivate_fanout` events from soland, performs
-//     per-actor + per-device unbinds, and tracks whether the fanout completed fully or partially.
-//     Sealed channels still count as drained so soland's fanout state isn't blocked on a dead push
-//     provider.
-//   * `push_contact_cache` accepts `consent_revoke{scope=any}` events and drops every cached PSI
-//     verdict for the affected principal so the next push goes through a fresh consent check.
+// `deactivation_ledger` accepts `account_deactivate_fanout` events from soland,
+// performs per-actor + per-device unbinds, and tracks whether the fanout completed
+// fully or partially. Sealed channels still count as drained so soland's fanout
+// state isn't blocked on a dead push provider.
 //
-// Both are `Option<Arc<…>>` so deployments that do not subscribe to
-// the soland broadcast bus / audit endpoint can leave them unset; the
-// matching required routes then answer `503 service_unavailable` so
-// misconfigurations surface in operator dashboards rather than silently
-// swallowing broadcasts or audit events.
+// It is optional so deployments that do not subscribe to the soland
+// broadcast bus can leave it unset; the endpoint then answers
+// `503 service_unavailable` so misconfigurations surface in operator dashboards
+// rather than silently swallowing broadcasts.
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
@@ -77,7 +75,6 @@ pub struct AppState {
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
     pub circuit_breaker: Option<Arc<CircuitBreaker>>,
     pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
-    pub push_contact_cache: Option<Arc<PushContactCache>>,
     pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
     /// AKP-0007 — when `true`, per-(provider, scope) metrics use the
     /// `circle_id` (cardinality up to the number of active Circles).
@@ -98,7 +95,6 @@ impl AppState {
             notify_retry_queue: None,
             circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
             deactivation_ledger: None,
-            push_contact_cache: None,
             broadcast_bus: None,
             metrics_detailed_circle_labels: false,
         }
@@ -119,7 +115,6 @@ impl AppState {
             notify_retry_queue: None,
             circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
             deactivation_ledger: None,
-            push_contact_cache: None,
             broadcast_bus: None,
             metrics_detailed_circle_labels: false,
         }

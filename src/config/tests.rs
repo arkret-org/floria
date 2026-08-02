@@ -227,10 +227,10 @@ fn validate_requires_http_url_for_http_audit_backend() {
 #[test]
 fn validate_rejects_unsafe_storage_table_names() {
     let mut config = Config::default();
-    config.storage.push_contact_cache_table = "floria.cache;drop".to_owned();
+    config.storage.deactivation_queue_table = "floria.queue;drop".to_owned();
 
     let error = config.validate().unwrap_err().to_string();
-    assert!(error.contains("storage.push_contact_cache_table"));
+    assert!(error.contains("storage.deactivation_queue_table"));
 }
 
 #[test]

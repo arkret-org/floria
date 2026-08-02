@@ -338,7 +338,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // no provider call is issued and no per-device dedup state is
     // touched. Any other `reason_code` value is rejected — floria
     // only honors the well-known no-op shape on the request side.
-    match request.reason_code.as_deref() {
+    match request.reason_code.as_ref().map(|reason| reason.as_str()) {
         None => {}
         Some(value) if value == HISTORICAL_ONLY_REASON => {
             tracing::info!(
@@ -368,9 +368,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // surface any of them onto user-device push by default:
     //
     //   * `ak.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
-    //     zero fanout. The authoritative capability-cache invalidation path for these state changes
-    //     is the soland `consent_revoke` fanout (`reason=agent_paused` / `agent_deactivated`), not
-    //     a push.
+    //     zero fanout. Current lifecycle and participation admission are evaluated by the upstream
+    //     Sync / notification service before it constructs this closed push envelope.
     //   * `ak.agent.{draft.propose, action_request, action_approve, action_reject}` —
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
@@ -387,8 +386,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     request_id = %request_id,
                     event_kind = %kind,
                     "answering 200 no-fanout ack: durable agent lifecycle \
-                     event silently consumed (capability cache invalidation \
-                     strands through consent_revoke)"
+                     event silently consumed (current lifecycle and participation \
+                     admission remain upstream)"
                 );
             }
             AgentEventRouting::ActorPrivateDrop => {

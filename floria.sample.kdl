@@ -111,7 +111,6 @@ storage {
   // Omit postgres_url for process-local broadcast state.
   // postgres_url "postgres://floria:secret@127.0.0.1:5432/floria"
   deactivation_queue_table "floria_push_delivery_queue"
-  push_contact_cache_table "floria_push_contact_cache"
 }
 
 metrics {

@@ -772,7 +772,7 @@
     },
     "storage": {
       "additionalProperties": false,
-      "description": "Optional PostgreSQL storage for deactivation queue draining and push-contact PSI cache persistence.",
+      "description": "Optional PostgreSQL storage for deactivation queue draining.",
       "properties": {
         "deactivation_queue_table": {
           "default": "floria_push_delivery_queue",
@@ -780,16 +780,11 @@
           "type": "string"
         },
         "postgres_url": {
-          "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping and push-contact cache are in-memory only.",
+          "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping is in-memory only.",
           "type": [
             "string",
             "null"
           ]
-        },
-        "push_contact_cache_table": {
-          "default": "floria_push_contact_cache",
-          "description": "Table used by the PostgreSQL push-contact PSI cache overlay. Must be `table` or `schema.table` with simple SQL identifiers.",
-          "type": "string"
         }
       },
       "type": "object"

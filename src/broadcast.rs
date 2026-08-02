@@ -1,22 +1,17 @@
 use std::sync::Arc;
 
-use serde::Serialize;
-
 use crate::deactivation::{
     AccountDeactivateFanoutAck, AccountDeactivateFanoutBroadcast, DeactivationLedger,
 };
-use crate::push_contact_cache::{ConsentRevokeBroadcast, PushContactCache};
 
 #[derive(Debug, Clone)]
 pub struct InProcessBroadcastBus {
     deactivation_ledger: Option<Arc<DeactivationLedger>>,
-    push_contact_cache: Option<Arc<PushContactCache>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BroadcastError {
     DeactivationLedgerUnavailable,
-    PushContactCacheUnavailable,
     WorkerJoinFailed,
 }
 
@@ -26,29 +21,15 @@ impl BroadcastError {
             Self::DeactivationLedgerUnavailable => {
                 "deactivation ledger is not configured on this push gateway"
             }
-            Self::PushContactCacheUnavailable => {
-                "push contact cache is not configured on this push gateway"
-            }
             Self::WorkerJoinFailed => "background broadcast worker failed",
         }
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct ConsentRevokeAck {
-    pub broadcast_id: String,
-    pub scope: &'static str,
-    pub entries_evicted: usize,
-}
-
 impl InProcessBroadcastBus {
-    pub fn new(
-        deactivation_ledger: Option<Arc<DeactivationLedger>>,
-        push_contact_cache: Option<Arc<PushContactCache>>,
-    ) -> Self {
+    pub fn new(deactivation_ledger: Option<Arc<DeactivationLedger>>) -> Self {
         Self {
             deactivation_ledger,
-            push_contact_cache,
         }
     }
 
@@ -80,34 +61,17 @@ impl InProcessBroadcastBus {
             .await
             .unwrap_or(Err(BroadcastError::WorkerJoinFailed))
     }
-
-    pub async fn consent_revoke(
-        &self,
-        broadcast: &ConsentRevokeBroadcast,
-    ) -> Result<ConsentRevokeAck, BroadcastError> {
-        let Some(cache) = self.push_contact_cache.as_ref() else {
-            return Err(BroadcastError::PushContactCacheUnavailable);
-        };
-        Ok(ConsentRevokeAck {
-            broadcast_id: broadcast.broadcast_id.clone(),
-            scope: ConsentRevokeBroadcast::SUPPORTED_SCOPE,
-            entries_evicted: cache
-                .invalidate_principal_async(&broadcast.principal_id)
-                .await,
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::deactivation::DeactivateFanoutDevice;
-    use crate::push_contact_cache::PsiVerdict;
 
     #[test]
     fn bus_processes_deactivation_fanout() {
         let ledger = Arc::new(DeactivationLedger::new());
-        let bus = InProcessBroadcastBus::new(Some(ledger), None);
+        let bus = InProcessBroadcastBus::new(Some(ledger));
         let ack = bus
             .account_deactivate_fanout(&AccountDeactivateFanoutBroadcast {
                 fanout_id: "fanout-1".to_owned(),
@@ -121,22 +85,5 @@ mod tests {
             .unwrap();
         assert_eq!(ack.messages_drained, 0);
         assert_eq!(ack.device_bindings_unbound, 1);
-    }
-
-    #[tokio::test]
-    async fn bus_processes_consent_revoke() {
-        let cache = Arc::new(PushContactCache::in_memory());
-        cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
-        let bus = InProcessBroadcastBus::new(None, Some(cache));
-        let ack = bus
-            .consent_revoke(&ConsentRevokeBroadcast {
-                broadcast_id: "bcast-1".to_owned(),
-                principal_id: "did:web:alice.example".to_owned(),
-                scope: "any".to_owned(),
-                reason: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(ack.entries_evicted, 1);
     }
 }

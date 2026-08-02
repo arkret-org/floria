@@ -1,4 +1,4 @@
-//! Round R2/R3 (T07 + T17) — internal soland-broadcast endpoints.
+//! Internal account-lifecycle broadcast endpoints.
 //!
 //! These routes are intended for the soland-broadcast channel (or an
 //! equivalent in-process message bus). They are exposed under
@@ -17,7 +17,6 @@ use super::metrics::{finish_error, finish_json};
 use crate::AppState;
 use crate::auth::{BearerState, bearer_state};
 use crate::deactivation::AccountDeactivateFanoutBroadcast;
-use crate::push_contact_cache::ConsentRevokeBroadcast;
 
 #[handler]
 pub(super) async fn require_internal_auth(
@@ -376,102 +375,5 @@ pub(super) async fn account_deactivate_fanout(
     // Note: even when `outcome == PartiallyCompleted` we return 200 OK
     // with an honest ack body — the partial signal is for soland's
     // bookkeeping, not an HTTP transport error.
-    finish_json(res, StatusCode::OK, ack, started);
-}
-
-#[handler]
-pub(super) async fn consent_revoke(req: &mut Request, depot: &mut Depot, res: &mut Response) {
-    let started = Instant::now();
-    let state = match depot.get_typed::<Arc<AppState>>() {
-        Ok(state) => state.clone(),
-        Err(_) => {
-            finish_error(
-                res,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
-                "application state missing",
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-
-    let body: ConsentRevokeBroadcast = match req.parse_json().await {
-        Ok(body) => body,
-        Err(error) => {
-            tracing::warn!(error = %error, "invalid consent_revoke body");
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                "invalid consent_revoke body",
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-
-    if !body.scope_is_any() {
-        // Scoped revocations need realm context that floria doesn't
-        // learn. soland is expected to route those to the right
-        // service (sync / principal) directly.
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            arkret_wire::error_codes::ErrorCode::UNSUPPORTED_FEATURE,
-            &format!(
-                "consent_revoke scope must be `{}`; floria does not handle scoped revocations",
-                ConsentRevokeBroadcast::SUPPORTED_SCOPE
-            ),
-            None,
-            None,
-            started,
-        );
-        return;
-    }
-
-    let Some(bus) = state.broadcast_bus.as_ref() else {
-        // No cache wired up → nothing to invalidate. soland's broadcast
-        // is still a success, but we answer 503 so it's obvious in
-        // operator dashboards that the listener saw the broadcast but
-        // couldn't act.
-        finish_error(
-            res,
-            StatusCode::SERVICE_UNAVAILABLE,
-            arkret_wire::error_codes::ErrorCode::SERVICE_UNAVAILABLE,
-            "in-process broadcast bus is not configured on this push gateway",
-            None,
-            None,
-            started,
-        );
-        return;
-    };
-
-    let ack = match bus.consent_revoke(&body).await {
-        Ok(ack) => ack,
-        Err(error) => {
-            finish_error(
-                res,
-                StatusCode::SERVICE_UNAVAILABLE,
-                arkret_wire::error_codes::ErrorCode::SERVICE_UNAVAILABLE,
-                error.message(),
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-    tracing::info!(
-        broadcast_id = %ack.broadcast_id,
-        scope = ack.scope,
-        entries_evicted = ack.entries_evicted,
-        reason = body.reason_str().unwrap_or("<unset>"),
-        "processed consent_revoke scope=any broadcast"
-    );
     finish_json(res, StatusCode::OK, ack, started);
 }

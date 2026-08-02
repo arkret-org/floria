@@ -1,7 +1,6 @@
-//! Round R2/R3 (T07 + T17) — service tests for the internal
-//! soland-broadcast endpoints (`account_deactivate_fanout`,
-//! `consent_revoke`). Verifies wire-shape rejection, idempotency, and
-//! the sealed-channel "still complete" outcome.
+//! Service tests for the internal account-deactivation broadcast endpoint.
+//! Verifies wire-shape rejection, idempotency, and the sealed-channel
+//! "still complete" outcome.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -16,7 +15,6 @@ use crate::config::InternalAuthConfig;
 use crate::deactivation::{
     AccountDeactivateFanoutBroadcast, DeactivationLedger, DeactivationQueueDrain,
 };
-use crate::push_contact_cache::{PsiVerdict, PushContactCache};
 use crate::pushkin::PushkinRegistry;
 
 const INTERNAL_TOKEN: &str = "internal-test-token";
@@ -36,15 +34,12 @@ impl DeactivationQueueDrain for TestQueueDrain {
 
 fn test_service_with_internal_state(
     deactivation_ledger: Option<Arc<DeactivationLedger>>,
-    push_contact_cache: Option<Arc<PushContactCache>>,
 ) -> Service {
     let registry = PushkinRegistry::new(HashMap::new());
     let mut state = AppState::new(Arc::new(registry));
     state.deactivation_ledger = deactivation_ledger;
-    state.push_contact_cache = push_contact_cache;
     state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(
         state.deactivation_ledger.clone(),
-        state.push_contact_cache.clone(),
     )));
     state.internal_auth = internal_auth_config();
     Service::new(build_router(Arc::new(state)))
@@ -60,7 +55,7 @@ fn test_service_without_broadcast_bus() -> Service {
 fn test_service_without_internal_auth() -> Service {
     let registry = PushkinRegistry::new(HashMap::new());
     let mut state = AppState::new(Arc::new(registry));
-    state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(None, None)));
+    state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(None)));
     Service::new(build_router(Arc::new(state)))
 }
 
@@ -202,7 +197,7 @@ async fn status_and_device_unregister_require_internal_bearer() {
 #[tokio::test]
 async fn account_deactivate_fanout_completes_for_drained_devices() {
     let ledger = Arc::new(DeactivationLedger::new());
-    let service = test_service_with_internal_state(Some(ledger.clone()), None);
+    let service = test_service_with_internal_state(Some(ledger.clone()));
 
     let mut response = internal_auth(TestClient::post(
         "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
@@ -230,7 +225,7 @@ async fn account_deactivate_fanout_completes_for_drained_devices() {
 #[tokio::test]
 async fn account_deactivate_fanout_is_idempotent_across_retries() {
     let ledger = Arc::new(DeactivationLedger::new());
-    let service = test_service_with_internal_state(Some(ledger.clone()), None);
+    let service = test_service_with_internal_state(Some(ledger.clone()));
 
     let payload = json!({
         "fanout_id": "fanout-1",
@@ -268,7 +263,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
             drained: 7,
         },
     )));
-    let service = test_service_with_internal_state(Some(ledger), None);
+    let service = test_service_with_internal_state(Some(ledger));
 
     let payload = json!({
         "fanout_id": "fanout-drain-1",
@@ -310,7 +305,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
 async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
     let ledger = Arc::new(DeactivationLedger::new());
     ledger.mark_channel_sealed("did:web:alice.example", "device-a");
-    let service = test_service_with_internal_state(Some(ledger.clone()), None);
+    let service = test_service_with_internal_state(Some(ledger.clone()));
 
     let mut response = internal_auth(TestClient::post(
         "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
@@ -338,7 +333,7 @@ async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
 #[tokio::test]
 async fn account_deactivate_fanout_rejects_missing_actor_id() {
     let ledger = Arc::new(DeactivationLedger::new());
-    let service = test_service_with_internal_state(Some(ledger), None);
+    let service = test_service_with_internal_state(Some(ledger));
 
     let mut response = internal_auth(TestClient::post(
         "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
@@ -367,139 +362,6 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
         "fanout_id": "fanout-1",
         "actor_id": "did:web:alice.example",
         "devices": []
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(
-        response.status_code.unwrap(),
-        StatusCode::SERVICE_UNAVAILABLE
-    );
-    let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("service_unavailable"));
-}
-
-#[tokio::test]
-async fn consent_revoke_scope_any_invalidates_principal_entries() {
-    let cache = Arc::new(PushContactCache::in_memory());
-    cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
-    cache.insert("did:web:alice.example", "psi-2", PsiVerdict::Denied);
-    cache.insert("did:web:bob.example", "psi-1", PsiVerdict::Allowed);
-
-    let service = test_service_with_internal_state(None, Some(cache.clone()));
-
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/consent_revoke",
-    ))
-    .json(&json!({
-        "broadcast_id": "bcast-1",
-        "principal_id": "did:web:alice.example",
-        "scope": "any"
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["entries_evicted"], json!(2));
-    assert_eq!(body["scope"], json!("any"));
-
-    // Alice's entries gone, Bob's still cached.
-    assert!(cache.get("did:web:alice.example", "psi-1").is_none());
-    assert_eq!(
-        cache.get("did:web:bob.example", "psi-1"),
-        Some(PsiVerdict::Allowed)
-    );
-}
-
-#[tokio::test]
-async fn consent_revoke_rejects_scoped_revocation() {
-    let cache = Arc::new(PushContactCache::in_memory());
-    let service = test_service_with_internal_state(None, Some(cache));
-
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/consent_revoke",
-    ))
-    .json(&json!({
-        "broadcast_id": "bcast-1",
-        "principal_id": "did:web:alice.example",
-        "scope": "realm"
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
-    let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("unsupported_feature"));
-}
-
-#[tokio::test]
-async fn consent_revoke_accepts_agent_paused_reason() {
-    let cache = Arc::new(PushContactCache::in_memory());
-    cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
-
-    let service = test_service_with_internal_state(None, Some(cache.clone()));
-
-    // Phase P2 (AKP-0008) — soland attaches `reason=agent_paused`
-    // when the controller pauses a native Personal Agent so the
-    // downstream capability cache is invalidated. floria treats every
-    // reason identically (full PSI cache evict), but the field must
-    // round-trip cleanly through `serde(deny_unknown_fields)`.
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/consent_revoke",
-    ))
-    .json(&json!({
-        "broadcast_id": "bcast-agent-paused",
-        "principal_id": "did:web:alice.example",
-        "scope": "any",
-        "reason": "agent_paused"
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["entries_evicted"], json!(1));
-}
-
-#[tokio::test]
-async fn consent_revoke_accepts_agent_deactivated_reason() {
-    let cache = Arc::new(PushContactCache::in_memory());
-    cache.insert("did:web:alice.example", "psi-1", PsiVerdict::Allowed);
-
-    let service = test_service_with_internal_state(None, Some(cache.clone()));
-
-    // Phase P2 (AKP-0009) — agent deactivation invalidates the
-    // capability cache alongside the soland-side agent_key revoke
-    // cascade.
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/consent_revoke",
-    ))
-    .json(&json!({
-        "broadcast_id": "bcast-agent-deact",
-        "principal_id": "did:web:alice.example",
-        "scope": "any",
-        "reason": "agent_deactivated"
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["entries_evicted"], json!(1));
-}
-
-#[tokio::test]
-async fn consent_revoke_returns_503_when_cache_unwired() {
-    let service = test_service_without_broadcast_bus();
-
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/consent_revoke",
-    ))
-    .json(&json!({
-        "broadcast_id": "bcast-1",
-        "principal_id": "did:web:alice.example",
-        "scope": "any"
     }))
     .send(&service)
     .await;

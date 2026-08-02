@@ -119,7 +119,6 @@ impl AuditConfig {
 pub struct StorageConfig {
     pub postgres_url: Option<String>,
     pub deactivation_queue_table: String,
-    pub push_contact_cache_table: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -129,7 +128,6 @@ impl Default for StorageConfig {
         Self {
             postgres_url: None,
             deactivation_queue_table: "floria_push_delivery_queue".to_owned(),
-            push_contact_cache_table: "floria_push_contact_cache".to_owned(),
             extra: Map::new(),
         }
     }
@@ -156,15 +154,6 @@ impl StorageConfig {
         }
     }
 
-    pub fn push_contact_cache_table(&self) -> &str {
-        let value = self.push_contact_cache_table.trim();
-        if value.is_empty() {
-            "floria_push_contact_cache"
-        } else {
-            value
-        }
-    }
-
     pub(super) fn emit_startup_warnings(&self) {
         warn_unknown_fields(
             "storage",
@@ -179,10 +168,6 @@ impl StorageConfig {
         crate::postgres_support::SqlTableName::parse(
             self.deactivation_queue_table(),
             "storage.deactivation_queue_table",
-        )?;
-        crate::postgres_support::SqlTableName::parse(
-            self.push_contact_cache_table(),
-            "storage.push_contact_cache_table",
         )?;
         Ok(())
     }

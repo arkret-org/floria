@@ -39,21 +39,16 @@ fn storage_schema() -> Value {
     serde_json::json!({
         "type": "object",
         "additionalProperties": false,
-        "description": "Optional PostgreSQL storage for deactivation queue draining and push-contact PSI cache persistence.",
+        "description": "Optional PostgreSQL storage for deactivation queue draining.",
         "properties": {
             "postgres_url": {
                 "type": ["string", "null"],
-                "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping and push-contact cache are in-memory only."
+                "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping is in-memory only."
             },
             "deactivation_queue_table": {
                 "type": "string",
                 "default": "floria_push_delivery_queue",
                 "description": "Table drained by account_deactivate_fanout. Must be `table` or `schema.table` with simple SQL identifiers."
-            },
-            "push_contact_cache_table": {
-                "type": "string",
-                "default": "floria_push_contact_cache",
-                "description": "Table used by the PostgreSQL push-contact PSI cache overlay. Must be `table` or `schema.table` with simple SQL identifiers."
             }
         }
     })

@@ -107,7 +107,8 @@ or malformed-request errors use the standard `ok=false` envelope with
 
 ## Broadcast Endpoints
 
-The internal endpoints `POST /_floria/internal/account_deactivate_fanout` and
-`POST /_floria/internal/consent_revoke` are for soland's private broadcast path.
-Keep them on a private listener, service mesh, or reverse-proxy route. They are
-not mobile or third-party server APIs.
+The internal endpoint `POST /_floria/internal/account_deactivate_fanout` is for
+soland's private broadcast path. Keep it on a private listener, service mesh,
+or reverse-proxy route. It is not a mobile or third-party server API. Contact,
+Direct Conversation, Agent participation, Sidecar and operation-control gates
+are evaluated before the caller constructs the push-notify request.

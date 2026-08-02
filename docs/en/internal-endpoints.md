@@ -10,10 +10,9 @@ different auth and rate-limit posture.
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `/_floria/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
-| `/_floria/internal/consent_revoke` | POST | Drops every cached PSI verdict for the affected principal so the next push goes through a fresh consent check |
 
-Both handlers live in `src/service/internal.rs` and are wired into
-the router in `src/service/mod.rs`. They share the same `AppState`
+The handler lives in `src/service/internal.rs` and is wired into
+the router in `src/service/mod.rs`. It shares the same `AppState`
 as `/notify` but never touch the public dedup cache or rate limiter.
 
 ## Auth posture
@@ -37,13 +36,13 @@ broadcast channels return `503 service_unavailable`.
 
 ## Rate limit posture
 
-The internal endpoints are NOT subject to `notify_rate_limits`. The
+The internal endpoint is NOT subject to `notify_rate_limits`. The
 expectation is that the upstream broadcast bus (soland) backpressures
 on its own queue depth, and floria's role is to drain whatever shows
 up. If you need strand control, set it on the upstream bus rather than
 on floria.
 
-Internal endpoints DO honor the `notify_retry_queue` configuration:
+The internal endpoint DOES honor the `notify_retry_queue` configuration:
 if a provider call inside `account_deactivate_fanout` produces a
 transient error, the failed unregister is enqueued on the same retry
 queue and respects `max_attempts` / `default_backoff` like any other
@@ -53,9 +52,9 @@ dispatch failure.
 
 | Metric | Endpoint |
 |--------|----------|
-| `floria_audit_divert_total{event_type, outcome}` | both |
-| `floria_audit_rejected_devices_total{reason}` | both |
-| `floria_notify_dead_letter_total{pushkin, reason}` | both — when fanout retries exhaust |
+| `floria_audit_divert_total{event_type, outcome}` | account deactivation fanout |
+| `floria_audit_rejected_devices_total{reason}` | account deactivation fanout |
+| `floria_notify_dead_letter_total{pushkin, reason}` | account deactivation fanout — when retries exhaust |
 
 Trace spans are emitted with `service.name=floria`,
 `http.target=/_floria/internal/<route>`, and the broadcast event id

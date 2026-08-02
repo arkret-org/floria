@@ -5,9 +5,8 @@
 //! and B-B:
 //!
 //! 1. Durable agent lifecycle events (`ak.agent.{pause,resume,deactivate}`) MUST be silently
-//!    consumed on the `/push/notify` endpoint — 200 OK + zero provider fanout. The authoritative
-//!    capability-cache invalidation path is the `/internal/consent_revoke` listener with
-//!    `reason=agent_paused` or `agent_deactivated`.
+//!    consumed on the `/push/notify` endpoint — 200 OK + zero provider fanout. Current lifecycle
+//!    and participation admission remain the upstream Sync / notification service's responsibility.
 //! 2. Actor-private agent events (`ak.agent.{draft.propose,action_request,action_approve,
 //!    action_reject}`) MUST be dropped by default — same 200 OK + zero-fanout shape, but logged
 //!    separately so an operator can later opt a subscription gate in.
@@ -44,8 +43,8 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
         arkret_models_integration::PushNotifyGatewayStatus::Accepted
     );
     // Critical: durable agent lifecycle event MUST NOT trigger a
-    // user-device push fanout. Capability cache invalidation strands
-    // through `/internal/consent_revoke` with `reason=agent_paused`.
+    // user-device push fanout. Upstream current admission already gates
+    // lifecycle and participation before constructing this envelope.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 

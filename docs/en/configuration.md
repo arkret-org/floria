@@ -222,23 +222,18 @@ storage {
   // Omit postgres_url for in-memory broadcast state.
   // postgres_url "postgres://floria:secret@postgres.internal:5432/floria"
   deactivation_queue_table "floria_push_delivery_queue"
-  push_contact_cache_table "floria_push_contact_cache"
 }
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `postgres_url` | string | - | Optional PostgreSQL URL. Enables deactivation queue drain and persistent push-contact PSI cache overlay |
+| `postgres_url` | string | - | Optional PostgreSQL URL. Enables deactivation queue drain |
 | `deactivation_queue_table` | string | `"floria_push_delivery_queue"` | Queue table drained by `account_deactivate_fanout`; accepts `table` or `schema.table` |
-| `push_contact_cache_table` | string | `"floria_push_contact_cache"` | Persistent PSI cache table used by `consent_revoke`; accepts `table` or `schema.table` |
 
 The deactivation queue table is expected to contain `actor_id`, `device_id`,
 and `push_key_hash` text columns. floria drains it with `DELETE` statements for
 the broadcast actor and, when present, the listed device ids / push-key hashes.
 
-The push-contact cache table is expected to contain `principal_id`,
-`peer_psi_token`, `verdict`, and `updated_at` columns, with a unique constraint
-on `(principal_id, peer_psi_token)`. `verdict` stores `allowed` or `denied`.
 When `postgres_url` is unset, the same broadcast bus runs with process-local
 state only.
 

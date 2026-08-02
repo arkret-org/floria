@@ -174,14 +174,13 @@ mod tests {
 
     #[test]
     fn table_name_accepts_schema_table() {
-        let table = SqlTableName::parse("floria.push_contact_cache", "storage.table").unwrap();
-        assert_eq!(table.as_sql(), "\"floria\".\"push_contact_cache\"");
+        let table = SqlTableName::parse("floria.cache_entries", "storage.table").unwrap();
+        assert_eq!(table.as_sql(), "\"floria\".\"cache_entries\"");
     }
 
     #[test]
     fn table_name_rejects_unsafe_identifiers() {
-        let error =
-            SqlTableName::parse("floria.push_contact_cache;drop", "storage.table").unwrap_err();
+        let error = SqlTableName::parse("floria.cache_entries;drop", "storage.table").unwrap_err();
         assert!(error.to_string().contains("must contain only ASCII"));
     }
 
