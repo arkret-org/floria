@@ -186,7 +186,9 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
         supported_operations: vec![ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned()],
-        supported_bindings: vec![arkret_models_discovery::SupportedBinding::new("http")],
+        supported_bindings: vec![arkret_models_discovery::SupportedBinding::new(
+            arkret_wire::BindingKind::HttpJson,
+        )],
         supported_features: vec![
             "push.notify".to_owned(),
             "push.bridge_describe".to_owned(),
