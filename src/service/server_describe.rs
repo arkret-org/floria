@@ -245,7 +245,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         supported_schema_profiles: vec![],
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
-        reducer_profile: None,
         last_materialized_at: None,
         extensions: Default::default(),
     };
