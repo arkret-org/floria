@@ -7,7 +7,7 @@ This runbook covers provider and service-auth credential rotation for a running 
 1. Add the new credential to the provider console or upstream service first.
 2. Update floria config with the new credential path, token hash, key id, or secret value.
 3. Keep the old credential valid until all floria instances have restarted and `/ready` returns `200`.
-4. Send a provider mock or low-risk test push and verify the delivery receipt contains only provider/status/token-hash metadata.
+4. Send a provider mock or low-risk test push and verify gateway-private telemetry contains only provider/status/token-hash metadata; the synchronous notify response must contain none of it.
 5. Revoke the old credential in the provider console or upstream service.
 6. Watch `/metrics`, logs, and provider dashboards for retry or invalid-token spikes.
 

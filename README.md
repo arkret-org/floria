@@ -1,6 +1,6 @@
 # floria
 
-> **Spec target**: [arkret-spec @ c2848a4](../arkret-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [arkret-spec @ 1936d1c0](../arkret-spec) (fixed downstream baseline, 2026-08-03)
 
 Push gateway service in Rust.
 
@@ -142,13 +142,13 @@ Quick notes:
 ## Arkret notify semantics
 
 - `/_arkret/edge/push/notify` accepts authenticated service calls and supports the `Idempotency-Key` header
-- `ak.edge.push.command.notify` accepts active `strand` / `message` / `event` refs, optional `space_*` projection refs, `origin_service_id`, destination gateway DID, priority/TTL/collapse hints, and target device references
+- `ak.edge.push.command.notify` accepts only the SDK `PushNotifyRequestBody`; operation identity and the source/destination service DIDs stay in the URL and signed transport headers, never in the body
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `strand_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields
 - notify requests use the current `push_target_id`, `wakeup_kind`, and `push_key` field names; unknown notification fields are rejected by the wire model
 - notify responses conserve `(push_target_id, device_id)` outcomes and expose neither raw push tokens nor token hashes
-- response delivery receipt refs contain provider/status/token hash metadata only, never plaintext payloads
+- provider delivery receipts and token hashes are gateway-private telemetry and never appear in the synchronous notify response
 - bearer fallback is header-only; query string auth material is rejected
 - WebPush endpoints must match the configured allowlist and must not include query strings
 - lightweight readiness probes hit `GET /ready`; strict readiness probes can use `GET /readyz` to require a populated provider registry and reachable Redis-backed dependencies

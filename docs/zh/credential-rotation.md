@@ -7,7 +7,7 @@
 1. 先在 provider 控制台或上游服务中添加新凭据。
 2. 更新 floria 配置中的 credential path、token hash、key id 或 secret。
 3. 保持旧凭据有效，直到所有 floria 实例重启完成且 `/ready` 返回 `200`。
-4. 发送 provider mock 或低风险测试推送，并确认 delivery receipt 只包含 provider/status/token-hash metadata。
+4. 发送 provider mock 或低风险测试推送，并确认网关内部 telemetry 只包含 provider/status/token-hash metadata；同步 notify 响应中不得出现这些字段。
 5. 在 provider 控制台或上游服务中吊销旧凭据。
 6. 观察 `/metrics`、日志和 provider dashboard，确认没有 retry 或 invalid-token 异常尖峰。
 
