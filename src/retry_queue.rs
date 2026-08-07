@@ -122,8 +122,8 @@ impl RetryQueueCipher {
 /// CREATE TABLE IF NOT EXISTS <table> (
 ///   request_id   TEXT NOT NULL,
 ///   pushkin      TEXT NOT NULL,
-///   last_error   TEXT NOT NULL,
 ///   occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+///   last_error   TEXT NOT NULL,
 ///   PRIMARY KEY (request_id, pushkin, occurred_at)
 /// );
 /// ```
@@ -154,8 +154,8 @@ impl DeadLetterPgOverlay {
             "CREATE TABLE IF NOT EXISTS {table} (\n\
                  request_id  TEXT NOT NULL,\n\
                  pushkin     TEXT NOT NULL,\n\
-                 last_error  TEXT NOT NULL,\n\
                  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n\
+                 last_error  TEXT NOT NULL,\n\
                  PRIMARY KEY (request_id, pushkin, occurred_at)\n\
              )",
             table = self.table.as_sql()
