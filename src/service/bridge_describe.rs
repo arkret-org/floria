@@ -195,7 +195,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 "notification": {
                     "event_id": "ak:event:01964000-0000-7000-8000-000000000000",
                     "strand_id": "ak:strand:01964000-0000-7000-8000-000000000000",
-                    "realm_id": "ak:realm:01964000-0000-7000-8000-000000000000",
+                    "realm_id": "ak:realm:AW2ArxAsk4QV_AskkaL7o8Oli_HF9cYojMSbnlxYnNs6",
                     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",

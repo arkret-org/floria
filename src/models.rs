@@ -343,7 +343,7 @@ mod tests {
                     "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
                     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
-                    "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000003",
+                    "realm_id": "ak:realm:AYZQCyAMEvY_8vHSQUIly6vISE8zV9kwLHkd17skJdyW",
                     "route_tokens": {
                         "realm_route_token": "realm_route_token_000000001"
                     },
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(request.event_kind.as_deref(), Some("ak.message"));
         assert_eq!(
             request.notification.realm_id(),
-            Some("ak:realm:0196419b-0000-7000-8000-000000000003")
+            Some("ak:realm:AYZQCyAMEvY_8vHSQUIly6vISE8zV9kwLHkd17skJdyW")
         );
         assert_eq!(
             request.notification.realm_route_token(),
