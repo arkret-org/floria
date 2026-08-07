@@ -258,14 +258,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     res.render(Json(body));
 }
 
-/// Base push-gateway profile id.
-/// Mandatory default-interop privacy baseline. Spec (push-notifications.md
-/// §0, conformance-profiles.json) — any implementation claiming
-/// `ak.profile.push_gateway.v1` MUST also claim this profile.
-/// Opt-in visible-payload profile. Only advertised when the gateway is
-/// configured with a plaintext-eligible service surface
-/// (`describe_plaintext_visibility == "service-gated"`).
-
 /// Profiles the gateway actually supports and gates on, in claim order.
 /// The base profile and its mandatory blind-wakeup baseline are always
 /// present; the visible-notification profile is added only when a
