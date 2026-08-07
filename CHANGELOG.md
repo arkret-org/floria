@@ -22,7 +22,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 
 ## R3.3 — Spec sync 2026-05-28 (arkret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to arkret-spec @ cced4b8 (AKP-0011 shareable object addressing / `ak.find.directory.query.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to arkret-spec @ cced4b8 (AKP-0011 shareable object addressing / `ak.find.directory.read.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (arkret-spec @ b56cab1)
