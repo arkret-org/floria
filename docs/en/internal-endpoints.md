@@ -19,7 +19,7 @@ as `/notify` but never touch the public dedup cache or rate limiter.
 
 floria enforces `http.internal_auth` bearer/shared-secret
 authentication on `/_floria/internal/*` and the operator-only
-`/_floria/admin/push/status/*` / `/_floria/admin/push/device/unregister` routes. If
+`/_floria/admin/push/status/*` routes. If
 no internal bearer token or token hash is configured, these routes fail
 closed with `503 service_unavailable`; missing or invalid credentials
 return `401 unauthenticated`.

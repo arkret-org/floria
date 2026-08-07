@@ -172,7 +172,7 @@ async fn internal_routes_accept_hashed_bearer_token() {
 }
 
 #[tokio::test]
-async fn status_and_device_unregister_require_internal_bearer() {
+async fn status_requires_internal_bearer() {
     let service = test_service_without_broadcast_bus();
 
     let mut status = TestClient::get("http://127.0.0.1/_floria/admin/push/status/key-1")
@@ -181,17 +181,6 @@ async fn status_and_device_unregister_require_internal_bearer() {
     assert_eq!(status.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let status_body: Value = status.take_json().await.unwrap();
     assert_eq!(status_body["error"]["code"], json!("unauthenticated"));
-
-    let mut unregister = TestClient::post("http://127.0.0.1/_floria/admin/push/device/unregister")
-        .json(&json!({
-            "app_id": "com.example.app",
-            "push_key": "push-key"
-        }))
-        .send(&service)
-        .await;
-    assert_eq!(unregister.status_code.unwrap(), StatusCode::UNAUTHORIZED);
-    let unregister_body: Value = unregister.take_json().await.unwrap();
-    assert_eq!(unregister_body["error"]["code"], json!("unauthenticated"));
 }
 
 #[tokio::test]

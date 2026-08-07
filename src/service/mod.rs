@@ -45,16 +45,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
-        // Phase B.4 — status lookup + internal device unregister.
+        // Operator status lookup.
         .push(
             Router::with_path("_floria/admin/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
-        )
-        .push(
-            Router::with_path("_floria/admin/push/device/unregister")
-                .hoop(internal::require_internal_auth)
-                .post(internal::device_unregister),
         )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
@@ -81,16 +76,11 @@ pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLog
                 .hoop(internal::require_internal_auth)
                 .post(internal::account_deactivate_fanout),
         )
-        // Phase B.4 — status lookup + internal device unregister.
+        // Operator status lookup.
         .push(
             Router::with_path("_floria/admin/push/status/{idempotency_key}")
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
-        )
-        .push(
-            Router::with_path("_floria/admin/push/device/unregister")
-                .hoop(internal::require_internal_auth)
-                .post(internal::device_unregister),
         )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))

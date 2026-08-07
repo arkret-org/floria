@@ -67,25 +67,6 @@ static FCM_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| 
     .expect("register floria_fcm_status_codes")
 });
 
-static FCM_BATCH_SIZE: LazyLock<prometheus::HistogramVec> = LazyLock::new(|| {
-    prometheus::register_histogram_vec!(
-        "floria_fcm_batch_item_count",
-        "Batch size observed when FCM multicast dispatch is invoked",
-        &["pushkin"],
-        vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 500.0]
-    )
-    .expect("register floria_fcm_batch_item_count")
-});
-
-static FCM_BATCH_OUTCOMES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_fcm_batch_dispatched_total",
-        "Per-message outcome of FCM multicast dispatch",
-        &["pushkin", "outcome"]
-    )
-    .expect("register floria_fcm_batch_dispatched_total")
-});
-
 const FCM_MAX_TRIES: usize = 3;
 const FCM_RETRY_DELAY_BASE_SECS: u64 = 10;
 const FCM_RETRY_DELAY_QUOTA_SECS: u64 = 60;
@@ -435,45 +416,6 @@ impl Pushkin for FcmPushkin {
             return Ok(vec![]);
         };
         self.dispatch_v1(notification, device, data).await
-    }
-}
-
-impl FcmPushkin {
-    /// Dispatch a multicast batch. FCM v1 deprecated `batchSend`, so
-    /// the batched form is many concurrent `/messages:send` calls
-    /// sharing one access token and one HTTP/2 connection. The
-    /// `connection_semaphore` already bounds outbound concurrency;
-    /// this method just `tokio::join!`s the per-device dispatches so
-    /// the caller does not have to do it manually.
-    pub async fn dispatch_batch(
-        &self,
-        notification: &PushNotification,
-        devices: &[Device],
-        context: &NotificationContext,
-    ) -> Vec<Result<Vec<String>, DispatchError>> {
-        FCM_BATCH_SIZE
-            .with_label_values(&[self.name()])
-            .observe(devices.len() as f64);
-
-        let mut futures = Vec::with_capacity(devices.len());
-        for device in devices {
-            futures.push(self.dispatch_notification(notification, device, context));
-        }
-        let results = futures::future::join_all(futures).await;
-
-        for result in &results {
-            let outcome = match result {
-                Ok(rejected) if rejected.is_empty() => "accepted",
-                Ok(_) => "partial",
-                Err(error) if error.is_temporary() => "retryable",
-                Err(error) if error.is_remote() => "remote_error",
-                Err(_) => "internal_error",
-            };
-            FCM_BATCH_OUTCOMES
-                .with_label_values(&[self.name(), outcome])
-                .inc();
-        }
-        results
     }
 }
 
