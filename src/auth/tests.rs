@@ -115,9 +115,9 @@ async fn http_message_signature_authenticates_notify_request() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+            "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+            "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
@@ -171,9 +171,9 @@ async fn mtls_profile_authenticates_notify_request() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+            "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+            "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
@@ -228,9 +228,9 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+            "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+            "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
@@ -295,9 +295,9 @@ async fn rejects_tampered_body() {
     let service = test_service_with_principal(principal);
     let body = json!({
         "notification": {
-            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-            "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-            "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+            "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+            "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },

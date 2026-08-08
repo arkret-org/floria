@@ -667,7 +667,7 @@ mod sanitize_tests {
     fn sanitized_provider_payload_strips_event_id() {
         let payload = json!({
             "client": "android",
-            "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
             "wakeup_kind": "message",
         })
         .as_object()
@@ -815,14 +815,14 @@ mod sanitize_tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                arkret_wire::EventId::new("ak:event:0196419b-0000-7000-8000-000000000001").unwrap(),
+                arkret_wire::EventId::new("ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS").unwrap(),
             ),
             message_id: Some(
-                arkret_wire::MessageId::new("ak:message:0196419b-0000-7000-8000-000000000002")
+                arkret_wire::MessageId::new("ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1")
                     .unwrap(),
             ),
             strand_id: Some(
-                arkret_wire::StrandId::new("ak:strand:019640f9-8000-7000-8000-000000000000")
+                arkret_wire::StrandId::new("ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD")
                     .unwrap(),
             ),
             route_tokens: Some(RouteTokens {

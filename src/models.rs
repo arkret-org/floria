@@ -340,7 +340,7 @@ mod tests {
             serde_json::from_value(json!({
                 "event_kind": "ak.message",
                 "notification": {
-                    "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+                    "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
                     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",
                     "realm_id": "ak:realm:AYZQCyAMEvY_8vHSQUIly6vISE8zV9kwLHkd17skJdyW",

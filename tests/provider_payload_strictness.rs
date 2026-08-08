@@ -44,10 +44,10 @@ use serde_json::{Value, json};
 fn sanitizer_strips_apns_correlation_identifiers() {
     let payload = json!({
         "client": "ios",
-        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-        "space_id": "ak:space:0196419b-0000-7000-8000-000000000004",
-        "strand_id":  "ak:strand:019640f9-8000-7000-8000-000000000000",
-        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
+        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+        "space_id": "ak:space:AVpLL6IaVQSSJDqHs-Xz-LJqiqTSvYP1a0bCvh15YNC8",
+        "strand_id":  "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
+        "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
         "sender": "@alice:example.com",
         "sender_actor_display_name": "Alice",
         "strand_name": "Project Apollo",
@@ -86,7 +86,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
         "client": "android",
         "content_body": "I'm floating in a most peculiar way.",
         "content_msgtype": "m.text",
-        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
         "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
     })
@@ -107,9 +107,9 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
 fn sanitizer_strips_webpush_correlation_identifiers() {
     let payload = json!({
         "client": "web",
-        "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
-        "space_id": "ak:space:0196419b-0000-7000-8000-000000000004",
-        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
+        "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
+        "space_id": "ak:space:AVpLL6IaVQSSJDqHs-Xz-LJqiqTSvYP1a0bCvh15YNC8",
+        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
         "content": {"body": "secret message"},
         "wakeup_kind": "message",
     })
@@ -148,9 +148,9 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         // Security-boundary label.
         "realm_title": "Apollo",
         "sender_actor_display_name": "Major Tom",
-        "event_id":   "ak:event:0196419b-0000-7000-8000-000000000001",
-        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-        "strand_id":    "ak:strand:019640f9-8000-7000-8000-000000000000",
+        "event_id":   "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+        "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+        "strand_id":    "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
         // SPEC-CR-016: gateway-internal routing ids live under route_tokens.
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
@@ -469,9 +469,9 @@ fn visible_profile_service() -> salvo::Service {
 
 fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> Value {
     let mut notification = json!({
-        "event_id": "ak:event:0196419b-0000-7000-8000-000000000001",
-        "message_id": "ak:message:0196419b-0000-7000-8000-000000000002",
-        "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+        "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+        "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },

@@ -193,8 +193,8 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // id fields and `counts` follows the same closed schema.
             plaintext_visible_service_request: serde_json::json!({
                 "notification": {
-                    "event_id": "ak:event:01964000-0000-7000-8000-000000000000",
-                    "strand_id": "ak:strand:01964000-0000-7000-8000-000000000000",
+                    "event_id": "ak:event:AXYmt-Fuaq8Z8WqGu-VhVW_K-DQCqU0mMHZaXotnF-7g",
+                    "strand_id": "ak:strand:AXYmt-Fuaq8Z8WqGu-VhVW_K-DQCqU0mMHZaXotnF-7g",
                     "realm_id": "ak:realm:AW2ArxAsk4QV_AskkaL7o8Oli_HF9cYojMSbnlxYnNs6",
                     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
                     "wakeup_kind": "message",

@@ -47,7 +47,7 @@ by the URL and headers, not repeated in the body:
   "notification": {
     "event_id": "ak:event:01JS0EV000000000000000000",
     "message_id": "ak:message:01JS0MSG0000000000000000",
-    "strand_id": "ak:strand:019640f9-8000-7000-8000-000000000000",
+    "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
     "realm_id": "ak:realm:01JS0SP000000000000000000",
     "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
     "wakeup_kind": "message",

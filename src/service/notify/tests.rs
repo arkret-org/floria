@@ -6,7 +6,7 @@ fn e2ee_late_recovery_access_kind_matches_push_wire_repr() {
         serde_json::from_value::<arkret_models_integration::PushAuditEnvelopeMetadata>(json!({
             "access_kind": "e2ee_late_recovery",
             "late_recovery_original_event_id":
-                "ak:event:0196441c-0000-7000-8000-000000000000"
+                "ak:event:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz"
         }))
         .unwrap();
 
