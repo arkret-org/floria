@@ -5,7 +5,7 @@ use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID
 use crate::config::NotifyAuthConfig;
 use crate::models::{DeviceExt, PushNotification};
 
-/// SPEC-CR-016: the originating service DID rides the `Source-Service-ID`
+/// SPEC-CR-016: the originating service core id rides the `Source-Service-ID`
 /// transport header (`SOURCE_SERVICE_ID_HEADER`), which the auth layer
 /// already resolved into `caller.origin_service_id`. We keep a
 /// defense-in-depth check that the header is present and consistent with
@@ -33,18 +33,18 @@ pub(super) fn validate_origin_service_id(
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-            message: "origin service DID does not match the authenticated caller".to_owned(),
+            message: "origin service id does not match the authenticated caller".to_owned(),
         });
     }
     Ok(())
 }
 
-/// SPEC-CR-016: the destination service DID rides the
+/// SPEC-CR-016: the destination service core id rides the
 /// `Destination-Service-ID` transport header only (the body field is
 /// removed). The recipient-service-id scope binding reuses the same
 /// header value — `push_target_id` is a per-`(recipient_service_id, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
-/// destination equals its own `gateway_service_id` (spec
+/// destination equals the core projection of its own `gateway_service_id` (spec
 /// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
 /// decorative.
 pub(super) fn validate_destination_service_id(
@@ -61,14 +61,19 @@ pub(super) fn validate_destination_service_id(
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
 
-    if let Some(expected) = auth.gateway_service_id.as_deref()
+    let expected = auth.gateway_service_core_id().map_err(|_| AuthFailure {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        code: arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
+        message: "gateway service identity is invalid".to_owned(),
+    })?;
+    if let Some(expected) = expected.as_ref()
         && let Some(destination) = header_destination.as_deref()
-        && destination != expected
+        && destination != expected.as_str()
     {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-            message: "destination service DID does not match this gateway".to_owned(),
+            message: "destination service id does not match this gateway".to_owned(),
         });
     }
 

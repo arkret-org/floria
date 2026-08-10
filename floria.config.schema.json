@@ -198,6 +198,21 @@
               "type": "boolean"
             },
             "gateway_service_id": {
+              "description": "Resolvable full DID for this gateway; its stable core is derived for service_id and transport headers.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "gateway_service_method_history_head": {
+              "minLength": 1,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "gateway_service_version_id": {
+              "minLength": 1,
               "type": [
                 "string",
                 "null"
@@ -253,6 +268,7 @@
               "type": "object"
             },
             "plaintext_metadata_service_ids": {
+              "description": "Stable service core ids allowed to send visible notification metadata.",
               "oneOf": [
                 {
                   "type": "string"
@@ -378,6 +394,7 @@
                 },
                 "type": "object"
               },
+              "description": "Per-service authentication profiles keyed by stable service core id.",
               "type": "object"
             },
             "signature_max_skew_seconds": {
@@ -386,6 +403,7 @@
               "type": "integer"
             },
             "trusted_service_ids": {
+              "description": "Allowlisted stable service core ids carried by Source-Service-ID.",
               "oneOf": [
                 {
                   "type": "string"

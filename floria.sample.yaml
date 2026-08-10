@@ -26,16 +26,18 @@ http:
     # bearer_token_hashes:
     #   - sha256:<hex-digest>
     # trusted_service_ids:
-    #   - did:web:sync.example.com
+    #   - ak:did_core:web:sync.example.com
     # plaintext_metadata_service_ids:
-    #   - did:web:sync.example.com
-    # gateway_service_id: did:web:push.example.com
+    #   - ak:did_core:web:sync.example.com
+    # gateway_service_id: did:webvh:zQ3shGatewayScid:push.example.com
+    # gateway_service_method_history_head: sha256:<verified-log-head-digest>
+    # gateway_service_version_id: 1-<verified-version-id>
     #
     # Stronger production profile:
     # production_mode: true
     # require_message_signatures: true
     # service_principals:
-    #   did:web:sync.example.com:
+    #   ak:did_core:web:sync.example.com:
     #     allow_plaintext_metadata: true
     #     # bearer_tokens is non-production only; production_mode rejects it.
     #     bearer_token_hashes:

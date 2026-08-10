@@ -17,10 +17,14 @@ async fn notify_accepts_authenticated_allowlisted_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -93,10 +97,14 @@ async fn notify_accepts_hashed_bearer_token() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -120,10 +128,14 @@ async fn notify_rejects_query_string_auth_material() {
     let mut response =
         TestClient::post("http://127.0.0.1/_arkret/edge/push/notify?access_token=secret-token")
             .add_header("authorization", "Bearer secret-token", true)
-            .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                SOURCE_SERVICE_ID_HEADER,
+                "ak:did_core:web:sync.example.com",
+                true,
+            )
             .add_header(
                 DESTINATION_SERVICE_ID_HEADER,
-                "did:web:push.example.com",
+                "ak:did_core:web:push.example.com",
                 true,
             )
             .json(&payload(vec![device("com.example.app", "accept")]))
@@ -174,10 +186,14 @@ async fn notify_rejects_non_allowlisted_origin_service_id() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:rogue.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -193,6 +209,36 @@ async fn notify_rejects_non_allowlisted_origin_service_id() {
 }
 
 #[tokio::test]
+async fn notify_rejects_full_did_in_source_service_id_header() {
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        notify_auth_config(),
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            DESTINATION_SERVICE_ID_HEADER,
+            "ak:did_core:web:push.example.com",
+            true,
+        )
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body = assert_notify_error(&mut response, "schema_violation", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("Source-Service-ID must be a service core id")
+    );
+}
+
+#[tokio::test]
 async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
     let service = test_service_with_auth(
         vec![(
@@ -204,10 +250,14 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&visible_payload(vec![device("com.example.app", "accept")]))
@@ -277,10 +327,14 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&request_body)
@@ -310,10 +364,14 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&request_body)
@@ -352,10 +410,14 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&request_body)
@@ -385,10 +447,14 @@ async fn notify_rejects_mismatched_destination_service_id() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:other-gateway.example.com",
+            "ak:did_core:web:other-gateway.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -399,7 +465,7 @@ async fn notify_rejects_mismatched_destination_service_id() {
     let body = assert_notify_error(&mut response, "capability_denied", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("destination service DID does not match this gateway")
+        json!("destination service id does not match this gateway")
     );
 }
 
@@ -436,7 +502,7 @@ async fn production_mode_rejects_bearer_only_principal() {
     principal.bearer_tokens = vec!["principal-token".to_owned()];
     config
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -447,10 +513,14 @@ async fn production_mode_rejects_bearer_only_principal() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -479,10 +549,14 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer gateway-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:rogue.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:rogue.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&payload(vec![device("com.example.app", "accept")]))
@@ -510,7 +584,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     principal.service_kind = Some("push".to_owned());
     config
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -521,10 +595,14 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer principal-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&visible_payload(vec![device("com.example.app", "accept")]))

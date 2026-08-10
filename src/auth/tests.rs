@@ -54,7 +54,7 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
     notify_auth.require_message_signatures = true;
     notify_auth.replay_window_seconds = 300;
     notify_auth.service_principals =
-        HashMap::from([("did:web:sync.example.com".to_owned(), principal)]);
+        HashMap::from([("ak:did_core:web:sync.example.com".to_owned(), principal)]);
     state.notify_auth = notify_auth;
     state.notify_nonce_store = Some(Arc::new(NonceStore::memory(Duration::from_secs(300))));
     salvo::Service::new(build_router(Arc::new(state)))
@@ -88,8 +88,8 @@ fn sign_request(
         format!("\"@target-uri\": {target_uri}"),
         format!("\"@authority\": {authority}"),
         format!("\"content-digest\": {digest}"),
-        "\"source-service-id\": did:web:sync.example.com".to_owned(),
-        "\"destination-service-id\": did:web:push.example.com".to_owned(),
+        "\"source-service-id\": ak:did_core:web:sync.example.com".to_owned(),
+        "\"destination-service-id\": ak:did_core:web:push.example.com".to_owned(),
         format!(
             "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
@@ -146,10 +146,14 @@ async fn http_message_signature_authenticates_notify_request() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -204,10 +208,14 @@ async fn mtls_profile_authenticates_notify_request() {
         .add_header("signature", signature, true)
         .add_header("x-client-certificate-verified", "true", true)
         .add_header("x-client-certificate-sha256", "aa:bb:cc", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -259,10 +267,14 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -329,10 +341,14 @@ async fn rejects_tampered_body() {
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&tampered_body)
@@ -380,8 +396,8 @@ async fn rejects_signature_missing_required_components() {
         "\"@method\": POST".to_owned(),
         "\"@target-uri\": http://127.0.0.1/_arkret/edge/push/notify".to_owned(),
         format!("\"content-digest\": {digest}"),
-        "\"source-service-id\": did:web:sync.example.com".to_owned(),
-        "\"destination-service-id\": did:web:push.example.com".to_owned(),
+        "\"source-service-id\": ak:did_core:web:sync.example.com".to_owned(),
+        "\"destination-service-id\": ak:did_core:web:push.example.com".to_owned(),
         format!(
             "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
@@ -400,10 +416,14 @@ async fn rejects_signature_missing_required_components() {
         .add_header("content-digest", digest, true)
         .add_header("signature-input", signature_input, true)
         .add_header("signature", signature, true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)

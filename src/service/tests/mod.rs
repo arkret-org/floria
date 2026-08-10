@@ -196,8 +196,8 @@ pub(super) fn test_service_with_auth(
 pub(super) fn notify_auth_config() -> NotifyAuthConfig {
     let mut config = NotifyAuthConfig::default();
     config.bearer_tokens = vec!["secret-token".to_owned()];
-    config.trusted_service_ids = vec!["did:web:sync.example.com".to_owned()];
-    config.plaintext_metadata_service_ids = vec!["did:web:sync.example.com".to_owned()];
+    config.trusted_service_ids = vec!["ak:did_core:web:sync.example.com".to_owned()];
+    config.plaintext_metadata_service_ids = vec!["ak:did_core:web:sync.example.com".to_owned()];
     config.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config
 }
@@ -212,6 +212,8 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
     config.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.gateway_service_version_id = Some("fixture-v1".to_owned());
     config.production_mode = true;
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
@@ -219,7 +221,7 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     principal.service_kind = Some("sync".to_owned());
     config
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
     config
 }
 

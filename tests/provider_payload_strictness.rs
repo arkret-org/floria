@@ -433,7 +433,7 @@ fn blind_profile_service() -> salvo::Service {
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true; // operator flipped it on
     auth.service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let registry = PushkinRegistry::new(HashMap::from([(
         "com.example.app".to_owned(),
@@ -456,7 +456,7 @@ fn visible_profile_service() -> salvo::Service {
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true;
     auth.service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let registry = PushkinRegistry::new(HashMap::from([(
         "com.example.app".to_owned(),
@@ -505,10 +505,14 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -543,10 +547,14 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -581,10 +589,14 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -615,10 +627,14 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -653,10 +669,14 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)
@@ -682,10 +702,14 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("authorization", "Bearer secret-token", true)
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .add_header(
             DESTINATION_SERVICE_ID_HEADER,
-            "did:web:push.example.com",
+            "ak:did_core:web:push.example.com",
             true,
         )
         .json(&body)

@@ -98,13 +98,13 @@ http {
   notify_auth {
     bearer_tokens "replace-me"
     // bearer_token_hashes "sha256:<hex-digest>"
-    trusted_service_ids "did:web:sync.example.com"
-    plaintext_metadata_service_ids "did:web:sync.example.com"
+    trusted_service_ids "ak:did_core:web:sync.example.com"
+    plaintext_metadata_service_ids "ak:did_core:web:sync.example.com"
     gateway_service_id "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
-    //   "did:web:sync.example.com" {
+    //   "ak:did_core:web:sync.example.com" {
     //     allow_plaintext_metadata true
     //     // bearer_tokens is non-production only; production_mode rejects it.
     //     bearer_token_hashes "sha256:<hex-digest>"
@@ -141,9 +141,9 @@ http {
 | `notify_dedup.key_prefix` | string | `"floria"` | Prefix used for dedup keys in Redis |
 | `notify_auth.bearer_tokens` | string/string[] | — | Allowed bearer service tokens for non-production `/notify`; rejected when `production_mode=true` |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
-| `notify_auth.trusted_service_ids` | string/string[] | — | Allowlisted origin service DIDs for `/notify` |
-| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | Services allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
-| `notify_auth.gateway_service_id` | string | — | Expected destination gateway DID |
+| `notify_auth.trusted_service_ids` | string/string[] | — | Allowlisted origin service core IDs for `/notify` |
+| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | Service core IDs allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
+| `notify_auth.gateway_service_id` | string | — | Resolvable gateway full DID; transport headers carry its core projection |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
 | `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
@@ -151,7 +151,7 @@ http {
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | Ingress-provided header carrying the client certificate fingerprint |
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | Ingress-provided header carrying the client certificate Subject DN |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | Ingress-provided header carrying the comma-joined SAN list |
-| `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service DID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
+| `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service core ID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
 | `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/_floria/internal/*` and `/_floria/admin/push/status/*` |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | SHA-256 internal bearer token digests, optionally prefixed with `sha256:`; when both internal credential lists are empty, internal/operator routes fail closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
@@ -178,10 +178,12 @@ http {
   }
   notify_auth {
     gateway_service_id "did:web:push.example.com"
+    gateway_service_method_history_head "sha256:<verified-log-head-digest>"
+    gateway_service_version_id "1-<verified-version-id>"
     production_mode true
     require_message_signatures true
     service_principals {
-      "did:web:sync.example.com" {
+      "ak:did_core:web:sync.example.com" {
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"

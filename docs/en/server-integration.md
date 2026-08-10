@@ -33,8 +33,8 @@ The caller should set:
 | `Idempotency-Key` | Recommended | Stable key for retry-safe `/notify` calls |
 | `Authorization: Bearer ...` | Conditional | Only when bearer fallback is configured |
 | HTTP Message Signature headers | Conditional | Required when the caller principal requires signatures |
-| `Source-Service-ID` | Required whenever notify auth is enabled | Must match the authenticated caller service; HTTP Message Signature callers also cover it in the signature transcript |
-| `Destination-Service-ID` | Required when `gateway_service_id` is configured | Must match the gateway DID; HTTP Message Signature callers also cover it in the signature transcript |
+| `Source-Service-ID` | Required whenever notify auth is enabled | Stable caller service core ID; must match the authenticated principal and is covered by HTTP Message Signatures |
+| `Destination-Service-ID` | Required when `gateway_service_id` is configured | Must match the core projection of the gateway full DID and is covered by HTTP Message Signatures |
 
 ## Notify Request
 

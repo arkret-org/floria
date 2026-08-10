@@ -82,6 +82,15 @@ pub async fn authenticate_notify_request(
     }
 
     let origin_did = optional_header(req, SOURCE_SERVICE_ID_HEADER);
+    if let Some(origin_service_id) = origin_did.as_ref()
+        && arkret_wire::ServiceId::new(origin_service_id.clone()).is_err()
+    {
+        return Err(AuthFailure {
+            status: StatusCode::BAD_REQUEST,
+            code: arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+            message: "Source-Service-ID must be a service core id".to_owned(),
+        });
+    }
 
     if let Some(origin_did) = origin_did.as_deref()
         && let Some(principal) = auth.service_principals.get(origin_did)

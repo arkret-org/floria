@@ -211,9 +211,26 @@ fn notify_auth_schema() -> Value {
                     {"type": "array", "items": {"type": "string"}}
                 ]
             },
-            "trusted_service_ids": string_or_string_list_schema(),
-            "plaintext_metadata_service_ids": string_or_string_list_schema(),
-            "gateway_service_id": {"type": ["string", "null"]},
+            "trusted_service_ids": {
+                "description": "Allowlisted stable service core ids carried by Source-Service-ID.",
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}}
+                ]
+            },
+            "plaintext_metadata_service_ids": {
+                "description": "Stable service core ids allowed to send visible notification metadata.",
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}}
+                ]
+            },
+            "gateway_service_id": {
+                "type": ["string", "null"],
+                "description": "Resolvable full DID for this gateway; its stable core is derived for service_id and transport headers."
+            },
+            "gateway_service_method_history_head": {"type": ["string", "null"], "minLength": 1},
+            "gateway_service_version_id": {"type": ["string", "null"], "minLength": 1},
             "require_message_signatures": {"type": "boolean", "default": false},
             "signature_max_skew_seconds": {"type": "integer", "minimum": 1, "default": 300},
             "mtls_verified_header": {"type": "string", "default": "x-client-certificate-verified"},
@@ -232,6 +249,7 @@ fn notify_auth_schema() -> Value {
             },
             "service_principals": {
                 "type": "object",
+                "description": "Per-service authentication profiles keyed by stable service core id.",
                 "additionalProperties": service_principal_schema()
             },
             "nonce_store": {

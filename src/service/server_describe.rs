@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret_wire::{ProfileId, ServiceOperationId};
+use arkret_wire::{FullId, ProfileId, ServiceId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
@@ -18,17 +18,13 @@ use crate::config::NotifyAuthConfig;
 /// extension keys — never as bespoke top-level fields. The product's
 /// private describe surface stays on `/_floria/*`.
 ///
-/// DEFERRED (SDK gap): the schema's `service_kind=push_gateway` branch
-/// additionally requires a top-level `privacy_derivation.push_target_id`
-/// block. The SDK `ServiceDescribe` struct has no `privacy_derivation`
-/// field and exposes no top-level `extra` flatten, so this gateway-only
-/// required block cannot be expressed through the strongly-typed SDK
-/// surface today. It is intentionally NOT fabricated here; emitting it
-/// must wait for an SDK field (tracked as a FLORIA-01 deferred sub-item).
-/// Floria's HMAC push-target-id derivation profile metadata is mirrored
-/// into `limits.x_floria_privacy_derivation` so consumers that read the
-/// floria extension still see it.
-fn floria_service_id(auth: &NotifyAuthConfig) -> arkret_wire::Did {
+/// DEFERRED (deployment-input gap): the SDK can express the canonical
+/// `privacy_derivation.push_target_id` block, but Floria does not yet own
+/// configured salt-epoch and rotation metadata. It is intentionally not
+/// fabricated here. The non-authoritative derivation profile hint remains
+/// mirrored under `limits.x_floria_privacy_derivation` until those inputs
+/// are available.
+fn floria_service_full_id(auth: &NotifyAuthConfig) -> FullId {
     // production_mode enforces a configured gateway_service_id; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
@@ -36,10 +32,36 @@ fn floria_service_id(auth: &NotifyAuthConfig) -> arkret_wire::Did {
         .gateway_service_id
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    arkret_wire::Did::new(raw).unwrap_or_else(|_| {
-        arkret_wire::Did::new("did:web:floria.invalid".to_owned())
+    FullId::new(raw).unwrap_or_else(|_| {
+        FullId::new("did:web:floria.invalid".to_owned())
             .expect("static placeholder DID is well-formed")
     })
+}
+
+fn floria_service_identity(
+    auth: &NotifyAuthConfig,
+) -> (ServiceId, arkret_models_identity::ResolutionCommitment) {
+    let full_id = floria_service_full_id(auth);
+    let service_id = ServiceId::from(
+        arkret_wire::project_full_id_to_core_id(&full_id)
+            .expect("configured full DID was validated at startup"),
+    );
+    let method_history_head = auth
+        .gateway_service_method_history_head
+        .clone()
+        .unwrap_or_else(|| "development-unverified".to_owned());
+    let version_id = auth
+        .gateway_service_version_id
+        .clone()
+        .unwrap_or_else(|| "development-unverified".to_owned());
+    (
+        service_id,
+        arkret_models_identity::ResolutionCommitment {
+            full_id,
+            method_history_head,
+            version_id,
+        },
+    )
 }
 
 #[handler]
@@ -81,7 +103,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     // empty. The `development_mode=true => verified_profiles=[]`
     // invariant (validated by `ServiceDescribe::validate`) is trivially
     // upheld.
-    let development_mode = false;
+    let development_mode = !auth.production_mode;
     let verified_profiles: Vec<arkret_models_discovery::VerifiedProfileEntry> = Vec::new();
 
     let supported_profiles = describe_supported_profiles(auth);
@@ -136,10 +158,9 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         "x_floria_rate_limit_scopes".to_owned(),
         json!(rate_limit_scopes),
     );
-    // DEFERRED mirror — see module doc: canonical top-level
-    // `privacy_derivation` cannot be expressed via the SDK struct yet, so
-    // the floria derivation profile metadata is surfaced under the floria
-    // extension namespace until the SDK gains the strong field.
+    // DEFERRED mirror — see module doc: canonical epoch/rotation deployment
+    // inputs are not configured yet, so only the profile hint is surfaced
+    // under Floria's extension namespace.
     limits.insert(
         "x_floria_privacy_derivation".to_owned(),
         json!({
@@ -174,8 +195,10 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         arkret_models_discovery::PlaintextVisibility::none()
     };
 
+    let (service_id, service_resolution) = floria_service_identity(auth);
     let body = arkret_models_discovery::ServiceDescribe {
-        service_id: floria_service_id(auth),
+        service_id,
+        service_resolution,
         // DEFERRED: floria has no configured deployment trust domain; a
         // stable placeholder is emitted until a `trust_domain` config
         // field is wired in (see module doc / FLORIA-01 deferred items).

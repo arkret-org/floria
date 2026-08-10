@@ -524,7 +524,7 @@ mod tests {
         let limiter = NotifyRateLimiter::new(config());
         let checks = vec![NotifyRateLimitCheck {
             scope: "origin_service",
-            subject: "did:web:sync.example.com".to_owned(),
+            subject: "ak:did_core:web:sync.example.com".to_owned(),
             limit: 1,
             units: 1,
         }];
@@ -532,7 +532,7 @@ mod tests {
         assert!(limiter.check_many(&checks).is_ok());
         let rejection = limiter.check_many(&checks).unwrap_err();
         assert_eq!(rejection.scope, "origin_service");
-        assert_eq!(rejection.subject, "did:web:sync.example.com");
+        assert_eq!(rejection.subject, "ak:did_core:web:sync.example.com");
         assert_eq!(rejection.limit, 1);
         assert!(rejection.retry_after >= Duration::from_secs(1));
     }
@@ -568,7 +568,7 @@ mod tests {
         let combined = vec![
             NotifyRateLimitCheck {
                 scope: "origin_service",
-                subject: "did:web:sync.example.com".to_owned(),
+                subject: "ak:did_core:web:sync.example.com".to_owned(),
                 limit: 1,
                 units: 1,
             },
@@ -584,7 +584,7 @@ mod tests {
         // origin_service should still be free for a fresh single check.
         let probe = vec![NotifyRateLimitCheck {
             scope: "origin_service",
-            subject: "did:web:sync.example.com".to_owned(),
+            subject: "ak:did_core:web:sync.example.com".to_owned(),
             limit: 1,
             units: 1,
         }];

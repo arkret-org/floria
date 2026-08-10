@@ -79,13 +79,13 @@ http {
   notify_auth {
     bearer_tokens "replace-me"
     // bearer_token_hashes "sha256:<hex-digest>"
-    trusted_service_ids "did:web:sync.example.com"
-    plaintext_metadata_service_ids "did:web:sync.example.com"
+    trusted_service_ids "ak:did_core:web:sync.example.com"
+    plaintext_metadata_service_ids "ak:did_core:web:sync.example.com"
     gateway_service_id "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
-    //   "did:web:sync.example.com" {
+    //   "ak:did_core:web:sync.example.com" {
     //     allow_plaintext_metadata true
     //     // bearer_tokens 仅限非生产；production_mode 会拒绝
     //     bearer_token_hashes "sha256:<hex-digest>"
@@ -122,9 +122,9 @@ http {
 | `notify_dedup.key_prefix` | string | `"floria"` | Redis 去重键前缀 |
 | `notify_auth.bearer_tokens` | string/string[] | — | 非生产 `/notify` 允许的 bearer service token；`production_mode=true` 时会被拒绝 |
 | `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
-| `notify_auth.trusted_service_ids` | string/string[] | — | `/notify` 允许调用的 origin service DID 列表 |
-| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的服务 DID 列表 |
-| `notify_auth.gateway_service_id` | string | — | 期望的 destination gateway DID |
+| `notify_auth.trusted_service_ids` | string/string[] | — | `/notify` 允许调用的 origin service core ID 列表 |
+| `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的 service core ID 列表 |
+| `notify_auth.gateway_service_id` | string | — | gateway 的可解析 full DID；传输 header 使用其 core 投影 |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
 | `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
@@ -132,7 +132,7 @@ http {
 | `notify_auth.mtls_fingerprint_header` | string | `"x-client-certificate-sha256"` | 由入口层注入、携带客户端证书指纹的 header |
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | 由入口层注入、携带客户端证书 Subject DN 的 header |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | 由入口层注入、携带逗号分隔 SAN 列表的 header |
-| `notify_auth.service_principals` | object | — | 以 origin service DID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
+| `notify_auth.service_principals` | object | — | 以 origin service core ID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
 | `internal_auth.bearer_tokens` | string/string[] | — | `/_floria/internal/*`、`/_floria/admin/push/status/*` 使用的内部/运维 bearer token |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | 内部 bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀；两组内部凭据都为空时内部/运维路由 fail-closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
@@ -159,10 +159,12 @@ http {
   }
   notify_auth {
     gateway_service_id "did:web:push.example.com"
+    gateway_service_method_history_head "sha256:<verified-log-head-digest>"
+    gateway_service_version_id "1-<verified-version-id>"
     production_mode true
     require_message_signatures true
     service_principals {
-      "did:web:sync.example.com" {
+      "ak:did_core:web:sync.example.com" {
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_key_id "did:web:sync.example.com#push"

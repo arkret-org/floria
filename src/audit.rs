@@ -160,8 +160,8 @@ mod tests {
         let sink = JsonlAuditSink::new(&path);
         let event = AuditEvent::PolicyAccess {
             request_id: "req-1".to_owned(),
-            origin_service_id: "did:web:sync.example.com".to_owned(),
-            destination_service_id: Some("did:web:push.example.com".to_owned()),
+            origin_service_id: "ak:did_core:web:sync.example.com".to_owned(),
+            destination_service_id: Some("ak:did_core:web:push.example.com".to_owned()),
             access_kind: "e2ee_late_recovery".to_owned(),
         };
 

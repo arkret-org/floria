@@ -53,6 +53,12 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         .as_ref()
         .map(|limiter| describe_rate_limit_scopes(limiter.config()))
         .unwrap_or_default();
+    let gateway_service_id = state
+        .notify_auth
+        .gateway_service_core_id()
+        .ok()
+        .flatten()
+        .map(|id| id.as_str().to_owned());
 
     let body = PushBridgeDescribeOutcome {
         contract: "ak.push.bridge.describe".to_owned(),
@@ -69,7 +75,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // the contract-vs-spec distinction.
         spec_version: Some(arkret_models_integration::push::EXPECTED_SPEC_VERSION.to_owned()),
         gateway: PushBridgeDescribeGatewayDescriptor {
-            service_id: state.notify_auth.gateway_service_id.clone(),
+            service_id: gateway_service_id.clone(),
             supported_profiles: describe_supported_profiles(&state.notify_auth)
                 .into_iter()
                 .map(str::to_owned)
@@ -165,8 +171,8 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             notify_headers: serde_json::json!({
                 "X-Arkret-Request-Id": "req_01js0000000000000000000000",
                 "Idempotency-Key": "notify-01js0000000000000000000000",
-                "X-Arkret-Origin-Service-ID": "did:web:soland.example",
-                "X-Arkret-Destination-Service-ID": state.notify_auth.gateway_service_id,
+                "X-Arkret-Origin-Service-ID": "ak:did_core:web:soland.example",
+                "X-Arkret-Destination-Service-ID": gateway_service_id,
             }),
             // Default interop privacy baseline
             // (`ak.profile.push_gateway.blind_wakeup.v1`): identifying

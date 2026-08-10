@@ -47,7 +47,15 @@ pub(super) fn verify_destination_service_id(
     origin_did: &str,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
-    let Some(expected) = auth.gateway_service_id.as_deref() else {
+    let expected = auth.gateway_service_core_id().map_err(|error| {
+        tracing::error!(request_id, %error, "invalid configured gateway service identity");
+        AuthFailure {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            code: arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
+            message: "gateway service identity is invalid".to_owned(),
+        }
+    })?;
+    let Some(expected) = expected.as_ref() else {
         return Ok(());
     };
     let destination_did = required_header(
@@ -55,18 +63,18 @@ pub(super) fn verify_destination_service_id(
         super::DESTINATION_SERVICE_ID_HEADER,
         "destination service DID is required",
     )?;
-    if destination_did != expected {
+    if destination_did != expected.as_str() {
         tracing::warn!(
             request_id,
             origin_service_id = %origin_did,
             destination_service_id = %destination_did,
             expected_destination_service_id = %expected,
-            "rejecting /notify request for a different gateway DID"
+            "rejecting /notify request for a different gateway service core id"
         );
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-            message: "destination service DID does not match this gateway".to_owned(),
+            message: "destination service id does not match this gateway".to_owned(),
         });
     }
     Ok(())

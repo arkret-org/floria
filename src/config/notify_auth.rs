@@ -18,7 +18,14 @@ pub struct NotifyAuthConfig {
     pub trusted_service_ids: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
     pub plaintext_metadata_service_ids: Vec<String>,
+    /// Resolvable full DID for this gateway. Transport headers continue to
+    /// carry the derived service core id.
     pub gateway_service_id: Option<String>,
+    /// Exact method-history head verified when the gateway full DID was
+    /// registered. Required together with `gateway_service_version_id` in
+    /// production mode so Describe never invents resolution state.
+    pub gateway_service_method_history_head: Option<String>,
+    pub gateway_service_version_id: Option<String>,
     pub require_message_signatures: bool,
     pub signature_max_skew_seconds: u64,
     pub mtls_verified_header: String,
@@ -33,7 +40,7 @@ pub struct NotifyAuthConfig {
     pub production_mode: bool,
     /// When true, a bearer-only request MUST present a recognised
     /// origin_service_id and the gateway will only accept the request
-    /// if that DID has a configured `service_principal` entry whose
+    /// if that service core id has a configured `service_principal` entry whose
     /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
     /// stolen gateway-wide bearer token from being used to impersonate
     /// an arbitrary tenant via the X-Arkret-Origin-Service-ID header.
@@ -66,6 +73,14 @@ impl fmt::Debug for NotifyAuthConfig {
             )
             .field("gateway_service_id", &self.gateway_service_id)
             .field(
+                "gateway_service_method_history_head",
+                &self.gateway_service_method_history_head,
+            )
+            .field(
+                "gateway_service_version_id",
+                &self.gateway_service_version_id,
+            )
+            .field(
                 "require_message_signatures",
                 &self.require_message_signatures,
             )
@@ -91,6 +106,23 @@ impl fmt::Debug for NotifyAuthConfig {
 }
 
 impl NotifyAuthConfig {
+    /// Project the gateway's registered full DID to the stable service id
+    /// carried by service-to-service transport headers.
+    pub fn gateway_service_core_id(&self) -> Result<Option<arkret_wire::ServiceId>> {
+        self.gateway_service_id
+            .as_ref()
+            .map(|raw| {
+                let full_id = arkret_wire::FullId::new(raw.clone()).with_context(
+                    || "http.notify_auth.gateway_service_id must be a resolvable full DID",
+                )?;
+                let core_id = arkret_wire::project_full_id_to_core_id(&full_id).with_context(
+                    || "http.notify_auth.gateway_service_id uses an unsupported DID method",
+                )?;
+                Ok(arkret_wire::ServiceId::from(core_id))
+            })
+            .transpose()
+    }
+
     pub fn enabled(&self) -> bool {
         !self.bearer_tokens.is_empty()
             || !self.bearer_token_hashes.is_empty()
@@ -152,6 +184,35 @@ impl NotifyAuthConfig {
     }
 
     pub fn validate(&self) -> Result<()> {
+        self.gateway_service_core_id()?;
+        for (field, ids) in [
+            ("trusted_service_ids", &self.trusted_service_ids),
+            (
+                "plaintext_metadata_service_ids",
+                &self.plaintext_metadata_service_ids,
+            ),
+        ] {
+            for service_id in ids {
+                arkret_wire::ServiceId::new(service_id.clone()).with_context(|| {
+                    format!("http.notify_auth.{field} entries must be service core ids")
+                })?;
+            }
+        }
+        let history_head = self
+            .gateway_service_method_history_head
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let version_id = self
+            .gateway_service_version_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if history_head.is_some() != version_id.is_some() {
+            bail!(
+                "http.notify_auth.gateway_service_method_history_head and gateway_service_version_id must be configured together"
+            );
+        }
         if self.require_message_signatures && self.service_principals.is_empty() {
             bail!(
                 "http.notify_auth.require_message_signatures requires at least one service_principal"
@@ -162,6 +223,9 @@ impl NotifyAuthConfig {
             &self.bearer_token_hashes,
         )?;
         for (did, principal) in &self.service_principals {
+            arkret_wire::ServiceId::new(did.clone()).with_context(
+                || "http.notify_auth.service_principals keys must be service core ids",
+            )?;
             principal.validate(did)?;
         }
         if self.require_message_signatures && self.replay_window_seconds == 0 {
@@ -188,6 +252,13 @@ impl NotifyAuthConfig {
         }
         if self.gateway_service_id.is_none() {
             bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_id");
+        }
+        if self.gateway_service_method_history_head.is_none()
+            || self.gateway_service_version_id.is_none()
+        {
+            bail!(
+                "http.notify_auth.production_mode requires gateway_service_method_history_head and gateway_service_version_id"
+            );
         }
         if self.service_principals.is_empty() {
             bail!(
@@ -255,6 +326,8 @@ impl Default for NotifyAuthConfig {
             trusted_service_ids: Vec::new(),
             plaintext_metadata_service_ids: Vec::new(),
             gateway_service_id: None,
+            gateway_service_method_history_head: None,
+            gateway_service_version_id: None,
             require_message_signatures: false,
             signature_max_skew_seconds: 300,
             mtls_verified_header: "x-client-certificate-verified".to_owned(),

@@ -1050,6 +1050,7 @@ dependencies = [
  "anyhow",
  "arkret-egress-policy",
  "arkret-models-discovery",
+ "arkret-models-identity",
  "arkret-models-integration",
  "arkret-push-policy",
  "arkret-rate-limit",

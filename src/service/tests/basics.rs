@@ -91,9 +91,9 @@ async fn describe_endpoint_advertises_gateway_profile() {
 async fn describe_separates_claim_levels() {
     // T6.1 — push gateway describe response MUST partition into
     // wire-callable operations + claim-level arrays. floria has no
-    // dedicated dev toggle, so development_mode is `false` here; the
-    // spec invariant (development_mode=true => verified_profiles=[]) is
-    // still trivially exercised — an empty verified list means no
+    // production posture is explicit, so the default service is described as
+    // development-mode; the invariant (development_mode=true =>
+    // verified_profiles=[]) is exercised directly — an empty list means no
     // cotest_verified entry can leak into a dev posture.
     let service = test_service(vec![(
         "com.example.app",
@@ -192,7 +192,7 @@ async fn describe_does_not_advertise_media_token_self_issue() {
 async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
     let mut auth = production_notify_auth_config();
     auth.service_principals
-        .get_mut("did:web:sync.example.com")
+        .get_mut("ak:did_core:web:sync.example.com")
         .unwrap()
         .bearer_token_hashes = vec![crate::auth::bearer_token_sha256_hex("fallback-token")];
     let service = test_service_with_auth(

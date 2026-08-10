@@ -16,6 +16,7 @@ base64 = {workspace = true}
 blake2 = {workspace = true}
 chacha20poly1305 = {workspace = true}
 arkret-models-discovery = {workspace = true,default-features = false}
+arkret-models-identity = {workspace = true,default-features = false}
 arkret-models-integration = {workspace = true,default-features = false}
 arkret-push-policy = {workspace = true,default-features = false}
 arkret-rate-limit.workspace = true
@@ -81,6 +82,7 @@ base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10"
 arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery",default-features = false}
+arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity",default-features = false}
 arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration",default-features = false}
 arkret-push-policy = {path = "../arkret-rust-sdk/crates/push-policy",default-features = false}
 arkret-rate-limit = {path = "../arkret-rust-sdk/crates/rate-limit",default-features = false}

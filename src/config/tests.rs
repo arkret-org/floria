@@ -248,7 +248,7 @@ fn parses_plaintext_metadata_service_ids_and_endpoint_rate_limit() {
         r#"
 http:
   notify_auth:
-    plaintext_metadata_service_ids: did:web:sync.example.com
+    plaintext_metadata_service_ids: ak:did_core:web:sync.example.com
   notify_rate_limits:
     per_endpoint: 10
 apps: {}
@@ -258,7 +258,7 @@ apps: {}
 
     assert_eq!(
         config.http.notify_auth.plaintext_metadata_service_ids,
-        vec!["did:web:sync.example.com"]
+        vec!["ak:did_core:web:sync.example.com"]
     );
     assert_eq!(config.http.notify_rate_limits.per_endpoint, Some(10));
 }
@@ -305,6 +305,8 @@ fn production_mode_requires_signed_or_mtls_principal() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         ..Default::default()
@@ -313,7 +315,7 @@ fn production_mode_requires_signed_or_mtls_principal() {
         .http
         .notify_auth
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let error = config.validate().unwrap_err().to_string();
     assert!(
@@ -327,6 +329,8 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
@@ -337,7 +341,7 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
         .http
         .notify_auth
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let error = config.validate().unwrap_err().to_string();
     assert!(
@@ -351,6 +355,8 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
@@ -361,12 +367,12 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
         .http
         .notify_auth
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let error = config.validate().unwrap_err().to_string();
     assert!(
         error.contains(
-            "rejects plaintext bearer_tokens on service_principals.did:web:sync.example.com"
+            "rejects plaintext bearer_tokens on service_principals.ak:did_core:web:sync.example.com"
         ),
         "unexpected error: {error}"
     );
@@ -377,6 +383,8 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("b".repeat(64)),
@@ -388,7 +396,7 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
         .http
         .notify_auth
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     let error = config.validate().unwrap_err().to_string();
     assert!(
@@ -402,6 +410,8 @@ fn production_mode_accepts_signed_eligible_principal() {
     let mut config = Config::default();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
+    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
         signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("c".repeat(64)),
@@ -413,7 +423,7 @@ fn production_mode_accepts_signed_eligible_principal() {
         .http
         .notify_auth
         .service_principals
-        .insert("did:web:sync.example.com".to_owned(), principal);
+        .insert("ak:did_core:web:sync.example.com".to_owned(), principal);
 
     config
         .validate()

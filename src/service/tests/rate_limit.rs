@@ -43,14 +43,22 @@ async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
-        .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
         .json(&payload(vec![
             device("com.example.app", "two"),
             device("com.example.app", "three"),
@@ -190,7 +198,11 @@ async fn dedup_replay_bypasses_rate_limit() {
 
     for _ in 0..2 {
         let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
-            .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
+            .add_header(
+                SOURCE_SERVICE_ID_HEADER,
+                "ak:did_core:web:sync.example.com",
+                true,
+            )
             .add_header("idempotency-key", "notify-123", true)
             .json(&request_body)
             .send(&service)
