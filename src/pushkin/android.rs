@@ -193,15 +193,20 @@ mod tests {
             membership: None,
             sender_actor_display_name: Some("Major Tom".to_owned()),
             event_id: Some(
-                arkret_wire::EventId::new("ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS").unwrap(),
+                arkret_wire::EventId::new("ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS")
+                    .unwrap(),
             ),
             message_id: Some(
-                arkret_wire::MessageId::new("ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1")
-                    .unwrap(),
+                arkret_wire::MessageId::new(
+                    "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
+                )
+                .unwrap(),
             ),
             strand_id: Some(
-                arkret_wire::StrandId::new("ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD")
-                    .unwrap(),
+                arkret_wire::StrandId::new(
+                    "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
+                )
+                .unwrap(),
             ),
             route_tokens: Some(RouteTokens {
                 realm_route_token: Some("realm_route_token_000000001".to_owned()),
@@ -301,13 +306,17 @@ mod tests {
                 membership: Some("invite".to_owned()),
                 sender_actor_display_name: Some("Major Tom".to_owned()),
                 event_id: Some(
-                    arkret_wire::EventId::new("ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS")
-                        .unwrap(),
+                    arkret_wire::EventId::new(
+                        "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
+                    )
+                    .unwrap(),
                 ),
                 message_id: None,
                 strand_id: Some(
-                    arkret_wire::StrandId::new("ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD")
-                        .unwrap(),
+                    arkret_wire::StrandId::new(
+                        "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
+                    )
+                    .unwrap(),
                 ),
                 user_is_target: Some(true),
                 push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),

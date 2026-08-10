@@ -324,9 +324,9 @@ fn sanitizer_strips_nested_route_token_metadata() {
 
 #[test]
 fn build_blind_provider_data_never_emits_route_tokens() {
-    // Realm + Circle ids must be canonical lower-case UUIDv7 to satisfy
-    // the SDK `EffectiveScope` deserializer (which is strict per
-    // `conformance/encoding.md` §4).
+    // Any Realm/Circle identifiers in provider-facing scope data must remain
+    // complete typed 44-character event tokens; this blind payload carries
+    // only opaque route tokens.
     let notification: Notification = serde_json::from_value(json!({
         "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
