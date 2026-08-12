@@ -1,122 +1,100 @@
+use arkret_models_integration::{
+    IntegrationDependencyDescriptor, IntegrationDescribeOutcome, IntegrationSurfaceDescriptor,
+};
+use arkret_wire::{ProfileId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use serde::Serialize;
-use serde_json::Value;
 
-#[derive(Debug, Serialize)]
-struct IntegrationDescribeOutcome {
-    contract: &'static str,
-    version: &'static str,
-    service: &'static str,
-    service_kind: &'static str,
-    api_base_path: &'static str,
-    describe_path: &'static str,
-    dependencies: Vec<IntegrationDependencyDescriptor>,
-    surfaces: Vec<IntegrationSurfaceDescriptor>,
-    examples: Value,
-}
-
-#[derive(Debug, Serialize)]
-struct IntegrationDependencyDescriptor {
-    service: &'static str,
-    purpose: &'static str,
-    required_contract: &'static str,
-    discovery_path: &'static str,
-    mode: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct IntegrationSurfaceDescriptor {
-    name: &'static str,
-    method: &'static str,
-    path: &'static str,
-    contract: &'static str,
-    stability: &'static str,
-    description: &'static str,
-}
-
+/// `GET /_floria/integration/describe` emits the shared SDK integration
+/// manifest (`arkret_models_integration::IntegrationDescribeOutcome`).
+///
+/// The shape MUST come from the SDK: chime deserializes this exact route with
+/// the SDK type (`floria_integration_describe`), so a product-local mirror
+/// silently breaks the client the moment the SDK adds or renames a required
+/// field.
 #[handler]
 pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response) {
     res.status_code(StatusCode::OK);
     res.render(Json(IntegrationDescribeOutcome {
-        contract: "arkret.rest.integration_manifest.v1",
-        version: "2026-05-07",
-        service: "floria",
-        service_kind: "push_gateway",
-        api_base_path: "/_floria",
-        describe_path: "/_floria/integration/describe",
+        // Canonical manifest contract id per the SDK
+        // (`models-integration/src/integration.rs`).
+        contract: "ak.integration.manifest.v1".to_owned(),
+        version: "2026-05-07".to_owned(),
+        service: "floria".to_owned(),
+        service_kind: "push_gateway".to_owned(),
+        api_base_path: "/_floria".to_owned(),
+        describe_path: "/_floria/integration/describe".to_owned(),
         dependencies: vec![
             IntegrationDependencyDescriptor {
-                service: "soland",
-                purpose: "principal_outbound_push_delivery",
-                required_contract: "arkret.rest.outbound_push_bridge.v1",
-                discovery_path: "/_soland/edge/push/outbound/bridge/describe",
-                mode: "remote_principal_contract",
+                service: "soland".to_owned(),
+                purpose: "principal_outbound_push_delivery".to_owned(),
+                // Names the contract soland actually publishes at the
+                // discovery path below; it is a product-local soland id with
+                // no SDK/spec counterpart, so it is quoted verbatim rather
+                // than mapped onto an invented `ak.*` id.
+                required_contract: "arkret.rest.outbound_push_bridge.v1".to_owned(),
+                discovery_path: "/_soland/edge/push/outbound/bridge/describe".to_owned(),
+                mode: "remote_principal_contract".to_owned(),
             },
             IntegrationDependencyDescriptor {
-                service: "chime",
-                purpose: "client_sdk_consumption",
-                required_contract: "ak.push.bridge.describe",
-                discovery_path: "/_floria/push/bridge/describe",
-                mode: "sdk_contract_discovery",
+                service: "chime".to_owned(),
+                purpose: "client_sdk_consumption".to_owned(),
+                required_contract: "ak.push.bridge.v1".to_owned(),
+                discovery_path: "/_floria/push/bridge/describe".to_owned(),
+                mode: "sdk_contract_discovery".to_owned(),
             },
         ],
         surfaces: vec![
             IntegrationSurfaceDescriptor {
-                name: "push_bridge",
-                method: "GET",
-                path: "/_floria/push/bridge/describe",
-                contract: "ak.push.bridge.describe",
-                stability: "active",
-                description: "GET /_floria/push/bridge/describe exposes the frozen provider capability matrix; consumers should pin provider_capabilities_version.",
+                name: "push_bridge".to_owned(),
+                method: "GET".to_owned(),
+                path: "/_floria/push/bridge/describe".to_owned(),
+                // Surface label for the bridge-describe endpoint; the payload's
+                // own contract id is `ak.push.bridge.v1` (see the chime
+                // dependency above).
+                contract: "ak.push.bridge.describe".to_owned(),
+                stability: "active".to_owned(),
+                todo: "the provider capability matrix is self-declared and unattested; consumers must pin provider_capabilities_version to detect a silent matrix change.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
-                name: "push_notify",
-                method: "POST",
-                path: "/_arkret/edge/push/notify",
-                contract: "ak.edge.push.command.notify",
-                stability: "active",
-                description: "POST /_arkret/edge/push/notify enforces blind-wakeup, dedup, rate limit, and HTTP Message Signature when configured.",
+                name: "push_notify".to_owned(),
+                method: "POST".to_owned(),
+                path: "/_arkret/edge/push/notify".to_owned(),
+                contract: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned(),
+                stability: "active".to_owned(),
+                todo: "dedup, rate limit, HTTP Message Signature and mTLS are enforced only for the modes the deployment configures; the contract itself mandates none of them.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
-                name: "gateway_describe",
-                method: "GET",
-                path: "/_arkret/describe",
-                contract: "ak.profile.push_gateway.v1",
-                stability: "active",
-                description: "GET /_arkret/describe advertises the gateway profile at the root meta position; it is the only protocol-surface describe and is kept in sync with bridge/describe.",
+                name: "gateway_describe".to_owned(),
+                method: "GET".to_owned(),
+                path: "/_arkret/describe".to_owned(),
+                contract: ProfileId::PUSH_GATEWAY_V1.to_owned(),
+                stability: "active".to_owned(),
+                todo: "profiles are self-claimed only (no cotest verifier is wired in, so verified_profiles is always empty) and trust_domain / privacy_derivation still emit deployment placeholders.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
-                name: "health",
-                method: "GET",
-                path: "/health",
-                contract: "plain_text_health_probe.v1",
-                stability: "active",
-                description: "GET /health is the liveness probe surface and intentionally returns an empty plain-text body.",
+                name: "ready".to_owned(),
+                method: "GET".to_owned(),
+                path: "/ready".to_owned(),
+                contract: "plain_text_readiness_probe.v1".to_owned(),
+                stability: "active".to_owned(),
+                todo: "readiness covers the auth and dedup dependencies only; provider upstream reachability is not probed.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
-                name: "ready",
-                method: "GET",
-                path: "/ready",
-                contract: "plain_text_readiness_probe.v1",
-                stability: "active",
-                description: "GET /ready verifies auth and dedup dependencies before returning plain-text `ok`.",
+                name: "readyz".to_owned(),
+                method: "GET".to_owned(),
+                path: "/readyz".to_owned(),
+                contract: "json_strict_readiness_probe.v1".to_owned(),
+                stability: "active".to_owned(),
+                todo: "readyz checks the provider registry and Redis-backed dependencies; per-provider credentials are not validated.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
-                name: "readyz",
-                method: "GET",
-                path: "/readyz",
-                contract: "json_strict_readiness_probe.v1",
-                stability: "active",
-                description: "GET /readyz verifies the provider registry is populated and enabled Redis-backed dependencies answer PING.",
-            },
-            IntegrationSurfaceDescriptor {
-                name: "metrics",
-                method: "GET",
-                path: "/metrics",
-                contract: "prometheus.text.0.0.4",
-                stability: "active",
-                description: "Prometheus scrape surface is served on the dedicated metrics listener when metrics are enabled.",
+                name: "metrics".to_owned(),
+                method: "GET".to_owned(),
+                path: "/metrics".to_owned(),
+                contract: "prometheus.text.0.0.4".to_owned(),
+                stability: "active".to_owned(),
+                todo: "the scrape surface is unauthenticated and is served only when the dedicated metrics listener is enabled.".to_owned(),
             },
         ],
         examples: serde_json::json!({
@@ -138,5 +116,9 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 }
             }
         }),
+        todos: vec![
+            "wire a cotest verifier so the push gateway profile moves from self-claimed to verified in /_arkret/describe.".to_owned(),
+            "configure the deployment trust_domain and push_target_id salt-epoch inputs so /_arkret/describe stops emitting placeholders.".to_owned(),
+        ],
     }));
 }

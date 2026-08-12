@@ -108,17 +108,16 @@ impl fmt::Debug for NotifyAuthConfig {
 impl NotifyAuthConfig {
     /// Project the gateway's registered full DID to the stable service id
     /// carried by service-to-service transport headers.
-    pub fn gateway_service_core_id(&self) -> Result<Option<arkret_wire::ServiceId>> {
+    pub fn gateway_service_core_id(&self) -> Result<Option<arkret_wire::DidCoreId>> {
         self.gateway_service_id
             .as_ref()
             .map(|raw| {
-                let full_id = arkret_wire::FullId::new(raw.clone()).with_context(
+                let full_id = arkret_wire::DidFullId::new(raw.clone()).with_context(
                     || "http.notify_auth.gateway_service_id must be a resolvable full DID",
                 )?;
-                let core_id = arkret_wire::project_full_id_to_core_id(&full_id).with_context(
+                arkret_wire::project_full_id_to_core_id(&full_id).with_context(
                     || "http.notify_auth.gateway_service_id uses an unsupported DID method",
-                )?;
-                Ok(arkret_wire::ServiceId::from(core_id))
+                )
             })
             .transpose()
     }
@@ -193,7 +192,7 @@ impl NotifyAuthConfig {
             ),
         ] {
             for service_id in ids {
-                arkret_wire::ServiceId::new(service_id.clone()).with_context(|| {
+                arkret_wire::DidCoreId::new(service_id.clone()).with_context(|| {
                     format!("http.notify_auth.{field} entries must be service core ids")
                 })?;
             }
@@ -223,7 +222,7 @@ impl NotifyAuthConfig {
             &self.bearer_token_hashes,
         )?;
         for (did, principal) in &self.service_principals {
-            arkret_wire::ServiceId::new(did.clone()).with_context(
+            arkret_wire::DidCoreId::new(did.clone()).with_context(
                 || "http.notify_auth.service_principals keys must be service core ids",
             )?;
             principal.validate(did)?;

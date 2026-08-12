@@ -267,7 +267,6 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"push_bridge"));
     assert!(surface_names.contains(&"push_notify"));
     assert!(surface_names.contains(&"gateway_describe"));
-    assert!(surface_names.contains(&"health"));
     assert!(surface_names.contains(&"ready"));
     assert!(surface_names.contains(&"readyz"));
     assert!(surface_names.contains(&"metrics"));

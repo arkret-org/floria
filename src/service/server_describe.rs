@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret_wire::{FullId, ProfileId, ServiceId, ServiceOperationId};
+use arkret_wire::{DidCoreId, DidFullId, ProfileId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
@@ -24,7 +24,7 @@ use crate::config::NotifyAuthConfig;
 /// fabricated here. The non-authoritative derivation profile hint remains
 /// mirrored under `limits.x_floria_privacy_derivation` until those inputs
 /// are available.
-fn floria_service_full_id(auth: &NotifyAuthConfig) -> FullId {
+fn floria_service_full_id(auth: &NotifyAuthConfig) -> DidFullId {
     // production_mode enforces a configured gateway_service_id; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
@@ -32,20 +32,18 @@ fn floria_service_full_id(auth: &NotifyAuthConfig) -> FullId {
         .gateway_service_id
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    FullId::new(raw).unwrap_or_else(|_| {
-        FullId::new("did:web:floria.invalid".to_owned())
+    DidFullId::new(raw).unwrap_or_else(|_| {
+        DidFullId::new("did:web:floria.invalid".to_owned())
             .expect("static placeholder DID is well-formed")
     })
 }
 
 fn floria_service_identity(
     auth: &NotifyAuthConfig,
-) -> (ServiceId, arkret_models_identity::ResolutionCommitment) {
+) -> (DidCoreId, arkret_models_identity::ResolutionCommitment) {
     let full_id = floria_service_full_id(auth);
-    let service_id = ServiceId::from(
-        arkret_wire::project_full_id_to_core_id(&full_id)
-            .expect("configured full DID was validated at startup"),
-    );
+    let service_id = arkret_wire::project_full_id_to_core_id(&full_id)
+        .expect("configured full DID was validated at startup");
     let method_history_head = auth
         .gateway_service_method_history_head
         .clone()

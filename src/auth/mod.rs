@@ -83,7 +83,7 @@ pub async fn authenticate_notify_request(
 
     let origin_did = optional_header(req, SOURCE_SERVICE_ID_HEADER);
     if let Some(origin_service_id) = origin_did.as_ref()
-        && arkret_wire::ServiceId::new(origin_service_id.clone()).is_err()
+        && arkret_wire::DidCoreId::new(origin_service_id.clone()).is_err()
     {
         return Err(AuthFailure {
             status: StatusCode::BAD_REQUEST,

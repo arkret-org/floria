@@ -104,7 +104,7 @@ PostgreSQL is optional and used only for deactivation queue draining.
 - OPPO / OPlus / OnePlus server push
 - vivo Push server push
 - Xiaomi Mi Push server push
-- WebPush / VAPID (requires building with `--features webpush-provider`; not in the default build)
+- WebPush / VAPID (in the default build; opt out with `--no-default-features`)
 - `FLORIA_CONF` env var
 - `HTTPS_PROXY` env var fallback for outbound proxying
 - KDL config (default) and YAML config, detected by file extension

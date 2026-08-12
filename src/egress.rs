@@ -40,16 +40,12 @@ impl Resolve for EgressGuardResolver {
 
 pub fn validate_http_url_for_egress(raw_url: &str, purpose: &str) -> Result<Url, String> {
     let url = Url::parse(raw_url).map_err(|error| format!("{purpose}: invalid URL: {error}"))?;
-    validate_url_for_egress(&url, purpose, false)?;
+    validate_url_for_egress(&url, purpose)?;
     Ok(url)
 }
 
-pub fn validate_url_for_egress(
-    url: &Url,
-    purpose: &str,
-    local_development: bool,
-) -> Result<(), String> {
-    let policy = policy(local_development);
+pub fn validate_url_for_egress(url: &Url, purpose: &str) -> Result<(), String> {
+    let policy = OutboundPolicy::public_https();
     policy
         .validate_url(url)
         .map_err(|error| format!("{purpose}: {error}"))?;
@@ -65,14 +61,6 @@ pub fn validate_url_for_egress(
     policy
         .validate_resolved_addresses(&resolved)
         .map_err(|error| format!("{purpose}: {error}"))
-}
-
-fn policy(local_development: bool) -> OutboundPolicy {
-    if local_development {
-        OutboundPolicy::local_development()
-    } else {
-        OutboundPolicy::public_https()
-    }
 }
 
 #[cfg(test)]
@@ -91,17 +79,8 @@ mod tests {
             "https://[::1]/audit",
         ] {
             let url = Url::parse(raw).unwrap();
-            assert!(validate_url_for_egress(&url, "test", false).is_err());
+            assert!(validate_url_for_egress(&url, "test").is_err());
         }
-    }
-
-    #[test]
-    fn local_development_only_adds_http_loopback() {
-        let loopback = Url::parse("http://127.0.0.1:5001/audit").unwrap();
-        assert!(validate_url_for_egress(&loopback, "test", true).is_ok());
-
-        let private = Url::parse("http://10.0.0.1:5001/audit").unwrap();
-        assert!(validate_url_for_egress(&private, "test", true).is_err());
     }
 
     #[test]
@@ -113,7 +92,7 @@ mod tests {
         ] {
             let url = Url::parse(raw).unwrap();
             assert!(
-                validate_url_for_egress(&url, "test", false).is_err(),
+                validate_url_for_egress(&url, "test").is_err(),
                 "expected {raw} to be blocked"
             );
         }

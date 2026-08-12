@@ -66,6 +66,16 @@ pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
     fn kind(&self) -> &'static str;
     fn handles_app_id(&self, app_id: &str) -> bool;
+    /// Whether this adapter actually emits a provider-side collapse /
+    /// replace key. `ProviderCapabilities::supports_collapse` only states
+    /// that the upstream protocol has such a field; the bridge descriptor
+    /// advertises collapse support as the AND of the two, so an adapter that
+    /// does not emit the key never claims it.
+    ///
+    /// An implementation that starts emitting one MUST mint a fresh
+    /// per-message random value: never derive an APNS `apns-collapse-id`,
+    /// FCM `collapse_key`, WebPush topic or OEM equivalent from `realm_id`,
+    /// `strand_id`, route tokens, or any other stable scope identifier.
     fn emits_collapse_key(&self) -> bool {
         false
     }
@@ -642,20 +652,6 @@ fn counts_badge_count(counts: &Counts) -> Option<u64> {
         })
 }
 
-/// Generate a fresh random base64url collapse key for future provider
-/// collapse/dedup support.
-///
-/// No current adapter emits provider-side collapse keys. Keep this as
-/// the single reference implementation for future APNS `apns-collapse-id`,
-/// FCM `collapse_key`, WebPush topic, or OEM equivalent wiring: never
-/// derive those values from `realm_id`, `strand_id`, route tokens, or
-/// any other stable scope identifier.
-pub fn random_collapse_key() -> String {
-    use base64::Engine;
-    let bytes: [u8; 16] = uuid::Uuid::new_v4().into_bytes();
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
-}
-
 #[cfg(test)]
 mod sanitize_tests {
     use serde_json::json;
@@ -884,13 +880,5 @@ mod sanitize_tests {
             };
             assert_eq!(notification_badge_count(&notification), expected);
         }
-    }
-
-    #[test]
-    fn random_collapse_key_does_not_leak_scope() {
-        let a = random_collapse_key();
-        let b = random_collapse_key();
-        assert_ne!(a, b);
-        assert!(!a.contains("ak:"));
     }
 }

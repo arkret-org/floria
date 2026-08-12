@@ -63,7 +63,11 @@ uuid = {workspace = true,features = ["serde", "v4"]}
 x509-parser = {workspace = true}
 
 [features]
-default = []
+# WebPush is the only browser delivery channel, and the config schema, sample
+# configs and deployment docs all treat it as a first-class provider, so it
+# ships by default. Leaving it opt-in meant the released image rejected
+# `kind: webpush` at startup while CI compiled and tested the whole provider.
+default = ["webpush-provider"]
 webpush-provider = []
 
 [dev-dependencies]

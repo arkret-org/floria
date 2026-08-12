@@ -372,7 +372,7 @@ impl WebpushPushkin {
     fn validate_endpoint_for_egress(&self, endpoint: &str) -> Result<(), String> {
         let url = Url::parse(endpoint)
             .map_err(|error| format!("webpush endpoint: invalid URL: {error}"))?;
-        crate::egress::validate_url_for_egress(&url, "webpush endpoint", false)
+        crate::egress::validate_url_for_egress(&url, "webpush endpoint")
     }
 
     fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
@@ -962,20 +962,6 @@ mod tests {
                 "forbidden field `{forbidden}` should not appear in webpush payload"
             );
         }
-    }
-
-    #[test]
-    fn random_collapse_key_does_not_leak_scope_id() {
-        let a = super::super::random_collapse_key();
-        let b = super::super::random_collapse_key();
-        // Per-message randomness — two adjacent calls must differ.
-        assert_ne!(a, b);
-        // base64url alphabet only — no `ak:` or other typed-id substrings.
-        assert!(!a.contains(':'));
-        assert!(
-            a.chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-        );
     }
 
     #[test]

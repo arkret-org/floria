@@ -6,7 +6,7 @@
 //! (`event_id` / `realm_id` / `space_id` / `strand_id` / `message_id` / sender /
 //! space-name / strand-name / `target_did` / call-setup material …) that
 //! used to leak via the freeform data dictionary. Coverage is split
-//! across three layers:
+//! across two layers:
 //!
 //!   1. **Builder snapshots** — drive `pushkin::sanitized_provider_payload` with payload trees that
 //!      include forbidden keys and assert that they are stripped (or the request is rejected).
@@ -14,9 +14,6 @@
 //!      callers carrying plaintext metadata and assert that the response is `failed_precondition`
 //!      (412) with the `plaintext_in_blind_profile` reason; `notification.content` is rejected
 //!      earlier as an unknown product-private field.
-//!   3. **WebPush collapse key randomness** — drive `pushkin::random_collapse_key` to confirm two
-//!      consecutive calls produce different opaque base64url tokens that don't embed any `ak:` /
-//!      typed-id substring.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,8 +25,7 @@ use floria::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use floria::error::DispatchError;
 use floria::models::{Device, NotificationContext, PushNotification as Notification};
 use floria::pushkin::{
-    Pushkin, PushkinRegistry, build_blind_provider_data, random_collapse_key,
-    sanitized_provider_payload,
+    Pushkin, PushkinRegistry, build_blind_provider_data, sanitized_provider_payload,
 };
 use floria::service::build_router;
 use salvo::http::StatusCode;
@@ -360,41 +356,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
 }
 
 // ---------------------------------------------------------------------------
-// (2) WebPush collapse-key randomness.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn webpush_collapse_key_is_random_and_opaque() {
-    let keys: Vec<_> = (0..20).map(|_| random_collapse_key()).collect();
-    let unique: std::collections::HashSet<_> = keys.iter().cloned().collect();
-    assert_eq!(
-        unique.len(),
-        keys.len(),
-        "random_collapse_key collisions in 20 samples: {keys:?}"
-    );
-    for key in &keys {
-        assert!(
-            !key.contains(':'),
-            "collapse key must not contain `:` (would embed typed id): {key}"
-        );
-        assert!(
-            !key.to_ascii_lowercase().contains("ak:"),
-            "collapse key must not contain `ak:` substring: {key}"
-        );
-        assert!(
-            !key.to_ascii_lowercase().contains("did:"),
-            "collapse key must not contain `did:` substring: {key}"
-        );
-        assert!(
-            key.chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'),
-            "collapse key must be base64url-only: {key}"
-        );
-    }
-}
-
-// ---------------------------------------------------------------------------
-// (3) HTTP-level profile gating.
+// (2) HTTP-level profile gating.
 // ---------------------------------------------------------------------------
 
 struct AcceptPushkin;
