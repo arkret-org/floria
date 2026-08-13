@@ -6,6 +6,9 @@ rust-version = "1.97"
 license = "Apache-2.0"
 description = "arkret-compatible push gateway service with APNS, FCM, WebPush, and domestic Android OEM providers."
 
+[lints]
+workspace = true
+
 [dependencies]
 # Push and service wire models come from the edge leaf; HTTP signatures use
 # the transport-only signatures feature so the gateway does not compile core.
@@ -77,6 +80,15 @@ salvo = {workspace = true,features = ["test"]}
 
 [workspace]
 resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+mem_forget = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [workspace.dependencies]
 anyhow = "1.0.102"

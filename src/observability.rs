@@ -269,6 +269,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        unsafe_code,
+        reason = "the test mutates RUST_LOG before constructing the filter"
+    )]
     fn build_env_filter_falls_back_to_level() {
         let config = LogSetupConfig {
             level: TracingLevel::Warn,
