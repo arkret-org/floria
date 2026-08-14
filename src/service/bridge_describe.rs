@@ -62,8 +62,9 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
 
     let body = PushBridgeDescribeOutcome {
         // Canonical bridge-outcome contract id (SDK
-        // `models-integration/src/push.rs`). `ak.push.bridge.describe` is the
-        // *surface* label for this route, not the payload's contract.
+        // `models-integration/src/push.rs`). This is the single id for this
+        // route: the integration-describe surface, soland's accepted-contract
+        // list and chime's drift cache all reference the same value.
         contract: "ak.push.bridge.v1".to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the

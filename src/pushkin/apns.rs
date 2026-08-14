@@ -657,7 +657,7 @@ fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Resul
         .tls_backend_rustls()
         .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
         .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-        .dns_resolver(crate::egress::EgressGuardResolver::new())
+        .dns_resolver(crate::egress::dns_resolver())
         .redirect(reqwest::redirect::Policy::none())
         .http2_adaptive_window(true);
     if let Some(proxy) = proxy {

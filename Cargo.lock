@@ -158,6 +158,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-egress-reqwest"
+version = "0.3.0"
+dependencies = [
+ "arkret-egress-policy",
+ "reqwest",
+ "thiserror 2.0.19",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "arkret-identifiers"
 version = "0.3.0"
 dependencies = [
@@ -1048,7 +1059,7 @@ version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
- "arkret-egress-policy",
+ "arkret-egress-reqwest",
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-models-integration",

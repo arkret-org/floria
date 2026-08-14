@@ -129,7 +129,7 @@ impl FcmPushkin {
             .user_agent("floria")
             .connect_timeout(super::reqwest_support::CONNECT_TIMEOUT)
             .timeout(super::reqwest_support::REQUEST_TIMEOUT)
-            .dns_resolver(crate::egress::EgressGuardResolver::new())
+            .dns_resolver(crate::egress::dns_resolver())
             .redirect(reqwest::redirect::Policy::none())
             .http2_adaptive_window(true);
         if let Some(proxy) = config.outbound_proxy() {

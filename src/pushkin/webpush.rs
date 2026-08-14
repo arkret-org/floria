@@ -367,7 +367,7 @@ impl WebpushPushkin {
 
     /// Validate the endpoint against the egress blocklist before building
     /// the request. The shared reqwest client also installs
-    /// `EgressGuardResolver`, so every connection re-applies the same
+    /// the shared guarded DNS resolver, so every connection re-applies the same
     /// blocklist at dial time and closes the DNS-rebinding gap.
     fn validate_endpoint_for_egress(&self, endpoint: &str) -> Result<(), String> {
         let url = Url::parse(endpoint)

@@ -1,66 +1,38 @@
-use std::net::{SocketAddr, ToSocketAddrs};
+//! Push-gateway binding of the shared Arkret egress guard.
+//!
+//! The gateway has a single outbound posture — public HTTPS only — so this
+//! module is just the named entry point; the parse/judge/resolve/bind sequence
+//! itself lives in `arkret-egress-reqwest`.
+
 use std::sync::Arc;
 
-use arkret_egress_policy::OutboundPolicy;
+use arkret_egress_reqwest::{EgressGuard, GuardedDnsResolver};
 use reqwest::Url;
-use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
-/// Connect-time adapter for the shared Arkret outbound policy.
-#[derive(Debug, Clone)]
-pub struct EgressGuardResolver;
-
-impl EgressGuardResolver {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
+/// The gateway's outbound posture.
+#[must_use]
+pub fn guard() -> EgressGuard {
+    EgressGuard::public_https()
 }
 
-impl Resolve for EgressGuardResolver {
-    fn resolve(&self, name: Name) -> Resolving {
-        let host = name.as_str().to_owned();
-        Box::pin(async move {
-            type DnsError = Box<dyn std::error::Error + Send + Sync>;
-            let resolved: Vec<SocketAddr> = tokio::task::spawn_blocking(move || {
-                (host.as_str(), 0u16)
-                    .to_socket_addrs()
-                    .map(|addrs| addrs.collect::<Vec<_>>())
-            })
-            .await
-            .map_err(|error| -> DnsError { Box::new(std::io::Error::other(error)) })?
-            .map_err(|error| -> DnsError { Box::new(error) })?;
-
-            OutboundPolicy::public_https()
-                .validate_resolved_addresses(&resolved)
-                .map_err(|error| -> DnsError { Box::new(error) })?;
-            let addrs: Addrs = Box::new(resolved.into_iter());
-            Ok(addrs)
-        })
-    }
+/// Connect-time adapter for the shared Arkret outbound policy.
+#[must_use]
+pub fn dns_resolver() -> Arc<GuardedDnsResolver> {
+    guard().resolver()
 }
 
 pub fn validate_http_url_for_egress(raw_url: &str, purpose: &str) -> Result<Url, String> {
-    let url = Url::parse(raw_url).map_err(|error| format!("{purpose}: invalid URL: {error}"))?;
-    validate_url_for_egress(&url, purpose)?;
-    Ok(url)
+    guard()
+        .lock_str(raw_url, purpose)
+        .map(|target| target.url().clone())
+        .map_err(|error| error.to_string())
 }
 
 pub fn validate_url_for_egress(url: &Url, purpose: &str) -> Result<(), String> {
-    let policy = OutboundPolicy::public_https();
-    policy
-        .validate_url(url)
-        .map_err(|error| format!("{purpose}: {error}"))?;
-    let host = url.host_str().expect("validated URL has a host");
-    if host.parse::<std::net::IpAddr>().is_ok() {
-        return Ok(());
-    }
-    let port = url.port_or_known_default().unwrap_or(443);
-    let resolved = (host, port)
-        .to_socket_addrs()
-        .map_err(|error| format!("{purpose}: DNS resolution for {host} failed: {error}"))?
-        .collect::<Vec<_>>();
-    policy
-        .validate_resolved_addresses(&resolved)
-        .map_err(|error| format!("{purpose}: {error}"))
+    guard()
+        .lock_url(url, purpose)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

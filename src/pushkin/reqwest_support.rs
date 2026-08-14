@@ -36,7 +36,7 @@ pub(super) fn build_reqwest_client(config: &Config, user_agent: &str) -> Result<
         .user_agent(user_agent)
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
-        .dns_resolver(crate::egress::EgressGuardResolver::new())
+        .dns_resolver(crate::egress::dns_resolver())
         .redirect(reqwest::redirect::Policy::none());
     if let Some(proxy) = config.outbound_proxy() {
         builder =

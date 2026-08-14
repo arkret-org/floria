@@ -49,10 +49,12 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 name: "push_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_floria/push/bridge/describe".to_owned(),
-                // Surface label for the bridge-describe endpoint; the payload's
-                // own contract id is `ak.push.bridge.v1` (see the chime
-                // dependency above).
-                contract: "ak.push.bridge.describe".to_owned(),
+                // The contract this surface serves is the contract of the
+                // payload it returns. There is exactly one, and it is the id
+                // `bridge_describe.rs` actually emits and chime's
+                // `BridgeContractCache` compares — so the surface must not
+                // carry a second, unregistered `ak.push.bridge.describe` label.
+                contract: "ak.push.bridge.v1".to_owned(),
                 stability: "active".to_owned(),
                 todo: "the provider capability matrix is self-declared and unattested; consumers must pin provider_capabilities_version to detect a silent matrix change.".to_owned(),
             },

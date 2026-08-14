@@ -106,7 +106,7 @@ impl HttpAuditSink {
                 .https_only(true)
                 .connect_timeout(std::time::Duration::from_secs(5))
                 .timeout(std::time::Duration::from_secs(30))
-                .dns_resolver(crate::egress::EgressGuardResolver::new())
+                .dns_resolver(crate::egress::dns_resolver())
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("build audit HTTP client"),
