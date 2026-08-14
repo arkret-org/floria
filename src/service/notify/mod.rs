@@ -759,7 +759,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 rejected.push(rejected_device(device, device.push_key()));
                 outcomes.push(PushNotifyDeviceOutcome::rejected(
                     device.device_id.clone(),
-                    PushNotifyReasonCode::ProfileUnsupported,
+                    PushNotifyReasonCode::UnsupportedProfile,
                     None,
                 ));
                 delivery_receipts.push(delivery_receipt(
@@ -1037,7 +1037,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 rejected.push(rejected_device(device, device.push_key()));
                 outcomes.push(PushNotifyDeviceOutcome::rejected(
                     device.device_id.clone(),
-                    PushNotifyReasonCode::ProfileUnsupported,
+                    PushNotifyReasonCode::UnsupportedProfile,
                     None,
                 ));
                 delivery_receipts.push(delivery_receipt(

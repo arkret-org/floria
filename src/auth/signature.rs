@@ -29,7 +29,7 @@ pub(super) fn verify_message_signature(
     if req.header::<String>("content-encoding").is_some() {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "signed JSON requests must not use Content-Encoding".to_owned(),
         });
     }
@@ -41,7 +41,7 @@ pub(super) fn verify_message_signature(
         );
         AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "service principal is missing signature key configuration".to_owned(),
         }
     })?;
@@ -56,7 +56,7 @@ pub(super) fn verify_message_signature(
             );
             AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+                code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
                 message: "service principal is missing signature key configuration".to_owned(),
             }
         })?;
@@ -89,7 +89,7 @@ pub(super) fn verify_message_signature(
     if signature_bytes.len() != 64 {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Signature header is not a valid Ed25519 signature".to_owned(),
         });
     }
@@ -101,14 +101,14 @@ pub(super) fn verify_message_signature(
     if signature_input.key_id != key_id {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Signature key_id does not match configured service principal".to_owned(),
         });
     }
     if signature_input.algorithm != "ed25519" {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "unsupported HTTP Message Signature algorithm".to_owned(),
         });
     }
@@ -124,7 +124,7 @@ pub(super) fn verify_message_signature(
     if !signature_input.covers_all(&required_components) {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "HTTP Message Signature is missing required covered components".to_owned(),
         });
     }
@@ -175,29 +175,29 @@ pub(super) fn verify_message_signature(
 
     let public_key_bytes = hex::decode(public_key_hex).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message: "configured signature public key is not valid hex".to_owned(),
     })?;
     let public_key =
         sdk_sig::public_key_from_bytes(&public_key_bytes).map_err(|_| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "configured signature public key is invalid".to_owned(),
         })?;
     sdk_sig::verify_signature(&message, &signature_b64, &public_key).map_err(|err| match err {
         SignatureError::InvalidSignatureBase64 => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Signature header is not valid base64".to_owned(),
         },
         SignatureError::InvalidSignatureLength => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Signature header is not a valid Ed25519 signature".to_owned(),
         },
         _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "HTTP Message Signature verification failed".to_owned(),
         },
     })
@@ -262,29 +262,29 @@ pub(super) fn verified_content_digest(req: &Request, body: &[u8]) -> Result<Stri
         .header::<String>(CONTENT_DIGEST_HEADER)
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "missing Content-Digest header".to_owned(),
         })?;
     let parsed = ContentDigest::parse(value.trim()).map_err(|err| match err {
         SignatureError::MalformedContentDigest => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Content-Digest must use the sole Arkret v1 sha-256 token".to_owned(),
         },
         _ => AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "Content-Digest header is invalid".to_owned(),
         },
     })?;
     sdk_sig::verify_content_digest(&parsed, body).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message: "Content-Digest does not match request body".to_owned(),
     })?;
     arkret_wire::canonical::validate_canonical_bytes(body).map_err(|error| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message: format!("signed request body is not canonical JSON: {error}"),
     })?;
     Ok(parsed.wire_value)
@@ -320,7 +320,7 @@ fn map_signature_input_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message,
     }
 }
@@ -335,7 +335,7 @@ fn map_signature_header_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message,
     }
 }
@@ -349,7 +349,7 @@ fn map_canonical_error(err: SignatureError) -> AuthFailure {
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
         message,
     }
 }
@@ -413,7 +413,7 @@ pub(super) async fn verify_nonce_freshness(
             );
             Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
-                code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+                code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
                 message: "HTTP Message Signature has already been observed (replay)".to_owned(),
             })
         }

@@ -67,7 +67,7 @@ pub(super) fn authority(req: &Request) -> Result<String, AuthFailure> {
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::INVALID_SIGNATURE,
+            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "request authority is missing".to_owned(),
         })
 }
