@@ -17,7 +17,7 @@ pub trait AuditSink: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
 pub enum AuditEvent {
-    #[serde(rename = "ak.audit.policy_access")]
+    #[serde(rename = "org.arkret.floria.audit.policy_access")]
     PolicyAccess {
         request_id: String,
         origin_service_id: String,
@@ -25,7 +25,10 @@ pub enum AuditEvent {
         destination_service_id: Option<String>,
         access_kind: String,
     },
-    #[serde(rename = "ak.push.rejected_devices")]
+    // Floria's audit-sink record is an implementation event, not an Arkret
+    // wire event kind. Product-local names must not occupy the `ak.*`
+    // protocol namespace.
+    #[serde(rename = "org.arkret.floria.audit.push_rejected_devices")]
     RejectedDevices {
         request_id: String,
         origin_service_id: String,

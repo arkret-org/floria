@@ -1,7 +1,7 @@
 use arkret_models_integration::{
     IntegrationDependencyDescriptor, IntegrationDescribeOutcome, IntegrationSurfaceDescriptor,
 };
-use arkret_wire::{ProfileId, ServiceOperationId};
+use arkret_wire::{ProfileId, ServiceContractId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
@@ -18,7 +18,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
     res.render(Json(IntegrationDescribeOutcome {
         // Canonical manifest contract id per the SDK
         // (`models-integration/src/integration.rs`).
-        contract: "ak.integration.manifest.v1".to_owned(),
+        contract: ServiceContractId::INTEGRATION_MANIFEST_V1.to_owned(),
         version: "2026-05-07".to_owned(),
         service: "floria".to_owned(),
         service_kind: "push_gateway".to_owned(),
@@ -39,7 +39,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             IntegrationDependencyDescriptor {
                 service: "chime".to_owned(),
                 purpose: "client_sdk_consumption".to_owned(),
-                required_contract: "ak.push.bridge.v1".to_owned(),
+                required_contract: ServiceContractId::PUSH_BRIDGE_V1.to_owned(),
                 discovery_path: "/_floria/push/bridge/describe".to_owned(),
                 mode: "sdk_contract_discovery".to_owned(),
             },
@@ -54,7 +54,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 // `bridge_describe.rs` actually emits and chime's
                 // `BridgeContractCache` compares — so the surface must not
                 // carry a second, unregistered `ak.push.bridge.describe` label.
-                contract: "ak.push.bridge.v1".to_owned(),
+                contract: ServiceContractId::PUSH_BRIDGE_V1.to_owned(),
                 stability: "active".to_owned(),
                 todo: "the provider capability matrix is self-declared and unattested; consumers must pin provider_capabilities_version to detect a silent matrix change.".to_owned(),
             },

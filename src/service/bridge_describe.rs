@@ -5,7 +5,7 @@ use arkret_models_integration::push::{
     PushBridgeDescribeNotifyDescriptor, PushBridgeDescribeOutcome,
     PushBridgeDescribePrivacyDescriptor, PushBridgeFailureCodeDescriptor,
 };
-use arkret_wire::ServiceOperationId;
+use arkret_wire::{ServiceContractId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
@@ -65,7 +65,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         // `models-integration/src/push.rs`). This is the single id for this
         // route: the integration-describe surface, soland's accepted-contract
         // list and chime's drift cache all reference the same value.
-        contract: "ak.push.bridge.v1".to_owned(),
+        contract: ServiceContractId::PUSH_BRIDGE_V1.to_owned(),
         // `version` is the bridge-describe CONTRACT version (the shape of
         // this response), distinct from `spec_version` below (the
         // arkret-spec revision the SDK is compiled against) and from the
