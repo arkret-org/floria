@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
         let response = PushNotifyOutcome {
-            request_id: "ak:request:123".to_owned(),
+            request_id: "ak:request:0196419b-0000-7000-8000-000000000010".to_owned(),
             push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
             outcomes: vec![
                 arkret_models_integration::PushNotifyDeviceOutcome::accepted(
@@ -412,7 +412,7 @@ mod tests {
                 status: Some("accepted".to_owned()),
                 retry_after_ms: None,
                 timestamp: Some("2026-05-02T00:00:00.000Z".to_owned()),
-                request_id: Some("ak:request:123".to_owned()),
+                request_id: Some("ak:request:0196419b-0000-7000-8000-000000000011".to_owned()),
             }],
         };
 
