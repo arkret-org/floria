@@ -214,8 +214,7 @@ pub struct NotifyRetryQueueConfig {
     /// non-empty string is acceptable; rotating the key invalidates
     /// every in-flight retry, so operators should drain the queue
     /// first or accept the loss as a deliberate forgetting event.
-    /// Empty string (the default) disables encryption — backwards
-    /// compatible with existing deployments.
+    /// Empty string (the default) disables encryption.
     pub encryption_key: String,
     /// Path to a file containing the AEAD key material. Mutually
     /// exclusive with `encryption_key`; both unset means no

@@ -200,7 +200,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         // DEFERRED: floria has no configured deployment trust domain; a
         // stable placeholder is emitted until a `trust_domain` config
         // field is wired in (see module doc / FLORIA-01 deferred items).
-        trust_domain: arkret_wire::TypedTrustDomainId::new("ak:trust_domain:floria")
+        trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
         service_kind: arkret_wire::ServiceKind::PushGateway,
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),

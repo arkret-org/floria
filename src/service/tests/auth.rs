@@ -378,8 +378,8 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    // `content` is no longer part of the notify schema, so old payloads
-    // are rejected before any legacy content sanitizer can run.
+    // `content` is not part of the notify schema, so a body carrying it
+    // is rejected at the schema boundary.
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();
@@ -424,8 +424,8 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
         .send(&service)
         .await;
 
-    // `content` is no longer part of the notify schema, so old payloads
-    // are rejected before any legacy content sanitizer can run.
+    // `content` is not part of the notify schema, so a body carrying it
+    // is rejected at the schema boundary.
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body = assert_notify_error(&mut response, "schema_violation", true).await;
     let msg = body["error"]["message"].as_str().unwrap_or_default();

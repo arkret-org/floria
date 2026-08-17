@@ -101,13 +101,12 @@ Out of scope for the threat model:
 These items are intentionally closed as floria-local N/A rather than
 implemented:
 
-1. **ROST-FLO-1..3 mention reference v2** — floria is a push gateway,
+1. **ROST-FLO-1..3 mention references** — floria is a push gateway,
    not the Message AST authoring or rendering layer. The public
    `ak.edge.push.command.notify` payload must not carry mention-preview fields such
    as `subject_id` or `display_name_at_time`; the typed wire model uses
-   `serde(deny_unknown_fields)` and the round4 test
-   `mention_reference_v2_fields_are_not_push_payload_fields` proves the
-   gateway rejects them with `schema_violation`. The only mention field
+   `serde(deny_unknown_fields)`, so the gateway rejects them with
+   `schema_violation`. The only mention field
    floria accepts is the push-routing allow-list
    `mention_redirect_target_route_tokens`, which carries opaque route
    tokens only.
@@ -139,10 +138,9 @@ or open follow-up tickets:
    counter deltas (`floria_notify_retry_enqueued_total`,
    `floria_notify_retry_replayed_total`).
 4. **Plaintext bearer tokens are development-only** — the
-   `notify_auth.bearer_tokens` field is still supported for
-   non-production compatibility, but `production_mode=true` rejects
-   both gateway-wide and per-principal plaintext bearer tokens at
-   config validation. Production callers must use HTTP Message
+   `notify_auth.bearer_tokens` field is accepted outside production,
+   but `production_mode=true` rejects both gateway-wide and
+   per-principal plaintext bearer tokens at config validation. Production callers must use HTTP Message
    Signatures or mTLS; bearer hashes are retained only as non-production
    fallback material. See `docs/en/configuration.md`.
 5. **Takedown notification path is not implemented** — there is no

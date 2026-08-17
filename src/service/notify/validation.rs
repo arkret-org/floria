@@ -242,15 +242,12 @@ fn validate_optional_plaintext_identity_string(
 }
 
 fn validate_plaintext_identity_string(path: &str, value: &str) -> Result<(), String> {
-    // Round 4 (spec a77b995) — DID regex sweep: the SDK has tightened
-    // its validator to `^did:[a-z0-9]+:[^\s]+$`, but floria treats DID
-    // literals as an opaque correlation leak regardless of method-name
-    // shape. The substring check here therefore stays — it rejects any
-    // `did:` prefix, including round-4 strict forms AND any pre-round-4
-    // dotted-method form a misconfigured client might still emit. The
-    // canonical regex validator lives in the SDK; floria's job at this
-    // boundary is just to keep DID-shaped strings out of plaintext push
-    // payloads.
+    // The SDK's canonical DID validator is `^did:[a-z0-9]+:[^\s]+$`, but
+    // floria treats DID literals as an opaque correlation leak regardless of
+    // method-name shape. The substring check here therefore rejects any
+    // `did:` prefix, well-formed or not. The canonical regex validator lives
+    // in the SDK; floria's job at this boundary is just to keep DID-shaped
+    // strings out of plaintext push payloads.
     if value.to_ascii_lowercase().contains("did:") {
         Err(format!(
             "caller is not authorized to send DID literal in `{path}`"

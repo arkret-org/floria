@@ -45,15 +45,14 @@ producer-signed `scope_ref` and never reaches a gateway. The negative
 assertions in the Android / FCM / WebPush adapters stay as regression
 guards on the allow-list builder.
 
-## Mention Reference v2 N/A
+## Mention Reference Fields N/A
 
-ROST-FLO-1..3 mention reference v2 fields are intentionally not part of
+ROST-FLO-1..3 mention reference fields are intentionally not part of
 floria's push wire model. `subject_id`, `display_name_at_time`, and
 related Message AST preview fields belong to chime / principal-service
 message rendering, not to `ak.edge.push.command.notify`. floria keeps the typed
-payload closed with `serde(deny_unknown_fields)`; the round4 service
-test `mention_reference_v2_fields_are_not_push_payload_fields` rejects
-those fields with `schema_violation`.
+payload closed with `serde(deny_unknown_fields)`, so those fields are
+rejected with `schema_violation`.
 
 ## Upgrade Gate
 

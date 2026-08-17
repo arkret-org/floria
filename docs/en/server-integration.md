@@ -22,8 +22,8 @@ The OpenAPI artifact is committed at
 
 Production deployments should enable `http.notify_auth.production_mode` and use
 HTTP Message Signatures or mTLS-bound service principals. Bearer tokens are
-supported for local or transitional deployments, but production mode rejects
-gateway-wide bearer tokens and per-principal plaintext bearer tokens.
+supported for local deployments, but production mode rejects gateway-wide
+bearer tokens and per-principal plaintext bearer tokens.
 
 The caller should set:
 
