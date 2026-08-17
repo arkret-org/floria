@@ -241,7 +241,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "push.bridge.failure_reason_codes".to_owned(),
             "push.notify.retry_queue".to_owned(),
         ],
-        compat_surfaces: vec![],
+        interop_surfaces: vec![],
         development_mode,
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,

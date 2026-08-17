@@ -146,11 +146,11 @@ async fn describe_separates_claim_levels() {
         .collect();
     assert!(experimental.is_disjoint(&verified_ids));
 
-    for surface in body["compat_surfaces"]
+    for surface in body["interop_surfaces"]
         .as_array()
-        .expect("compat_surfaces present")
+        .expect("interop_surfaces present")
     {
-        let kind = surface["kind"].as_str().expect("compat surface kind");
+        let kind = surface["kind"].as_str().expect("interop surface kind");
         assert!(matches!(
             kind,
             "matrix_passthrough" | "mimi_passthrough" | "delegated_resolver" | "external_interop"
@@ -176,7 +176,7 @@ async fn describe_does_not_advertise_media_token_self_issue() {
     for field in [
         "implemented_features",
         "experimental_features",
-        "compat_surfaces",
+        "interop_surfaces",
     ] {
         let encoded = serde_json::to_string(&body[field]).unwrap();
         assert!(
