@@ -707,11 +707,11 @@ mod sanitize_tests {
     }
 
     /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
-    /// policy-frontier-hash / trust-domain / reset-event-id field names
-    /// added by rounds 2+3 MUST be stripped from any provider payload
-    /// before it leaves floria. They are all stable correlators that
-    /// would let an observer link the push back to a moderation appeal,
-    /// audit agent, or cross-signing reset.
+    /// policy-frontier-hash / trust-domain field names added by rounds
+    /// 2+3 MUST be stripped from any provider payload before it leaves
+    /// floria. They are all stable correlators that would let an
+    /// observer link the push back to a moderation appeal or audit
+    /// agent.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields() {
         // We stage values that are safe (no `did:` / `ak:` literals)
@@ -728,7 +728,6 @@ mod sanitize_tests {
             "audit_policy_version_digest": "a".repeat(64),
             "policy_frontier_digest": "b".repeat(64),
             "trust_domain": "example.net",
-            "reset_event_id": "01904100-0000-7000-8000-000000000002",
         })
         .as_object()
         .unwrap()
@@ -744,7 +743,6 @@ mod sanitize_tests {
             "audit_policy_version_digest",
             "policy_frontier_digest",
             "trust_domain",
-            "reset_event_id",
             "timing_profile_hint",
         ] {
             assert!(

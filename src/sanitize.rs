@@ -23,8 +23,8 @@ use arkret_push_policy::blind_payload_sanitizer as sdk;
 ///   * SPEC-CR-016 gateway-internal routing fragment (`route_tokens` and its leaves) — consumed by
 ///     floria for routing/dedup, opaque by construction, never forwarded.
 ///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,
-///     cross-signing reset, policy-frontier hash) — meaningful to the audit pipeline, a stable
-///     correlator on the provider wire.
+///     policy-frontier hash) — meaningful to the audit pipeline, a stable correlator on the
+///     provider wire.
 pub const STRIP_ONLY_KEYS: &[&str] = &[
     // --- SPEC-CR-016 gateway-internal routing fragment ---
     // The whole `route_tokens` wrapper plus its leaf routing fields are
@@ -40,13 +40,10 @@ pub const STRIP_ONLY_KEYS: &[&str] = &[
     "target_route_token",
     "timing_profile_hint",
     // --- Protocol payload names kept off the provider surface ---
-    "expected_previous_generation",
     "attestation_evidence",
     "attestation_chain",
     "size",
     "strand_body",
-    "message_body",
-    "body_only",
     "encrypted_payload",
     "encrypted_metadata",
     "metadata",
@@ -69,7 +66,6 @@ pub const STRIP_ONLY_KEYS: &[&str] = &[
     "audit_policy_version_digest",
     "policy_frontier_digest",
     "trust_domain",
-    "reset_event_id",
 ];
 
 /// Returns `true` if `key` must be stripped before a provider sees it:

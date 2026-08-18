@@ -3,8 +3,9 @@
 floria still carries a local provider-payload sweep for forbidden egress
 fields that are stricter than the SDK's generic blind-payload helper. The
 SDK exposes `arkret::blind_payload_sanitizer::is_forbidden_payload_key`,
-but the exported list is not yet sufficient for appeal, attestation,
-policy-frontier, and cross-signing-reset field names.
+but the exported list is not yet sufficient for the gateway-internal
+routing fragment, appeal, attestation, policy-frontier, or the
+actor-private DND / snooze preference field names.
 
 ## Local Sweep
 
@@ -14,11 +15,16 @@ The local sweep is implemented in `src/sanitize.rs` as
 Android, FCM, and WebPush adapters also assert that renamed
 Realm/Space/Circle identifiers stay off the provider wire.
 
-### Full forbidden-key list
+### Governance / correlation identifiers
+
+`src/sanitize.rs`'s `STRIP_ONLY_KEYS` is the authoritative list; the
+table below records the rationale for the R2/R3 governance and
+correlation names only. Names the SDK helper already rejects (for
+example `realm_id`, `space_id`, `encrypted_content`,
+`sender_actor_display_name`) are deliberately not duplicated locally.
 
 | Field | Round | Rationale |
 |-------|-------|-----------|
-| `realm_id` | R2 | Stable security-boundary identifier; leaking it on a provider wire would let an observer pivot pushes back to a tenant scope |
 | `appeal_id` | R2 | Links a push to a moderation appeal thread; visible in provider logs would expose that the user is under review |
 | `attestation_evidence` | R3 | Reveals audit-agent or device posture (TPM PCR digests, key attestation chain) |
 | `audit_purpose` | R3 | Reveals audit routing intent (which downstream audit channel the push will divert to) |
@@ -26,7 +32,6 @@ Realm/Space/Circle identifiers stay off the provider wire.
 | `audit_policy_version_digest` | R3 | Stable audit policy correlator — long-lived, cross-request linkability |
 | `policy_frontier_digest` | R3 | Stable policy frontier correlator — same linkability class as the audit policy version |
 | `trust_domain` | R3 | Deployment-scope leakage — exposes whether the principal is on a federation edge |
-| `reset_event_id` | R3 | Links a push to a cross-signing reset event, exposing key-rotation timing |
 
 The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
@@ -58,7 +63,8 @@ rejected with `schema_violation`.
 
 Do not remove the local sweep until all of these are true:
 
-1. The SDK helper rejects every name above case-insensitively.
+1. The SDK helper rejects every `STRIP_ONLY_KEYS` name
+   case-insensitively.
 2. The SDK helper is documented as the canonical blind-wakeup
    forbidden-key source for Round R2/R3 and AKP-0007 and later.
 3. floria tests pass after deleting the local `is_forbidden_egress_key` extension list and

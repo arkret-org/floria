@@ -55,13 +55,16 @@ three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`appeal_id`, `attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
-`policy_frontier_digest`, `trust_domain`, `reset_event_id`) and added two
-the internal `POST /_floria/internal/account_deactivate_fanout` (T07)
-broadcast endpoint consumed from soland. Contact/DM, Agent participation,
+`policy_frontier_digest`, `trust_domain`) and added the internal
+`POST /_floria/internal/account_deactivate_fanout` (T07) broadcast
+endpoint. That endpoint implements the push-gateway half of the
+deactivation fanout required by
+[`account-lifecycle.md` §7.1](../arkret-spec/spec/v1/zh/identity/account-lifecycle.md);
+no Principal Server currently drives it. Contact/DM, Agent participation,
 Sidecar, and operation-control admission stay upstream of the push gateway. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
-[`../arkret-spec/CHANGELOG.md`](../arkret-spec/CHANGELOG.md) for the
-normative source. Signal kinds (`ak.presence`, `ak.typing`,
+[`push-notifications.md`](../arkret-spec/spec/v1/zh/discovery/push-notifications.md)
+for the normative source. Signal kinds (`ak.presence`, `ak.typing`,
 `ak.receipt.read`, `ak.call.signal`) are confirmed to bypass floria
 entirely; they ride the encrypted `SignalEnvelope` rail in the Sync
 Service (`spec/v1/zh/sync/signal.md`). The former plaintext realtime rail
@@ -209,8 +212,8 @@ The same list will be computed at runtime and surfaced on
 `/health.hardening` so sodmin's `/hardening` dashboard can flag failing
 checks across the whole fleet (see T8.3 for the cross-service shape).
 
-- [ ] `FLORIA_DEVELOPMENT_MODE=false` (or unset in production builds)
-- [ ] TLS enabled at the reverse proxy (or `FLORIA_TLS_CERT` / `FLORIA_TLS_KEY` when terminated in-process)
+- [ ] `http.notify_auth.production_mode true` (surfaced as `hardening.admin_auth_mode`)
+- [ ] TLS terminated at the reverse proxy — floria has no in-process TLS listener
 - [ ] CSP header configured at the reverse proxy
 - [ ] CORS limited to the allowed origins for principal-server callers
 - [ ] Secrets sourced from an external secret manager and mounted/rendered before startup (APNs auth key/cert, FCM service account, VAPID keys, custom push secrets, service-auth keys)

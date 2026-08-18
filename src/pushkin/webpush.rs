@@ -598,7 +598,7 @@ impl Pushkin for WebpushPushkin {
         // unregister", so reporting it here would book a withheld push as a
         // success: the caller could neither retry nor count it, and an
         // unconfigured `allowed_endpoints` (fail-closed by design — see
-        // docs/configuration.md) would silently blackhole every WebPush.
+        // docs/en/configuration.md) would silently blackhole every WebPush.
         // These are policy decisions, not provider faults, so they are
         // permanent (`remote`) rather than retryable.
         if !self.allows_endpoint(&endpoint_domain) {
@@ -1027,7 +1027,7 @@ mod tests {
         );
     }
 
-    /// `allowed_endpoints` is fail-closed when unset (docs/configuration.md).
+    /// `allowed_endpoints` is fail-closed when unset (docs/en/configuration.md).
     /// Withholding every push is intended; booking it as a delivered push is
     /// not — the caller would see neither an error nor a rejected device.
     #[tokio::test]

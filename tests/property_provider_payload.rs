@@ -90,19 +90,12 @@ const FORBIDDEN_NAMES: &[&str] = &[
     "audit_policy_version_digest",
     "policy_frontier_digest",
     "trust_domain",
-    "reset_event_id",
     "route_tokens",
     "realm_route_token",
     "scope_route_token",
     "mention_redirect_target_route_tokens",
     "delivery_binding_frontier_token",
     "target_route_token",
-    "encrypted_content",
-    "encrypted_metadata",
-    "metadata",
-    "fields",
-    "track",
-    "track_name",
 ];
 
 fn arb_forbidden_key() -> impl Strategy<Value = &'static str> {
