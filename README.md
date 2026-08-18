@@ -35,8 +35,7 @@ Strand, Event, Message and actor identifiers before dispatch.
 
 Spec round 4 (`arkret-spec` range `2a4d39b..a77b995`, 8 commits) adds
 three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
-`[Unreleased]` and [`../_todos.md`](../_todos.md) for the canonical
-wire-breaking list.
+`[Unreleased]` for the canonical wire-breaking list.
 
 - **`mention_redirect_target_route_tokens` plaintext routing**
   message / system-message payloads now carry an explicit
@@ -68,11 +67,6 @@ entirely; they ride the encrypted `SignalEnvelope` rail in the Sync
 Service (`spec/v1/zh/sync/signal.md`). The former plaintext realtime rail
 and transaction-body field are gone, superseded by `SignalEnvelope` /
 `signals`.
-
-## Cross-project task tracking
-
-Per-project task lists are consolidated upstream see
-[`../_todos.md`](../_todos.md) for the active cross-project task plan.
 
 ## Stack
 
@@ -229,9 +223,3 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 
 Licensed under Apache 2.0. See `LICENSE`.
 
----
-
-<!-- circle-rollout milestone pointer -->
-> **Active milestone tracking** (local-only, gitignored): see
-> `_floria_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (AKP-0007) work item list and per-stage checkpoints.
