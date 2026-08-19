@@ -13,13 +13,13 @@ use uuid::Uuid;
 
 use super::MAX_REQUEST_SIZE;
 use super::metrics::{
-    finish_error, record_notify_delivery_by_scope, record_notify_delivery_outcomes,
+    finish_error, record_delivery_receipt_outcomes, record_notify_delivery_by_scope,
 };
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
 use crate::models::{
     DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
-    ProviderRetry, PushNotification,
+    PushNotification,
 };
 use crate::{AppState, metrics as app_metrics};
 
@@ -30,11 +30,11 @@ mod validation;
 mod tests;
 
 use helpers::{
-    cache_success_response, dedup_provider_retries, delivery_receipt, enqueue_retry,
-    finish_standard_notify_json, idempotency_cache_key, mark_delivered_devices,
-    normalized_notify_dedup_key, notify_rate_limit_checks, optional_owned_string,
-    record_rejected_devices_audit_or_finish, record_required_audit_event, rejected_device,
-    request_destination_service_id, resolve_idempotency_key,
+    cache_success_response, delivery_receipt, enqueue_retry, finish_standard_notify_json,
+    idempotency_cache_key, mark_delivered_devices, normalized_notify_dedup_key,
+    notify_rate_limit_checks, optional_owned_string, record_rejected_devices_audit_or_finish,
+    record_required_audit_event, rejected_device, request_destination_service_id,
+    resolve_idempotency_key,
 };
 use validation::{
     BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_id,
@@ -138,9 +138,6 @@ fn no_fanout_response(request_id: &str, notification: &PushNotification) -> Push
         request_id: request_id.to_owned(),
         push_target_id: push_target_id(notification),
         outcomes,
-        rejected: Vec::new(),
-        provider_retries: Vec::new(),
-        delivery_receipts: Vec::new(),
     }
 }
 
@@ -651,9 +648,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 request_id: request_id.clone(),
                 push_target_id: push_target_id(&notification),
                 outcomes,
-                rejected: Vec::new(),
-                provider_retries: Vec::new(),
-                delivery_receipts: Vec::new(),
             };
             cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
             finish_standard_notify_json(res, StatusCode::OK, &response, started);
@@ -671,7 +665,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut outcomes = Vec::with_capacity(notification.devices.len());
     let mut delivered_now = 0usize;
     let mut skipped_delivered = 0usize;
-    let mut provider_retries = Vec::new();
     let mut delivery_receipts = Vec::new();
     let mut taken_over_this_request = HashSet::new();
     let mut first_remote_error: Option<String> = None;
@@ -822,10 +815,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                         has_scope_route_token = notification.scope_route_token().is_some(),
                         "short-circuiting dispatch because circuit breaker is open"
                     );
-                    provider_retries.push(ProviderRetry::new(
-                        pushkin.name(),
-                        Some(CIRCUIT_BREAKER_RETRY_AFTER),
-                    ));
                     for target in &dispatch_targets {
                         delivery_receipts.push(delivery_receipt(
                             Some(pushkin.name()),
@@ -951,7 +940,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             push_key_hash = %device.redacted_push_key(),
                             "temporary dispatch failure"
                         );
-                        provider_retries.push(ProviderRetry::new(pushkin.name(), retry_after));
                         for target in &dispatch_targets {
                             delivery_receipts.push(delivery_receipt(
                                 Some(pushkin.name()),
@@ -1051,8 +1039,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
     }
 
-    dedup_provider_retries(&mut provider_retries);
-
     let fully_settled = first_internal_error.is_none()
         && first_temporary_error.is_none()
         && first_remote_error.is_none();
@@ -1106,16 +1092,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             request_id: context.request_id.clone(),
             push_target_id: push_target_id(&notification),
             outcomes,
-            rejected,
-            provider_retries,
-            delivery_receipts,
         };
         if !record_rejected_devices_audit_or_finish(
             &state,
             &context.request_id,
             &caller,
             &notification,
-            &response.rejected,
+            &rejected,
             res,
             started,
         )
@@ -1124,10 +1107,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
         cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
-        record_notify_delivery_outcomes(&response);
+        record_delivery_receipt_outcomes(&delivery_receipts, response.accepted(), rejected.len());
         record_notify_delivery_by_scope(
             &notification,
-            &response.delivery_receipts,
+            &delivery_receipts,
             state.metrics_detailed_circle_labels,
         );
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
@@ -1157,16 +1140,13 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         request_id: context.request_id.clone(),
         push_target_id: push_target_id(&notification),
         outcomes,
-        rejected,
-        provider_retries,
-        delivery_receipts,
     };
     if !record_rejected_devices_audit_or_finish(
         &state,
         &context.request_id,
         &caller,
         &notification,
-        &response.rejected,
+        &rejected,
         res,
         started,
     )
@@ -1175,10 +1155,10 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
     cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
-    record_notify_delivery_outcomes(&response);
+    record_delivery_receipt_outcomes(&delivery_receipts, response.accepted(), rejected.len());
     record_notify_delivery_by_scope(
         &notification,
-        &response.delivery_receipts,
+        &delivery_receipts,
         state.metrics_detailed_circle_labels,
     );
     finish_standard_notify_json(res, StatusCode::OK, &response, started);

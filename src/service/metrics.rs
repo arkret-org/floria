@@ -9,10 +9,7 @@ use salvo::prelude::*;
 use serde::Serialize;
 
 use crate::metrics as app_metrics;
-use crate::models::{
-    DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
-    PushNotification,
-};
+use crate::models::{DeliveryReceipt, NotificationExt, PushNotification};
 
 /// Cardinality guard threshold for `metrics_detailed_circle_labels`.
 /// Once the count of unique circle_ids observed since startup crosses
@@ -110,14 +107,6 @@ fn record_realm_and_check_guard(realm_id: &str) -> bool {
         realm_id,
         "realm",
     )
-}
-
-pub(super) fn record_notify_delivery_outcomes(response: &PushNotifyOutcome) {
-    record_delivery_receipt_outcomes(
-        &response.delivery_receipts,
-        response.accepted(),
-        response.rejected.len(),
-    );
 }
 
 pub(super) fn record_delivery_receipt_outcomes(

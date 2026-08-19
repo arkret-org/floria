@@ -331,11 +331,20 @@ impl NotifyDeduplicator {
             NotifyDedupBackend::Memory(backend) => backend.cached_response(key)?,
             NotifyDedupBackend::Redis(backend) => backend.cached_response(key)?,
         };
-        let attempts = if response.provider_retries.is_empty() {
-            1
-        } else {
-            (response.provider_retries.len() as u32).saturating_add(1)
-        };
+        let attempts = response
+            .outcomes
+            .iter()
+            .filter(|outcome| {
+                matches!(
+                    outcome.reason_code,
+                    Some(
+                        arkret_models_integration::PushNotifyReasonCode::PushGatewayUnreachable
+                            | arkret_models_integration::PushNotifyReasonCode::RateLimited
+                    )
+                )
+            })
+            .count()
+            .saturating_add(1) as u32;
         let accepted = response.accepted();
         let rejected = response
             .outcomes
@@ -357,13 +366,7 @@ impl NotifyDeduplicator {
         let last_error = response
             .outcomes
             .iter()
-            .find_map(|outcome| outcome.reason_code.map(|reason| reason.as_str().to_owned()))
-            .or_else(|| {
-                response
-                    .rejected
-                    .iter()
-                    .find_map(|rejected| rejected.reason_code.clone())
-            });
+            .find_map(|outcome| outcome.reason_code.map(|reason| reason.as_str().to_owned()));
         Some(NotifyStatus {
             idempotency_key: key.to_owned(),
             status,
@@ -712,7 +715,6 @@ mod tests {
     use std::env;
 
     use super::*;
-    use crate::models::RejectedDevice;
 
     #[test]
     fn returns_inserted_response_before_expiry() {
@@ -721,9 +723,6 @@ mod tests {
             request_id: "request-1".to_owned(),
             push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
             outcomes: vec![],
-            rejected: vec![RejectedDevice::new(Some("com.example.app"), "push_key")],
-            provider_retries: vec![],
-            delivery_receipts: vec![],
         };
         let key = request_hash(br#"{"notification":{}}"#);
 
@@ -746,9 +745,6 @@ mod tests {
                 request_id: "request-1".to_owned(),
                 push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
                 outcomes: vec![],
-                rejected: vec![],
-                provider_retries: vec![],
-                delivery_receipts: vec![],
             },
         );
 
@@ -780,9 +776,6 @@ mod tests {
                 request_id: "request-1".to_owned(),
                 push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
                 outcomes: vec![],
-                rejected: vec![],
-                provider_retries: vec![],
-                delivery_receipts: vec![],
             },
         );
 
@@ -853,9 +846,6 @@ mod tests {
             request_id: format!("request-{index}"),
             push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
             outcomes: vec![],
-            rejected: vec![],
-            provider_retries: vec![],
-            delivery_receipts: vec![],
         }
     }
 

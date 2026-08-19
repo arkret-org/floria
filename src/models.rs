@@ -14,11 +14,6 @@ pub struct FloriaPushNotifyOutcome {
     pub request_id: String,
     pub push_target_id: String,
     pub outcomes: Vec<arkret_models_integration::PushNotifyDeviceOutcome>,
-    pub rejected: Vec<RejectedDevice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub provider_retries: Vec<ProviderRetry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub delivery_receipts: Vec<DeliveryReceipt>,
 }
 
 impl FloriaPushNotifyOutcome {
@@ -36,22 +31,6 @@ impl FloriaPushNotifyOutcome {
                     != arkret_models_integration::PushNotifyGatewayStatus::Rejected
             })
             .count()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ProviderRetry {
-    pub provider: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub retry_after_ms: Option<u64>,
-}
-
-impl ProviderRetry {
-    pub fn new(provider: impl Into<String>, retry_after: Option<std::time::Duration>) -> Self {
-        Self {
-            provider: provider.into(),
-            retry_after_ms: retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
-        }
     }
 }
 
@@ -266,8 +245,7 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        Counts, DeliveryReceipt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
-        PushNotification,
+        Counts, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt, PushNotification,
     };
 
     #[test]
@@ -390,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn notify_response_serializes_delivery_receipt_refs_without_tokens() {
+    fn notify_response_carries_no_provider_identifiers() {
         let response = PushNotifyOutcome {
             request_id: "ak:request:0196419b-0000-7000-8000-000000000010".to_owned(),
             push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
@@ -400,25 +378,22 @@ mod tests {
                         .unwrap(),
                 ),
             ],
-            rejected: vec![super::RejectedDevice::new(
-                Some("app.example.android"),
-                "token-123",
-            )],
-            provider_retries: vec![],
-            delivery_receipts: vec![DeliveryReceipt {
-                provider: Some("fcm".to_owned()),
-                provider_message_id: Some("projects/example/messages/1".to_owned()),
-                push_key_hash: Some("pkh_abc".to_owned()),
-                status: Some("accepted".to_owned()),
-                retry_after_ms: None,
-                timestamp: Some("2026-05-02T00:00:00.000Z".to_owned()),
-                request_id: Some("ak:request:0196419b-0000-7000-8000-000000000011".to_owned()),
-            }],
         };
 
         let encoded = serde_json::to_string(&response).unwrap();
-        assert!(encoded.contains("delivery_receipts"));
-        assert!(encoded.contains("pkh_"));
-        assert!(!encoded.contains("token-123"));
+        for forbidden in [
+            "push_key",
+            "app_id",
+            "provider_message_id",
+            "push_key_hash",
+            "rejected",
+            "provider_retries",
+            "delivery_receipts",
+        ] {
+            assert!(
+                !encoded.contains(forbidden),
+                "notify response must not contain `{forbidden}`, got: {encoded}"
+            );
+        }
     }
 }

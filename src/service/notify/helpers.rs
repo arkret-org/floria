@@ -14,7 +14,7 @@ use crate::auth::{
 use crate::dedup::request_hash;
 use crate::models::{
     DeliveryReceipt, DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
-    ProviderRetry, PushNotification, RejectedDevice, redact_push_token,
+    PushNotification, RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -40,15 +40,6 @@ pub(super) fn resolve_idempotency_key(req: &Request) -> Result<Option<String>, S
         req.header::<String>("idempotency-key").as_deref(),
         "Idempotency-Key header",
     )
-}
-
-pub(super) fn dedup_provider_retries(provider_retries: &mut Vec<ProviderRetry>) {
-    provider_retries.sort_by(|left, right| {
-        left.provider
-            .cmp(&right.provider)
-            .then(left.retry_after_ms.cmp(&right.retry_after_ms))
-    });
-    provider_retries.dedup();
 }
 
 pub(super) fn notify_rate_limit_checks(

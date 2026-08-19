@@ -417,8 +417,20 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
     );
     let encoded = serde_json::to_string(&body).unwrap();
     assert!(!encoded.contains("plaintext-token-should-not-leak"));
-    assert!(!encoded.contains("push_key"));
-    assert!(!encoded.contains("delivery_receipts"));
+    for forbidden in [
+        "push_key",
+        "app_id",
+        "provider_message_id",
+        "push_key_hash",
+        "rejected",
+        "provider_retries",
+        "delivery_receipts",
+    ] {
+        assert!(
+            !encoded.contains(forbidden),
+            "notify response must not contain `{forbidden}`, got: {encoded}"
+        );
+    }
 }
 
 #[tokio::test]
