@@ -84,7 +84,6 @@ pub struct DeliveryReceipt {
 }
 
 pub trait NotificationExt {
-    fn scope_id(&self) -> Option<&str>;
     fn scope_title(&self) -> Option<&str>;
     fn realm_route_token(&self) -> Option<&str>;
     fn scope_route_token(&self) -> Option<&str>;
@@ -102,10 +101,6 @@ pub trait NotificationExt {
 }
 
 impl NotificationExt for PushNotification {
-    fn scope_id(&self) -> Option<&str> {
-        self.strand_id().or_else(|| self.realm_id())
-    }
-
     fn scope_title(&self) -> Option<&str> {
         self.strand_title().or_else(|| self.realm_title())
     }

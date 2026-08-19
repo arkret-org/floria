@@ -100,29 +100,6 @@
             }
           ]
         },
-        "circle_rate_limits": {
-          "additionalProperties": false,
-          "description": "AKP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
-          "properties": {
-            "per_circle_concurrency": {
-              "description": "Max in-flight notify dispatches for a single Circle.",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "per_circle_qps": {
-              "description": "Max sustained notify QPS for a single Circle.",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            }
-          },
-          "type": "object"
-        },
         "internal_auth": {
           "additionalProperties": false,
           "description": "Bearer/shared-secret authentication for internal and operator-only endpoints. When no token or hash is configured, those endpoints fail closed.",

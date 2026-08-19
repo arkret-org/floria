@@ -334,14 +334,6 @@ impl RetryQueue {
         Ok(self)
     }
 
-    pub fn redis(
-        config: RetryQueueConfig,
-        redis_url: &str,
-        key_prefix: impl Into<String>,
-    ) -> Result<Self> {
-        Self::redis_with_cipher(config, redis_url, key_prefix, None)
-    }
-
     pub fn redis_with_cipher(
         config: RetryQueueConfig,
         redis_url: &str,
@@ -1020,9 +1012,14 @@ mod tests {
 
     #[test]
     fn redis_backend_requires_valid_url() {
-        let error = RetryQueue::redis(RetryQueueConfig::default(), "://bad-url", "floria")
-            .unwrap_err()
-            .to_string();
+        let error = RetryQueue::redis_with_cipher(
+            RetryQueueConfig::default(),
+            "://bad-url",
+            "floria",
+            None,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("invalid notify_retry_queue redis_url"));
     }
 

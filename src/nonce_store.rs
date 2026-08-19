@@ -104,10 +104,6 @@ impl NonceStore {
         }
     }
 
-    pub fn redis(ttl: Duration, redis_url: &str, key_prefix: impl Into<String>) -> Result<Self> {
-        Self::redis_with_policy(ttl, redis_url, key_prefix, RedisFailurePolicy::Strict)
-    }
-
     pub fn redis_with_policy(
         ttl: Duration,
         redis_url: &str,
@@ -130,10 +126,6 @@ impl NonceStore {
                 failure_policy,
             }),
         })
-    }
-
-    pub fn ttl(&self) -> Duration {
-        self.ttl
     }
 
     pub fn backend_name(&self) -> &'static str {
@@ -298,9 +290,14 @@ mod tests {
 
     #[test]
     fn redis_backend_requires_valid_url() {
-        let error = NonceStore::redis(Duration::from_secs(60), "://bad-url", "floria")
-            .unwrap_err()
-            .to_string();
+        let error = NonceStore::redis_with_policy(
+            Duration::from_secs(60),
+            "://bad-url",
+            "floria",
+            RedisFailurePolicy::Strict,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("invalid notify_auth.nonce_store redis_url"));
     }
 }

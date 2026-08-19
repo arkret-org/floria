@@ -58,8 +58,6 @@ arkret-rust-sdk P1.
   `floria_notify_delivery_total{provider, scope_kind, scope_id}` gated
   by the new `http.metrics_detailed_circle_labels` boolean
   (default `false` — labels key off `realm_id` to bound cardinality).
-- New `http.circle_rate_limits.{per_circle_qps,
-  per_circle_concurrency}` config fields (both default null).
 - New `circuit_breaker` module: in-process per-(provider, realm,
   circle) breaker so a single misbehaving Circle does NOT bleed into a
   realm- or provider-wide outage. Threshold + open-window are

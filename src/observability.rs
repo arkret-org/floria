@@ -39,22 +39,11 @@ use crate::config::{
 /// client session when it goes out of scope.
 ///
 /// Always returned from [`init_telemetry`]; the values inside are
-/// `Option`s so test callers don't have to spin up real exporters.
+/// `Option`s because every exporter is opt-in via configuration.
 #[must_use = "drop the TelemetryGuard at the end of `main` to flush spans and Sentry events"]
 pub struct TelemetryGuard {
     tracer_provider: Option<SdkTracerProvider>,
     _sentry: Option<ClientInitGuard>,
-}
-
-impl TelemetryGuard {
-    /// Returns a guard that owns no resources. Useful for callers that
-    /// build a subscriber themselves (e.g. tests).
-    pub fn empty() -> Self {
-        Self {
-            tracer_provider: None,
-            _sentry: None,
-        }
-    }
 }
 
 impl Drop for TelemetryGuard {
@@ -247,11 +236,6 @@ fn init_sentry(config: &SentryConfig) -> Result<Option<ClientInitGuard>> {
 mod tests {
     use super::*;
     use crate::config::TracingLevel;
-
-    #[test]
-    fn empty_guard_drops_without_panicking() {
-        drop(TelemetryGuard::empty());
-    }
 
     #[test]
     fn build_env_filter_uses_explicit_filter_first() {

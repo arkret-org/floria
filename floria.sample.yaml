@@ -98,11 +98,6 @@ http:
   # with the `circle_id` instead of the parent `realm_id`. Default
   # false bounds label cardinality by realm count.
   metrics_detailed_circle_labels: false
-  # AKP-0007 — per-Circle rate-limit caps applied on top of
-  # notify_rate_limits. Both knobs default to null (no per-Circle cap).
-  circle_rate_limits:
-    # per_circle_qps: 200
-    # per_circle_concurrency: 16
 
 storage:
   # Omit postgres_url for process-local broadcast state.

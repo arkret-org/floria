@@ -49,10 +49,6 @@ impl JsonlAuditSink {
             lock: Mutex::new(()),
         }
     }
-
-    pub fn path(&self) -> &PathBuf {
-        &self.path
-    }
 }
 
 #[async_trait]

@@ -51,7 +51,6 @@ fn keeps_explicit_http_ports() {
         notify_rate_limits: NotifyRateLimitConfig::default(),
         notify_retry_queue: NotifyRetryQueueConfig::default(),
         metrics_detailed_circle_labels: false,
-        circle_rate_limits: CircleRateLimitConfig::default(),
         extra: Map::new(),
     };
 
@@ -73,7 +72,6 @@ fn supports_bracketed_ipv6_without_explicit_port() {
         notify_rate_limits: NotifyRateLimitConfig::default(),
         notify_retry_queue: NotifyRetryQueueConfig::default(),
         metrics_detailed_circle_labels: false,
-        circle_rate_limits: CircleRateLimitConfig::default(),
         extra: Map::new(),
     };
 

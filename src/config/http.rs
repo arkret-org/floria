@@ -31,31 +31,8 @@ pub struct HttpConfig {
     /// needed.
     #[serde(default)]
     pub metrics_detailed_circle_labels: bool,
-    /// AKP-0007 Circle primitive — per-Circle rate limits and
-    /// concurrency caps. Default disabled.
-    #[serde(default)]
-    pub circle_rate_limits: CircleRateLimitConfig,
     #[serde(flatten)]
     pub(super) extra: Map<String, Value>,
-}
-
-/// AKP-0007 Circle primitive — per-Circle rate-limit configuration.
-/// Defaults leave both knobs unset (no Circle-specific limits applied).
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
-pub struct CircleRateLimitConfig {
-    /// Max sustained notify QPS for a single Circle. `None` disables
-    /// the per-Circle QPS cap.
-    pub per_circle_qps: Option<u32>,
-    /// Max in-flight notify dispatches for a single Circle. `None`
-    /// disables the per-Circle concurrency cap.
-    pub per_circle_concurrency: Option<u32>,
-}
-
-impl CircleRateLimitConfig {
-    pub fn enabled(&self) -> bool {
-        self.per_circle_qps.is_some() || self.per_circle_concurrency.is_some()
-    }
 }
 
 impl Default for HttpConfig {
@@ -70,7 +47,6 @@ impl Default for HttpConfig {
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
             metrics_detailed_circle_labels: false,
-            circle_rate_limits: CircleRateLimitConfig::default(),
             extra: Map::new(),
         }
     }

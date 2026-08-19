@@ -9,7 +9,6 @@ mod jpush;
 mod oppo;
 mod reqwest_support;
 mod vivo;
-#[cfg(feature = "webpush-provider")]
 mod webpush;
 mod xiaomi;
 
@@ -48,7 +47,6 @@ pub use huawei::HuaweiPushkin;
 pub use jpush::JpushPushkin;
 pub use oppo::OppoPushkin;
 pub use vivo::VivoPushkin;
-#[cfg(feature = "webpush-provider")]
 pub use webpush::WebpushPushkin;
 pub use xiaomi::XiaomiPushkin;
 
@@ -371,30 +369,10 @@ fn create_pushkin(
         "oppo" => Ok(Arc::new(OppoPushkin::new(name, app, config)?)),
         "oneplus" => Ok(Arc::new(OppoPushkin::new_oneplus(name, app, config)?)),
         "vivo" => Ok(Arc::new(VivoPushkin::new(name, app, config)?)),
-        "webpush" => create_webpush_pushkin(name, app, config, base_dir),
+        "webpush" => Ok(Arc::new(WebpushPushkin::new(name, app, config, base_dir)?)),
         "xiaomi" => Ok(Arc::new(XiaomiPushkin::new(name, app, config)?)),
         other => bail!("unsupported pushkin type `{other}`"),
     }
-}
-
-#[cfg(feature = "webpush-provider")]
-fn create_webpush_pushkin(
-    name: String,
-    app: &AppConfig,
-    config: &Config,
-    base_dir: &Path,
-) -> Result<Arc<dyn Pushkin>> {
-    Ok(Arc::new(WebpushPushkin::new(name, app, config, base_dir)?))
-}
-
-#[cfg(not(feature = "webpush-provider"))]
-fn create_webpush_pushkin(
-    _name: String,
-    _app: &AppConfig,
-    _config: &Config,
-    _base_dir: &Path,
-) -> Result<Arc<dyn Pushkin>> {
-    bail!("webpush pushkin requires the `webpush-provider` cargo feature")
 }
 
 #[derive(Debug)]

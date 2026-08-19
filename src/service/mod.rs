@@ -58,33 +58,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
 pub fn build_router_with_access_log(state: Arc<AppState>, access_log: &AccessLogConfig) -> Router {
     let use_forwarded_for = access_log.x_forwarded_for;
-    Router::with_hoop(affix_state::inject(state))
-        .hoop(AccessLogger { use_forwarded_for })
-        .push(notify_route("_arkret/edge/push/notify"))
-        .push(
-            Router::with_path("_floria/integration/describe")
-                .get(integration_describe::integration_describe),
-        )
-        .push(
-            Router::with_path("_floria/push/bridge/describe")
-                .get(bridge_describe::bridge_describe),
-        )
-        .push(Router::with_path("_arkret/describe").get(server_describe::describe))
-        // Internal account-lifecycle broadcast endpoint.
-        .push(
-            Router::with_path("_floria/internal/account_deactivate_fanout")
-                .hoop(internal::require_internal_auth)
-                .post(internal::account_deactivate_fanout),
-        )
-        // Operator status lookup.
-        .push(
-            Router::with_path("_floria/admin/push/status/{idempotency_key}")
-                .hoop(internal::require_internal_auth)
-                .get(internal::push_status),
-        )
-        .push(Router::with_path("health").get(health::health))
-        .push(Router::with_path("ready").get(health::ready))
-        .push(Router::with_path("readyz").get(health::readyz))
+    build_router(state).hoop(AccessLogger { use_forwarded_for })
 }
 
 struct AccessLogger {

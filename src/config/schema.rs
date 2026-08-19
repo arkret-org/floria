@@ -158,23 +158,6 @@ fn http_schema() -> Value {
                 "type": "boolean",
                 "default": false,
                 "description": "AKP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count."
-            },
-            "circle_rate_limits": {
-                "type": "object",
-                "additionalProperties": false,
-                "description": "AKP-0007 Circle primitive. Per-Circle rate-limit caps applied on top of notify_rate_limits. Both knobs default to null (no per-Circle cap).",
-                "properties": {
-                    "per_circle_qps": {
-                        "type": ["integer", "null"],
-                        "minimum": 0,
-                        "description": "Max sustained notify QPS for a single Circle."
-                    },
-                    "per_circle_concurrency": {
-                        "type": ["integer", "null"],
-                        "minimum": 0,
-                        "description": "Max in-flight notify dispatches for a single Circle."
-                    }
-                }
             }
         }
     })

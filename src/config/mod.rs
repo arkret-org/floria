@@ -20,7 +20,7 @@ mod schema;
 mod tests;
 
 pub use audit_storage::{AuditConfig, StorageConfig};
-pub use http::{CircleRateLimitConfig, HttpConfig, InternalAuthConfig};
+pub use http::{HttpConfig, InternalAuthConfig};
 #[cfg(test)]
 use kdl::parse_kdl_to_json;
 pub use notify::{NotifyDedupConfig, NotifyRateLimitConfig, NotifyRetryQueueConfig};

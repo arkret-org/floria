@@ -52,14 +52,8 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
-      - name: Run clippy (webpush-provider)
-        run: cargo clippy --all-targets --features webpush-provider --locked -- -D warnings
-
       - name: Run tests
         run: cargo test --all-targets --locked
-
-      - name: Run tests (webpush-provider)
-        run: cargo test --all-targets --features webpush-provider --locked
 
   msrv:
     name: MSRV (Cargo.toml rust-version)
@@ -79,6 +73,3 @@ jobs:
 
       - name: Verify workspace builds on MSRV
         run: cargo check --workspace --all-targets --locked
-
-      - name: Verify workspace builds on MSRV (webpush-provider)
-        run: cargo check --workspace --all-targets --features webpush-provider --locked

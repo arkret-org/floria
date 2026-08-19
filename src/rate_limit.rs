@@ -85,14 +85,6 @@ impl NotifyRateLimiter {
         }
     }
 
-    pub fn redis(
-        config: NotifyRateLimitConfig,
-        redis_url: &str,
-        key_prefix: impl Into<String>,
-    ) -> Result<Self> {
-        Self::redis_with_policy(config, redis_url, key_prefix, RedisFailurePolicy::Strict)
-    }
-
     pub fn redis_with_policy(
         config: NotifyRateLimitConfig,
         redis_url: &str,
@@ -539,9 +531,14 @@ mod tests {
 
     #[test]
     fn redis_backend_requires_valid_url() {
-        let error = NotifyRateLimiter::redis(config(), "://bad-url", "floria")
-            .unwrap_err()
-            .to_string();
+        let error = NotifyRateLimiter::redis_with_policy(
+            config(),
+            "://bad-url",
+            "floria",
+            RedisFailurePolicy::Strict,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("invalid notify_rate_limits redis_url"));
     }
 
