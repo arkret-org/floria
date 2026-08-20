@@ -262,7 +262,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         takedown_contact: None,
         rate_limits: None,
         supported_reducer_profiles: vec![],
-        supported_schema_profiles: vec![],
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
         last_materialized_at: None,
