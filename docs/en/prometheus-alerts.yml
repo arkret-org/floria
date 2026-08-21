@@ -51,4 +51,4 @@ groups:
         labels: { severity: ticket, service: floria }
         annotations:
           summary: "floria dead-letter ring grew >100 entries in 1h"
-          description: "Inspect the configured PG overlay or dead-letter snapshot."
+          description: "Inspect the configured PG overlay or GET /_floria/admin/push/dead-letters?limit=N (internal-auth bearer)."

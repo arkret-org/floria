@@ -51,6 +51,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .hoop(internal::require_internal_auth)
                 .get(internal::push_status),
         )
+        // Operator dead-letter ring snapshot.
+        .push(
+            Router::with_path("_floria/admin/push/dead-letters")
+                .hoop(internal::require_internal_auth)
+                .get(internal::push_dead_letters),
+        )
         .push(Router::with_path("health").get(health::health))
         .push(Router::with_path("ready").get(health::ready))
         .push(Router::with_path("readyz").get(health::readyz))

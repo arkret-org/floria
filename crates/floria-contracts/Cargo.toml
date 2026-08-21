@@ -1,0 +1,16 @@
+[package]
+name = "floria-contracts"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+description = "Audited wire contract for floria's private internal endpoints (`/_floria/internal/*`). Producer: soland; consumer: floria."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = {workspace = true,features = ["derive"]}
+
+[dev-dependencies]
+serde_json = {workspace = true}

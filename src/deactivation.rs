@@ -8,7 +8,8 @@
 //! soland so soland can advance its own
 //! `ak.account.deactivate.fanout_state` machine.
 //!
-//! The wire shape mirrors soland's broadcast contract: per-actor +
+//! The wire shape is the audited `floria-contracts` crate (workspace member
+//! `crates/floria-contracts`), shared with soland as the producer: per-actor +
 //! per-device unbind targets, an idempotent `fanout_id`, and an
 //! `outcome` enum that includes `partially_completed` so soland never
 //! has to guess whether floria saw the full set.
@@ -31,95 +32,20 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+// Wire types live in the audited `floria-contracts` crate; re-export them so
+// in-crate consumers (`service::internal`, `broadcast`) keep their paths.
+pub use floria_contracts::{
+    AccountDeactivateFanoutAck, AccountDeactivateFanoutBroadcast, DeactivateFanoutDevice,
+    DeactivateFanoutOutcome,
+};
 use lru::LruCache;
 use postgres::types::ToSql;
-use serde::{Deserialize, Serialize};
 
 use crate::auth::redact_url_credentials;
 use crate::postgres_support::{PostgresPool, SqlTableName};
 
 const DEFAULT_DEACTIVATION_LEDGER_FANOUT_CAPACITY: usize = 16_384;
 const DEFAULT_DEACTIVATION_LEDGER_BINDING_CAPACITY: usize = 65_536;
-
-/// Round R2/R3 (T07) — broadcast envelope soland sends to every push
-/// gateway when a deactivation fanout starts.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AccountDeactivateFanoutBroadcast {
-    /// Stable id soland uses to deduplicate retries. Echoed back in
-    /// the ack response.
-    pub fanout_id: String,
-    /// DID of the principal whose footprint is being torn down. floria
-    /// never learns realm contents — only the actor identity.
-    pub actor_id: String,
-    /// Per-device unbind targets. Empty list means "every device for
-    /// this actor"; floria still answers honestly about how many cells
-    /// it saw.
-    #[serde(default)]
-    pub devices: Vec<DeactivateFanoutDevice>,
-    /// Optional soland-supplied reason — purely diagnostic, not echoed.
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeactivateFanoutDevice {
-    pub device_id: String,
-    /// Optional explicit push_key_hash hint so floria can match an
-    /// unbind target faster when the actor has many cells. The hint is
-    /// validated as a `pkh_*` shape; bare push tokens are NEVER carried
-    /// across this hop.
-    #[serde(default)]
-    pub push_key_hash: Option<String>,
-}
-
-/// Outcome a push gateway reports back to soland for a fanout.
-///
-/// Mirrors soland's `ak.account.deactivate.fanout_state` enum.
-/// `partially_completed` is reserved for the case where floria
-/// observed at least one cell it could not drain (e.g. queue subsystem
-/// momentarily unavailable) — sealed channels are treated as drained.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeactivateFanoutOutcome {
-    Completed,
-    PartiallyCompleted,
-    /// soland is permitted to retry the broadcast; floria saw nothing
-    /// to do for the requested actor.
-    NoOp,
-}
-
-impl DeactivateFanoutOutcome {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::PartiallyCompleted => "partially_completed",
-            Self::NoOp => "no_op",
-        }
-    }
-}
-
-/// Ack response floria emits back to soland after processing a
-/// deactivation fanout. Carries an honest accounting of what was
-/// touched so soland's fanout-state machine can step forward.
-#[derive(Debug, Clone, Serialize)]
-pub struct AccountDeactivateFanoutAck {
-    pub fanout_id: String,
-    pub outcome: DeactivateFanoutOutcome,
-    /// Number of per-actor bindings unbound (typically 1; can be > 1
-    /// if the same actor had multiple service-bound bindings).
-    pub actor_bindings_unbound: usize,
-    /// Number of per-device bindings unbound.
-    pub device_bindings_unbound: usize,
-    /// Number of cells whose underlying push channel was already
-    /// sealed (provider had previously rejected the token). These
-    /// count as drained for the purpose of `outcome`.
-    pub sealed_channels: usize,
-    /// Number of queued to-device messages drained as part of the
-    /// unbind. `0` until the queue-drain wiring lands.
-    pub messages_drained: usize,
-}
 
 /// Result of [`DeactivationLedger::record_fanout`].
 ///

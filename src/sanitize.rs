@@ -78,6 +78,34 @@ pub fn is_forbidden_egress_key(key: &str) -> bool {
             .any(|name| name.eq_ignore_ascii_case(key))
 }
 
+/// Recursively remove every [`STRIP_ONLY_KEYS`] name (case-insensitive)
+/// from a JSON value, descending into nested objects and arrays.
+///
+/// Used by egress-adjacent surfaces that serialize internal structures
+/// for an external reader — e.g. the operator dead-letter snapshot
+/// route — as a defense-in-depth backstop: even if the serialized shape
+/// later grows a routing/audit field, it never leaves the process.
+pub fn strip_egress_only_keys(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|key, _| {
+                !STRIP_ONLY_KEYS
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(key))
+            });
+            for child in map.values_mut() {
+                strip_egress_only_keys(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                strip_egress_only_keys(child);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Representative value for the closed `6-20` count bucket.
 pub const BUCKET_SIX_TO_TWENTY: u64 = 20;
 /// Representative value for the open `21+` count bucket.
@@ -149,5 +177,33 @@ mod tests {
         assert!(is_forbidden_egress_key("snooze_expires_at"));
         // Allowed blind field stays allowed at both layers.
         assert!(!is_forbidden_egress_key("push_target_id"));
+    }
+
+    #[test]
+    fn strip_egress_only_keys_removes_nested_and_case_insensitive_names() {
+        let mut value = serde_json::json!({
+            "request_id": "req-1",
+            "route_tokens": {"realm_route_token": "ak:secret"},
+            "Scope_Route_Token": "ak:secret-2",
+            "nested": {
+                "target_route_token": "ak:secret-3",
+                "kept": "yes",
+                "list": [
+                    {"delivery_binding_frontier_token": "ak:secret-4", "ok": 1}
+                ]
+            }
+        });
+        strip_egress_only_keys(&mut value);
+        let rendered = serde_json::to_string(&value).unwrap();
+        for name in STRIP_ONLY_KEYS {
+            assert!(
+                !rendered.to_ascii_lowercase().contains(*name),
+                "stripped key `{name}` leaked into `{rendered}`"
+            );
+        }
+        assert!(!rendered.contains("ak:secret"));
+        assert_eq!(value["request_id"], serde_json::json!("req-1"));
+        assert_eq!(value["nested"]["kept"], serde_json::json!("yes"));
+        assert_eq!(value["nested"]["list"][0]["ok"], serde_json::json!(1));
     }
 }

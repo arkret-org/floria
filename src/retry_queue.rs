@@ -474,6 +474,20 @@ impl RetryQueue {
         }
     }
 
+    /// Async-safe [`Self::dead_letter_snapshot`]: the in-memory ring is
+    /// read inline (lock-bounded, non-blocking) while the Redis backend
+    /// — which opens a blocking connection and runs a blocking `LRANGE`
+    /// — is offloaded to `spawn_blocking` so the operator route never
+    /// stalls a tokio worker thread (FLO-02-002).
+    pub async fn dead_letter_snapshot_async(
+        self: &std::sync::Arc<Self>,
+        limit: usize,
+    ) -> Vec<RetryEnvelope> {
+        queue_operation(self, move |queue| queue.dead_letter_snapshot(limit))
+            .await
+            .unwrap_or_default()
+    }
+
     /// Compute the next retry timestamp for an envelope that should
     /// be re-enqueued, applying exponential backoff capped by
     /// `max_backoff` and adding ±10% jitter so a stampede of clients

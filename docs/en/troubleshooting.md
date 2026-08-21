@@ -36,7 +36,9 @@ and the alert rules in `docs/en/prometheus-alerts.yml`.
 
 **Symptom**: `floria_retry_queue_depth` keeps climbing; alert
 `FloriaRetryQueueBackedUp` fires; dead-letter ring fills (visible
-through the configured PG overlay or dead-letter snapshot).
+through the configured PG overlay or the dead-letter snapshot route
+`GET /_floria/admin/push/dead-letters?limit=N` — internal-auth bearer,
+see `docs/en/internal-endpoints.md`).
 
 **Triage**:
 
@@ -56,9 +58,10 @@ through the configured PG overlay or dead-letter snapshot).
 - If a single provider is at fault, you can drain the queue by
   tightening `notify_rate_limits.per_provider` so new traffic backs
   off, then let the retry worker catch up.
-- If the queue is stuck behind a permanently-broken provider, use the
-  dead-letter snapshot to extract envelopes for manual replay; the
-  retry worker eventually dead-letters them after `max_attempts`.
+- If the queue is stuck behind a permanently-broken provider, use
+  `GET /_floria/admin/push/dead-letters?limit=N` (internal-auth
+  bearer) to extract envelopes for manual replay; the retry worker
+  eventually dead-letters them after `max_attempts`.
 - Increase `batch_item_count` on the retry worker (it polls every
   `poll_interval_ms`) if the backlog is caused by burstiness rather
   than provider failure.

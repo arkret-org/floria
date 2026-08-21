@@ -167,6 +167,98 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
     }
 }
 
+/// Default page size for the dead-letter snapshot route.
+const DEAD_LETTER_SNAPSHOT_DEFAULT_LIMIT: usize = 100;
+/// Hard cap so an operator typo cannot ask a Redis backend to
+/// deserialize an unbounded LRANGE in one request.
+const DEAD_LETTER_SNAPSHOT_MAX_LIMIT: usize = 1000;
+
+/// `GET /_floria/admin/push/dead-letters?limit=N` — operator snapshot of
+/// the push retry dead-letter ring (newest first), for inspecting
+/// exhausted-retry envelopes and extracting them for manual replay.
+/// Backed by [`crate::retry_queue::RetryQueue::dead_letter_snapshot`];
+/// returns 503 when the notify retry queue is disabled.
+///
+/// Every envelope is serialized to JSON and passed through
+/// [`crate::sanitize::strip_egress_only_keys`] before it is rendered, so
+/// gateway-internal routing/audit fields (`route_tokens`,
+/// `realm_route_token`, `scope_route_token`, `target_route_token`, …)
+/// can never leak through this operator surface even if the envelope
+/// shape grows such fields later.
+#[handler]
+pub(super) async fn push_dead_letters(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let started = Instant::now();
+    let state = match depot.get_typed::<Arc<AppState>>() {
+        Ok(state) => state.clone(),
+        Err(_) => {
+            finish_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
+                "application state missing",
+                None,
+                None,
+                started,
+            );
+            return;
+        }
+    };
+    let limit = match req.query::<String>("limit") {
+        None => DEAD_LETTER_SNAPSHOT_DEFAULT_LIMIT,
+        Some(raw) => match raw.trim().parse::<usize>() {
+            Ok(value) if (1..=DEAD_LETTER_SNAPSHOT_MAX_LIMIT).contains(&value) => value,
+            _ => {
+                finish_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+                    "limit query parameter must be an integer between 1 and 1000",
+                    None,
+                    None,
+                    started,
+                );
+                return;
+            }
+        },
+    };
+    let Some(queue) = state.notify_retry_queue.as_ref() else {
+        finish_error(
+            res,
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::error_codes::ErrorCode::SERVICE_UNAVAILABLE,
+            "notify retry queue is disabled; dead-letter snapshot unavailable",
+            None,
+            None,
+            started,
+        );
+        return;
+    };
+    let envelopes = queue.dead_letter_snapshot_async(limit).await;
+    let mut dead_letters = Vec::with_capacity(envelopes.len());
+    for envelope in &envelopes {
+        let mut value = match serde_json::to_value(envelope) {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!(error = %error, request_id = %envelope.request_id, "failed to serialize dead-letter envelope; skipping");
+                continue;
+            }
+        };
+        crate::sanitize::strip_egress_only_keys(&mut value);
+        dead_letters.push(value);
+    }
+    finish_json(
+        res,
+        StatusCode::OK,
+        serde_json::json!({
+            "backend": queue.backend_name(),
+            "limit": limit,
+            "count": dead_letters.len(),
+            "dead_letters": dead_letters,
+        }),
+        started,
+    );
+}
+
 #[handler]
 pub(super) async fn account_deactivate_fanout(
     req: &mut Request,

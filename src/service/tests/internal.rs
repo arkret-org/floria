@@ -16,6 +16,8 @@ use crate::deactivation::{
     AccountDeactivateFanoutBroadcast, DeactivationLedger, DeactivationQueueDrain,
 };
 use crate::pushkin::PushkinRegistry;
+use crate::retry_queue::{RetryEnvelope, RetryQueue, RetryQueueConfig};
+use crate::sanitize::STRIP_ONLY_KEYS;
 
 const INTERNAL_TOKEN: &str = "internal-test-token";
 
@@ -64,6 +66,25 @@ fn test_service_with_internal_auth_config(internal_auth: InternalAuthConfig) -> 
     let mut state = AppState::new(Arc::new(registry));
     state.internal_auth = internal_auth;
     Service::new(build_router(Arc::new(state)))
+}
+
+fn test_service_with_retry_queue(queue: Arc<RetryQueue>) -> Service {
+    let registry = PushkinRegistry::new(HashMap::new());
+    let mut state = AppState::new(Arc::new(registry));
+    state.notify_retry_queue = Some(queue);
+    state.internal_auth = internal_auth_config();
+    Service::new(build_router(Arc::new(state)))
+}
+
+fn dead_letter_envelope(request_id: &str) -> RetryEnvelope {
+    RetryEnvelope::new(
+        request_id,
+        "test-pushkin",
+        "app-1",
+        "push-key-1",
+        std::time::Duration::from_secs(30),
+        "provider timeout",
+    )
 }
 
 fn internal_auth(request: RequestBuilder) -> RequestBuilder {
@@ -181,6 +202,137 @@ async fn status_requires_internal_bearer() {
     assert_eq!(status.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let status_body: Value = status.take_json().await.unwrap();
     assert_eq!(status_body["error"]["code"], json!("unauthenticated"));
+}
+
+#[tokio::test]
+async fn dead_letters_requires_internal_bearer() {
+    let service =
+        test_service_with_retry_queue(Arc::new(RetryQueue::memory(RetryQueueConfig::default())));
+
+    let mut response = TestClient::get("http://127.0.0.1/_floria/admin/push/dead-letters")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["code"], json!("unauthenticated"));
+}
+
+#[tokio::test]
+async fn dead_letters_returns_503_when_retry_queue_disabled() {
+    // No retry queue configured at all — the route must answer 503, not
+    // pretend the ring is empty.
+    let service = test_service_without_broadcast_bus();
+
+    let mut response = internal_auth(TestClient::get(
+        "http://127.0.0.1/_floria/admin/push/dead-letters",
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(
+        response.status_code.unwrap(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["code"], json!("service_unavailable"));
+    assert_eq!(
+        body["error"]["message"],
+        json!("notify retry queue is disabled; dead-letter snapshot unavailable")
+    );
+}
+
+#[tokio::test]
+async fn dead_letters_empty_ring_returns_empty_snapshot() {
+    let service =
+        test_service_with_retry_queue(Arc::new(RetryQueue::memory(RetryQueueConfig::default())));
+
+    let mut response = internal_auth(TestClient::get(
+        "http://127.0.0.1/_floria/admin/push/dead-letters",
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["backend"], json!("memory"));
+    assert_eq!(body["count"], json!(0));
+    assert_eq!(body["dead_letters"], json!([]));
+}
+
+#[tokio::test]
+async fn dead_letters_full_ring_returns_newest_first_and_strips_egress_keys() {
+    // Capacity 3 and 5 inserts — the ring must evict the two oldest.
+    let config = RetryQueueConfig {
+        dead_letter_capacity: 3,
+        ..RetryQueueConfig::default()
+    };
+    let queue = Arc::new(RetryQueue::memory(config));
+    for index in 1..=5 {
+        queue.dead_letter(dead_letter_envelope(&format!("req-{index}")));
+    }
+    let service = test_service_with_retry_queue(queue);
+
+    let mut response = internal_auth(TestClient::get(
+        "http://127.0.0.1/_floria/admin/push/dead-letters",
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["backend"], json!("memory"));
+    assert_eq!(body["count"], json!(3));
+    // Newest first; req-1 / req-2 were evicted by the ring.
+    assert_eq!(body["dead_letters"][0]["request_id"], json!("req-5"));
+    assert_eq!(body["dead_letters"][1]["request_id"], json!("req-4"));
+    assert_eq!(body["dead_letters"][2]["request_id"], json!("req-3"));
+    assert_eq!(body["dead_letters"][0]["pushkin"], json!("test-pushkin"));
+    assert_eq!(
+        body["dead_letters"][0]["last_error"],
+        json!("provider timeout")
+    );
+
+    // Egress hygiene: no strip-only routing/audit key may appear
+    // anywhere in the rendered snapshot.
+    let rendered = serde_json::to_string(&body).unwrap().to_ascii_lowercase();
+    for name in STRIP_ONLY_KEYS {
+        assert!(
+            !rendered.contains(*name),
+            "strip-only key `{name}` leaked into dead-letter snapshot"
+        );
+    }
+
+    // `limit` truncates from the newest end.
+    let mut limited = internal_auth(TestClient::get(
+        "http://127.0.0.1/_floria/admin/push/dead-letters?limit=1",
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(limited.status_code.unwrap(), StatusCode::OK);
+    let limited_body: Value = limited.take_json().await.unwrap();
+    assert_eq!(limited_body["count"], json!(1));
+    assert_eq!(
+        limited_body["dead_letters"][0]["request_id"],
+        json!("req-5")
+    );
+}
+
+#[tokio::test]
+async fn dead_letters_rejects_invalid_limit() {
+    let service =
+        test_service_with_retry_queue(Arc::new(RetryQueue::memory(RetryQueueConfig::default())));
+
+    for bad in ["0", "abc", "-1", "1001"] {
+        let mut response = internal_auth(TestClient::get(format!(
+            "http://127.0.0.1/_floria/admin/push/dead-letters?limit={bad}"
+        )))
+        .send(&service)
+        .await;
+        assert_eq!(
+            response.status_code.unwrap(),
+            StatusCode::BAD_REQUEST,
+            "limit={bad} must be rejected"
+        );
+        let body: Value = response.take_json().await.unwrap();
+        assert_eq!(body["error"]["code"], json!("schema_violation"));
+    }
 }
 
 #[tokio::test]

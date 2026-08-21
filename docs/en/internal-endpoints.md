@@ -10,16 +10,18 @@ different auth and rate-limit posture.
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `/_floria/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
+| `/_floria/admin/push/status/{idempotency_key}` | GET | operator status lookup for an outstanding or recently completed `/notify` request (dedup-cache backed; 404 when unknown, 503 when the dedup cache is disabled) |
+| `/_floria/admin/push/dead-letters?limit=N` | GET | operator snapshot of the push retry dead-letter ring, newest first (`limit` defaults to 100, max 1000; 503 when `notify_retry_queue` is disabled). Envelopes are passed through the `sanitize.rs` strip-only egress list before rendering, so routing/audit fields such as `route_tokens` never appear in the response |
 
-The handler lives in `src/service/internal.rs` and is wired into
-the router in `src/service/mod.rs`. It shares the same `AppState`
+The handlers live in `src/service/internal.rs` and are wired into
+the router in `src/service/mod.rs`. They share the same `AppState`
 as `/notify` but never touch the public dedup cache or rate limiter.
 
 ## Auth posture
 
 floria enforces `http.internal_auth` bearer/shared-secret
 authentication on `/_floria/internal/*` and the operator-only
-`/_floria/admin/push/status/*` routes. If
+`/_floria/admin/push/*` routes (`status`, `dead-letters`). If
 no internal bearer token or token hash is configured, these routes fail
 closed with `503 service_unavailable`; missing or invalid credentials
 return `401 unauthenticated`.
