@@ -421,11 +421,6 @@ impl RetryQueue {
         }
     }
 
-    /// True iff a PG dead-letter overlay is attached.
-    pub fn has_deadletter_pg(&self) -> bool {
-        self.deadletter_pg.is_some()
-    }
-
     pub fn uses_blocking_io(&self) -> bool {
         matches!(self.backend, Backend::Redis(_)) || self.deadletter_pg.is_some()
     }
@@ -1062,11 +1057,5 @@ mod tests {
             format!("{overlay:?}").contains("floria"),
             "overlay debug must include the table"
         );
-    }
-
-    #[test]
-    fn retry_queue_without_pg_overlay_reports_none() {
-        let queue = RetryQueue::memory(RetryQueueConfig::default());
-        assert!(!queue.has_deadletter_pg());
     }
 }

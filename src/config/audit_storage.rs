@@ -141,10 +141,6 @@ impl StorageConfig {
             .filter(|value| !value.is_empty())
     }
 
-    pub fn postgres_enabled(&self) -> bool {
-        self.postgres_url().is_some()
-    }
-
     pub fn deactivation_queue_table(&self) -> &str {
         let value = self.deactivation_queue_table.trim();
         if value.is_empty() {

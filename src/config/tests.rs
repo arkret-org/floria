@@ -14,7 +14,6 @@ apps: {}
     assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
     assert_eq!(config.http.notify_dedup.backend_kind(), "memory");
     assert_eq!(config.audit.backend_kind(), "disabled");
-    assert!(!config.storage.postgres_enabled());
     assert_eq!(
         config.storage.deactivation_queue_table(),
         "floria_push_delivery_queue"
