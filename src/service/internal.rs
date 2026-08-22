@@ -362,7 +362,6 @@ pub(super) async fn account_deactivate_fanout(
         outcome = %ack.outcome.as_str(),
         actor_bindings_unbound = ack.actor_bindings_unbound,
         device_bindings_unbound = ack.device_bindings_unbound,
-        sealed_channels = ack.sealed_channels,
         messages_drained = ack.messages_drained,
         "processed account_deactivate_fanout broadcast"
     );

@@ -63,7 +63,7 @@ pub struct DeactivateFanoutDevice {
 ///
 /// `partially_completed` is reserved for the case where floria observed at
 /// least one cell it could not drain (e.g. queue subsystem momentarily
-/// unavailable) — sealed channels are treated as drained.
+/// unavailable).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeactivateFanoutOutcome {
@@ -99,10 +99,6 @@ pub struct AccountDeactivateFanoutAck {
     pub actor_bindings_unbound: usize,
     /// Number of per-device bindings unbound.
     pub device_bindings_unbound: usize,
-    /// Number of cells whose underlying push channel was already
-    /// sealed (provider had previously rejected the token). These
-    /// count as drained for the purpose of `outcome`.
-    pub sealed_channels: usize,
     /// Number of queued to-device messages drained as part of the
     /// unbind.
     pub messages_drained: usize,
@@ -184,7 +180,6 @@ mod tests {
             "outcome": "completed",
             "actor_bindings_unbound": 1,
             "device_bindings_unbound": 2,
-            "sealed_channels": 0,
             "messages_drained": 3,
             "future_field": {"ignored": true}
         }))

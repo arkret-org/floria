@@ -56,8 +56,7 @@ use retry_queue::RetryQueue;
 //
 // `deactivation_ledger` accepts `account_deactivate_fanout` events from soland,
 // performs per-actor + per-device unbinds, and tracks whether the fanout completed
-// fully or partially. Sealed channels still count as drained so soland's fanout
-// state isn't blocked on a dead push provider.
+// fully or partially.
 //
 // It is optional so deployments that do not subscribe to the soland
 // broadcast bus can leave it unset; the endpoint then answers

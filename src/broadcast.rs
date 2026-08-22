@@ -46,7 +46,6 @@ impl InProcessBroadcastBus {
             outcome: result.outcome,
             actor_bindings_unbound: result.actor_bindings_unbound,
             device_bindings_unbound: result.device_bindings_unbound,
-            sealed_channels: result.sealed_channels,
             messages_drained: result.messages_drained,
         })
     }

@@ -14,14 +14,6 @@
 //! `outcome` enum that includes `partially_completed` so soland never
 //! has to guess whether floria saw the full set.
 //!
-//! Sealing semantics: if a downstream push provider has already rejected
-//! a token (push key sealed → `BadDeviceToken`, `Unregistered`, etc.)
-//! the local unbind succeeds anyway — there's nothing left to drain. We
-//! still report the fanout as complete locally so soland's fanout state
-//! is not blocked on a dead channel; the partial-vs-complete signal is
-//! reserved for cases where floria's own bookkeeping is incomplete
-//! (e.g. the queue subsystem is unreachable during the drain).
-//!
 //! When configured with PostgreSQL, floria drains the local
 //! `storage.deactivation_queue_table` by deleting queued rows for the
 //! actor, optionally narrowed to the broadcast's device ids /
@@ -57,7 +49,6 @@ pub struct DeactivationFanoutResult {
     pub outcome: DeactivateFanoutOutcome,
     pub actor_bindings_unbound: usize,
     pub device_bindings_unbound: usize,
-    pub sealed_channels: usize,
     pub messages_drained: usize,
 }
 
@@ -165,10 +156,6 @@ struct DeactivationLedgerInner {
     /// Set of actor_id values whose actor-level binding has been
     /// torn down.
     unbound_actors: LruCache<String, ()>,
-    /// Set of (actor_id, device_id) bindings whose underlying push
-    /// channel is sealed (provider rejected the token previously).
-    /// Populated by [`DeactivationLedger::mark_channel_sealed`].
-    sealed: LruCache<(String, String), ()>,
 }
 
 impl Default for DeactivationLedgerInner {
@@ -186,7 +173,6 @@ impl DeactivationLedgerInner {
             seen: LruCache::new(non_zero_capacity(fanout_capacity)),
             unbound_devices: LruCache::new(non_zero_capacity(binding_capacity)),
             unbound_actors: LruCache::new(non_zero_capacity(binding_capacity)),
-            sealed: LruCache::new(non_zero_capacity(binding_capacity)),
         }
     }
 }
@@ -227,16 +213,6 @@ impl DeactivationLedger {
         }
     }
 
-    /// Mark a channel as sealed so a subsequent fanout for the same
-    /// `(actor, device)` reports the cell as drained-via-sealed rather
-    /// than partially completed.
-    pub fn mark_channel_sealed(&self, actor_id: &str, device_id: &str) {
-        let mut inner = self.inner.lock().expect("deactivation ledger poisoned");
-        inner
-            .sealed
-            .put((actor_id.to_owned(), device_id.to_owned()), ());
-    }
-
     /// Process a fanout broadcast. Idempotent: a retry with the same
     /// `fanout_id` returns the recorded result without double-counting.
     pub fn record_fanout(
@@ -261,19 +237,11 @@ impl DeactivationLedger {
         }
 
         let mut device_bindings_unbound: usize = 0;
-        let mut sealed_channels: usize = 0;
         let mut observed_at_least_one_cell = false;
 
         for device in &broadcast.devices {
             observed_at_least_one_cell = true;
             let key = (broadcast.actor_id.clone(), device.device_id.clone());
-            if inner.sealed.contains(&key) {
-                sealed_channels += 1;
-                // Still mark as unbound so a future fanout for the
-                // same cell is a no-op rather than re-counted.
-                inner.unbound_devices.put(key, ());
-                continue;
-            }
             if lru_insert_absent(&mut inner.unbound_devices, key) {
                 device_bindings_unbound += 1;
             }
@@ -306,10 +274,6 @@ impl DeactivationLedger {
         } else if !observed_at_least_one_cell && actor_bindings_unbound == 0 {
             DeactivateFanoutOutcome::NoOp
         } else {
-            // Sealed channels DO count toward "drained" for the
-            // purpose of unblocking soland's fanout state machine, per
-            // T07: "if a channel is sealed, still mark fanout complete
-            // locally; don't block soland's fanout state".
             DeactivateFanoutOutcome::Completed
         };
 
@@ -317,7 +281,6 @@ impl DeactivationLedger {
             outcome,
             actor_bindings_unbound,
             device_bindings_unbound,
-            sealed_channels,
             messages_drained,
         };
         inner.seen.put(broadcast.fanout_id.clone(), result.clone());
@@ -373,7 +336,6 @@ mod tests {
         assert_eq!(result.outcome, DeactivateFanoutOutcome::Completed);
         assert_eq!(result.actor_bindings_unbound, 1);
         assert_eq!(result.device_bindings_unbound, 2);
-        assert_eq!(result.sealed_channels, 0);
     }
 
     #[test]
@@ -409,21 +371,6 @@ mod tests {
         let first = ledger.record_fanout(&payload);
         let second = ledger.record_fanout(&payload);
         assert_eq!(first, second);
-    }
-
-    #[test]
-    fn ledger_treats_sealed_channels_as_drained() {
-        let ledger = DeactivationLedger::new();
-        ledger.mark_channel_sealed("did:web:alice.example", "device-a");
-        let result = ledger.record_fanout(&broadcast(
-            "fanout-1",
-            "did:web:alice.example",
-            &["device-a", "device-b"],
-        ));
-        // Sealed cell counts as drained, not partial — per T07.
-        assert_eq!(result.outcome, DeactivateFanoutOutcome::Completed);
-        assert_eq!(result.sealed_channels, 1);
-        assert_eq!(result.device_bindings_unbound, 1);
     }
 
     #[test]

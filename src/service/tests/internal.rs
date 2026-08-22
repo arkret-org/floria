@@ -1,6 +1,5 @@
 //! Service tests for the internal account-deactivation broadcast endpoint.
-//! Verifies wire-shape rejection, idempotency, and the sealed-channel
-//! "still complete" outcome.
+//! Verifies wire-shape rejection and idempotency.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -360,7 +359,6 @@ async fn account_deactivate_fanout_completes_for_drained_devices() {
     assert_eq!(body["outcome"], json!("completed"));
     assert_eq!(body["device_bindings_unbound"], json!(2));
     assert_eq!(body["actor_bindings_unbound"], json!(1));
-    assert_eq!(body["sealed_channels"], json!(0));
 }
 
 #[tokio::test]
@@ -440,35 +438,6 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
         1,
         "idempotent retry must not drain the queue twice"
     );
-}
-
-#[tokio::test]
-async fn account_deactivate_fanout_marks_sealed_channels_as_drained() {
-    let ledger = Arc::new(DeactivationLedger::new());
-    ledger.mark_channel_sealed("did:web:alice.example", "device-a");
-    let service = test_service_with_internal_state(Some(ledger.clone()));
-
-    let mut response = internal_auth(TestClient::post(
-        "http://127.0.0.1/_floria/internal/account_deactivate_fanout",
-    ))
-    .json(&json!({
-        "fanout_id": "fanout-1",
-        "actor_id": "did:web:alice.example",
-        "devices": [
-            {"device_id": "device-a"},
-            {"device_id": "device-b"}
-        ]
-    }))
-    .send(&service)
-    .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body: Value = response.take_json().await.unwrap();
-    // Sealed channels count as drained — outcome MUST be `completed`
-    // so soland's fanout state is not blocked.
-    assert_eq!(body["outcome"], json!("completed"));
-    assert_eq!(body["sealed_channels"], json!(1));
-    assert_eq!(body["device_bindings_unbound"], json!(1));
 }
 
 #[tokio::test]
