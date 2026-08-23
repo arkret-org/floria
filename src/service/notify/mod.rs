@@ -17,9 +17,7 @@ use super::metrics::{
 };
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
-use crate::models::{
-    DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
-};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt, NotifyDispatchResult};
 use crate::{AppState, metrics as app_metrics};
 
 mod helpers;
@@ -134,13 +132,9 @@ fn duration_millis(duration: Duration) -> u64 {
 fn no_fanout_response(
     request_id: &str,
     notification: &PushNotificationEnvelope,
-) -> PushNotifyOutcome {
+) -> NotifyDispatchResult {
     let outcomes = accepted_outcomes(notification);
-    PushNotifyOutcome {
-        request_id: request_id.to_owned(),
-        push_target_id: push_target_id(notification),
-        outcomes,
-    }
+    NotifyDispatchResult::new(request_id, push_target_id(notification), outcomes)
 }
 
 fn circuit_breaker_key(
@@ -644,11 +638,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     )
                 })
                 .collect();
-            let response = PushNotifyOutcome {
-                request_id: request_id.clone(),
-                push_target_id: push_target_id(&notification),
+            let response = NotifyDispatchResult::new(
+                request_id.clone(),
+                push_target_id(&notification),
                 outcomes,
-            };
+            );
             cache_success_response(&state, &dedup_key, &request_fingerprint, &response).await;
             finish_standard_notify_json(res, StatusCode::OK, &response, started);
             return;
@@ -1088,11 +1082,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 "returning success with cached delivered devices"
             );
         }
-        let response = PushNotifyOutcome {
-            request_id: context.request_id.clone(),
-            push_target_id: push_target_id(&notification),
+        let response = NotifyDispatchResult::new(
+            context.request_id.clone(),
+            push_target_id(&notification),
             outcomes,
-        };
+        );
         if !record_rejected_devices_audit_or_finish(
             &state,
             &context.request_id,
@@ -1136,11 +1130,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
     }
 
-    let response = PushNotifyOutcome {
-        request_id: context.request_id.clone(),
-        push_target_id: push_target_id(&notification),
+    let response = NotifyDispatchResult::new(
+        context.request_id.clone(),
+        push_target_id(&notification),
         outcomes,
-    };
+    );
     if !record_rejected_devices_audit_or_finish(
         &state,
         &context.request_id,

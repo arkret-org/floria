@@ -36,7 +36,7 @@ use lru::LruCache;
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
-use crate::models::FloriaPushNotifyOutcome as PushNotifyOutcome;
+use crate::models::NotifyDispatchResult;
 use crate::redis_support::{RedisConnection, RedisPool};
 
 /// Lightweight status snapshot for the `GET /_floria/admin/push/status/{key}`
@@ -54,15 +54,15 @@ pub struct NotifyStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedPushNotifyOutcome {
-    pub response: PushNotifyOutcome,
+pub struct CachedNotifyDispatchResult {
+    pub response: NotifyDispatchResult,
 }
 
 #[derive(Debug)]
 struct CacheEntry {
     expires_at: Instant,
     request_fingerprint: String,
-    response: CachedPushNotifyOutcome,
+    response: CachedNotifyDispatchResult,
 }
 
 /// Upper bound on distinct in-memory dedup slots (request cache +
@@ -154,7 +154,11 @@ impl NotifyDeduplicator {
         }
     }
 
-    pub fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
+    pub fn lookup(
+        &self,
+        key: &str,
+        request_fingerprint: &str,
+    ) -> Option<CachedNotifyDispatchResult> {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
             NotifyDedupBackend::Redis(backend) => backend.lookup(key, request_fingerprint),
@@ -167,7 +171,7 @@ impl NotifyDeduplicator {
         self: &Arc<Self>,
         key: &str,
         request_fingerprint: &str,
-    ) -> Option<CachedPushNotifyOutcome> {
+    ) -> Option<CachedNotifyDispatchResult> {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
             NotifyDedupBackend::Redis(_) => {
@@ -211,7 +215,7 @@ impl NotifyDeduplicator {
         &self,
         key: &str,
         request_fingerprint: &str,
-        response: PushNotifyOutcome,
+        response: NotifyDispatchResult,
     ) {
         if self.ttl.is_zero() {
             return;
@@ -231,7 +235,7 @@ impl NotifyDeduplicator {
         self: &Arc<Self>,
         key: &str,
         request_fingerprint: &str,
-        response: PushNotifyOutcome,
+        response: NotifyDispatchResult,
     ) {
         match &self.backend {
             NotifyDedupBackend::Memory(_) => {
@@ -332,6 +336,7 @@ impl NotifyDeduplicator {
             NotifyDedupBackend::Redis(backend) => backend.cached_response(key)?,
         };
         let attempts = response
+            .wire_outcome
             .outcomes
             .iter()
             .filter(|outcome| {
@@ -347,6 +352,7 @@ impl NotifyDeduplicator {
             .saturating_add(1) as u32;
         let accepted = response.accepted();
         let rejected = response
+            .wire_outcome
             .outcomes
             .iter()
             .filter(|outcome| {
@@ -364,6 +370,7 @@ impl NotifyDeduplicator {
             "unknown"
         };
         let last_error = response
+            .wire_outcome
             .outcomes
             .iter()
             .find_map(|outcome| outcome.reason_code.map(|reason| reason.as_str().to_owned()));
@@ -378,7 +385,7 @@ impl NotifyDeduplicator {
 }
 
 impl MemoryNotifyDeduplicator {
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyDispatchResult> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -414,7 +421,7 @@ impl MemoryNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: PushNotifyOutcome,
+        response: NotifyDispatchResult,
     ) {
         let now = Instant::now();
         let mut entries = self
@@ -428,7 +435,7 @@ impl MemoryNotifyDeduplicator {
             CacheEntry {
                 expires_at: now + ttl,
                 request_fingerprint: request_fingerprint.to_owned(),
-                response: CachedPushNotifyOutcome { response },
+                response: CachedNotifyDispatchResult { response },
             },
         );
     }
@@ -471,7 +478,7 @@ impl MemoryNotifyDeduplicator {
         entries.put(key, now + ttl);
     }
 
-    fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {
+    fn cached_response(&self, key: &str) -> Option<NotifyDispatchResult> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -512,7 +519,7 @@ impl RedisNotifyDeduplicator {
         }
     }
 
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyOutcome> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyDispatchResult> {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
             Err(error) => {
@@ -541,8 +548,8 @@ impl RedisNotifyDeduplicator {
                 return None;
             }
         }?;
-        match serde_json::from_str::<PushNotifyOutcome>(&response_json) {
-            Ok(response) => Some(CachedPushNotifyOutcome { response }),
+        match serde_json::from_str::<NotifyDispatchResult>(&response_json) {
+            Ok(response) => Some(CachedNotifyDispatchResult { response }),
             Err(error) => {
                 tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to deserialize cached Redis notify response");
                 None
@@ -574,7 +581,7 @@ impl RedisNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: PushNotifyOutcome,
+        response: NotifyDispatchResult,
     ) {
         let ttl_seconds = ttl_seconds(ttl);
         let response_key = self.response_key(key);
@@ -653,7 +660,7 @@ impl RedisNotifyDeduplicator {
         self.pool.connection()
     }
 
-    fn cached_response(&self, key: &str) -> Option<PushNotifyOutcome> {
+    fn cached_response(&self, key: &str) -> Option<NotifyDispatchResult> {
         let mut connection = self.connection().ok()?;
         let response_key = self.response_key(key);
         let response_json: Option<String> = connection
@@ -661,7 +668,7 @@ impl RedisNotifyDeduplicator {
             .ok()
             .flatten();
         let response_json = response_json?;
-        serde_json::from_str::<PushNotifyOutcome>(&response_json).ok()
+        serde_json::from_str::<NotifyDispatchResult>(&response_json).ok()
     }
 
     /// Wrap the dynamic component of the key in Redis cluster hash
@@ -719,11 +726,11 @@ mod tests {
     #[test]
     fn returns_inserted_response_before_expiry() {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
-        let response = PushNotifyOutcome {
-            request_id: "request-1".to_owned(),
-            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
-            outcomes: vec![],
-        };
+        let response = NotifyDispatchResult::new(
+            "request-1",
+            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            vec![],
+        );
         let key = request_hash(br#"{"notification":{}}"#);
 
         dedup.insert_success(&key, &key, response.clone());
@@ -741,11 +748,11 @@ mod tests {
         dedup.insert_success(
             &key,
             &key,
-            PushNotifyOutcome {
-                request_id: "request-1".to_owned(),
-                push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
-                outcomes: vec![],
-            },
+            NotifyDispatchResult::new(
+                "request-1",
+                "ak:pseudonym:push:01HYZ8Z000000000000000",
+                vec![],
+            ),
         );
 
         std::thread::sleep(Duration::from_millis(5));
@@ -772,11 +779,11 @@ mod tests {
         dedup.insert_success(
             &key,
             &first_fingerprint,
-            PushNotifyOutcome {
-                request_id: "request-1".to_owned(),
-                push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
-                outcomes: vec![],
-            },
+            NotifyDispatchResult::new(
+                "request-1",
+                "ak:pseudonym:push:01HYZ8Z000000000000000",
+                vec![],
+            ),
         );
 
         assert!(dedup.lookup(&key, &first_fingerprint).is_some());
@@ -841,12 +848,12 @@ mod tests {
         Ok(())
     }
 
-    fn sample_response(index: usize) -> PushNotifyOutcome {
-        PushNotifyOutcome {
-            request_id: format!("request-{index}"),
-            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
-            outcomes: vec![],
-        }
+    fn sample_response(index: usize) -> NotifyDispatchResult {
+        NotifyDispatchResult::new(
+            format!("request-{index}"),
+            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            vec![],
+        )
     }
 
     fn assert_redis_ttl(

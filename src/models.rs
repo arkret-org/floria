@@ -1,18 +1,34 @@
 use std::time::Instant;
 
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope, PushRouteToken};
+use arkret_models_integration::{
+    PushDeviceRoute, PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyOutcome,
+    PushRouteToken,
+};
 use blake2::Blake2s256;
 use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FloriaPushNotifyOutcome {
+pub struct NotifyDispatchResult {
     pub request_id: String,
-    pub push_target_id: String,
-    pub outcomes: Vec<arkret_models_integration::PushNotifyDeviceOutcome>,
+    pub wire_outcome: PushNotifyOutcome,
 }
 
-impl FloriaPushNotifyOutcome {
+impl NotifyDispatchResult {
+    pub fn new(
+        request_id: impl Into<String>,
+        push_target_id: impl Into<String>,
+        outcomes: Vec<PushNotifyDeviceOutcome>,
+    ) -> Self {
+        Self {
+            request_id: request_id.into(),
+            wire_outcome: PushNotifyOutcome {
+                push_target_id: push_target_id.into(),
+                outcomes,
+            },
+        }
+    }
+
     pub fn with_request_id(&self, request_id: impl Into<String>) -> Self {
         let mut cloned = self.clone();
         cloned.request_id = request_id.into();
@@ -20,7 +36,8 @@ impl FloriaPushNotifyOutcome {
     }
 
     pub fn accepted(&self) -> usize {
-        self.outcomes
+        self.wire_outcome
+            .outcomes
             .iter()
             .filter(|outcome| {
                 outcome.gateway_status
@@ -236,7 +253,7 @@ mod tests {
     use arkret_models_integration::{PushCounts, PushNotificationEnvelope};
     use serde_json::json;
 
-    use super::{FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt};
+    use super::{NotificationExt, NotifyDispatchResult};
 
     #[test]
     fn notification_uses_priority_wire_field() {
@@ -361,18 +378,18 @@ mod tests {
 
     #[test]
     fn notify_response_carries_no_provider_identifiers() {
-        let response = PushNotifyOutcome {
-            request_id: "ak:request:0196419b-0000-7000-8000-000000000010".to_owned(),
-            push_target_id: "ak:pseudonym:push:01HYZ8Z000000000000000".to_owned(),
-            outcomes: vec![
+        let response = NotifyDispatchResult::new(
+            "ak:request:0196419b-0000-7000-8000-000000000010",
+            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            vec![
                 arkret_models_integration::PushNotifyDeviceOutcome::accepted(
                     arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000004")
                         .unwrap(),
                 ),
             ],
-        };
+        );
 
-        let encoded = serde_json::to_string(&response).unwrap();
+        let encoded = serde_json::to_string(&response.wire_outcome).unwrap();
         for forbidden in [
             "push_key",
             "app_id",

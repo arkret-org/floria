@@ -14,8 +14,8 @@ use crate::auth::{
 };
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
-    RejectedDevice, redact_push_token,
+    DeliveryReceipt, DeviceExt, NotificationExt, NotifyDispatchResult, RejectedDevice,
+    redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -256,26 +256,23 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
 pub(super) fn finish_standard_notify_json(
     res: &mut Response,
     status: StatusCode,
-    response: &PushNotifyOutcome,
+    response: &NotifyDispatchResult,
     started: Instant,
 ) {
     finish_json(res, status, standard_notify_outcome(response), started);
 }
 
 fn standard_notify_outcome(
-    response: &PushNotifyOutcome,
+    response: &NotifyDispatchResult,
 ) -> arkret_models_integration::PushNotifyOutcome {
-    arkret_models_integration::PushNotifyOutcome {
-        push_target_id: response.push_target_id.clone(),
-        outcomes: response.outcomes.clone(),
-    }
+    response.wire_outcome.clone()
 }
 
 pub(super) async fn cache_success_response(
     state: &Arc<AppState>,
     key: &str,
     request_fingerprint: &str,
-    response: &PushNotifyOutcome,
+    response: &NotifyDispatchResult,
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         deduplicator
