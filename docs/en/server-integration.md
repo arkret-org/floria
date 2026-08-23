@@ -49,7 +49,7 @@ by the URL and headers, not repeated in the body:
     "message_id": "ak:message:01JS0MSG0000000000000000",
     "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
     "realm_id": "ak:realm:01JS0SP000000000000000000",
-    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
     "wakeup_kind": "message",
     "timing_profile_hint": "default",
     "push_hint": "new_message",
@@ -88,7 +88,7 @@ or token metadata:
 
 ```json
 {
-  "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+  "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
   "outcomes": [
     {
       "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",

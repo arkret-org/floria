@@ -191,7 +191,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
             // defined by push-operations.schema.json#/$defs/counts.
             blind_wakeup_request: serde_json::json!({
                 "notification": {
-                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "push_hint": "new_message",
@@ -206,7 +206,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                     "event_id": "ak:event:AXYmt-Fuaq8Z8WqGu-VhVW_K-DQCqU0mMHZaXotnF-7g",
                     "strand_id": "ak:strand:AXYmt-Fuaq8Z8WqGu-VhVW_K-DQCqU0mMHZaXotnF-7g",
                     "realm_id": "ak:realm:AW2ArxAsk4QV_AskkaL7o8Oli_HF9cYojMSbnlxYnNs6",
-                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "push_hint": "new_message",

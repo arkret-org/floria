@@ -880,7 +880,10 @@ pub async fn run_worker(
                 ))
                 .expect("static retry shell device id is valid"),
                 app_id: Some(envelope.app_id.clone()),
-                push_key: Some(envelope.push_key.clone()),
+                push_key: Some(
+                    arkret_models_integration::PushKey::new(envelope.push_key.clone())
+                        .expect("persisted retry push key remains valid"),
+                ),
                 platform: None,
                 target_route_token: None,
                 visible_notification_opt_in: false,

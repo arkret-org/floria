@@ -84,7 +84,7 @@ fn sanitizer_strips_fcm_data_only_forbidden_fields() {
         "content_body": "I'm floating in a most peculiar way.",
         "content_msgtype": "m.text",
         "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
     })
     .as_object()
@@ -152,7 +152,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },
-        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
         "push_hint": "new_message",
         "counts": { "unread_increment": 3 },
@@ -162,7 +162,9 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
     let data = build_blind_provider_data(&notification);
     assert_eq!(
         data.get("push_target_id"),
-        Some(&json!("ak:pseudonym:push:01HYZ8Z000000000000000"))
+        Some(&json!(
+            "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8"
+        ))
     );
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     assert_eq!(data.get("push_hint"), Some(&json!("new_message")));
@@ -325,7 +327,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     // complete typed 44-character event tokens; this blind payload carries
     // only opaque route tokens.
     let notification: PushNotificationEnvelope = serde_json::from_value(json!({
-        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
         "timing_profile_hint": "default",
         "route_tokens": {
@@ -438,7 +440,7 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },
-        "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
         "timing_profile_hint": "default",
         "devices": [{

@@ -728,7 +728,10 @@ mod tests {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
         let response = NotifyDispatchResult::new(
             "request-1",
-            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            arkret_wire::PushTargetId::new(
+                "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+            )
+            .unwrap(),
             vec![],
         );
         let key = request_hash(br#"{"notification":{}}"#);
@@ -750,7 +753,10 @@ mod tests {
             &key,
             NotifyDispatchResult::new(
                 "request-1",
-                "ak:pseudonym:push:01HYZ8Z000000000000000",
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
                 vec![],
             ),
         );
@@ -781,7 +787,10 @@ mod tests {
             &first_fingerprint,
             NotifyDispatchResult::new(
                 "request-1",
-                "ak:pseudonym:push:01HYZ8Z000000000000000",
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
                 vec![],
             ),
         );
@@ -851,7 +860,10 @@ mod tests {
     fn sample_response(index: usize) -> NotifyDispatchResult {
         NotifyDispatchResult::new(
             format!("request-{index}"),
-            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            arkret_wire::PushTargetId::new(
+                "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+            )
+            .unwrap(),
             vec![],
         )
     }

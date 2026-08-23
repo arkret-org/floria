@@ -113,8 +113,11 @@ fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
     Duration::from_nanos((bucket_nanos - elapsed_in_bucket).min(u64::MAX as u128) as u64)
 }
 
-fn push_target_id(notification: &PushNotificationEnvelope) -> String {
-    notification.push_target_id.clone().unwrap_or_default()
+fn push_target_id(notification: &PushNotificationEnvelope) -> arkret_wire::PushTargetId {
+    notification
+        .push_target_id
+        .clone()
+        .expect("validated notify request has a push_target_id")
 }
 
 fn accepted_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyDeviceOutcome> {
@@ -709,7 +712,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 notification
                     .mention_redirect_target_route_tokens()
                     .iter()
-                    .any(|allowed| allowed.trim() == route_token)
+                    .any(|allowed| allowed.as_str() == route_token)
             });
             if !allowed {
                 tracing::info!(

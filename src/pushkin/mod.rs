@@ -478,7 +478,7 @@ pub fn sanitized_provider_payload(
     strip_forbidden_recursive(&mut payload);
     let envelope = serde_json::json!({
         "notification": {
-            "push_target_id": "ak:pseudonym:push:0000000000000000000000",
+            "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
         },
@@ -562,12 +562,10 @@ pub fn build_blind_routing_data(
     use arkret_push_policy::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
-    if let Some(push_target_id) = notification.push_target_id.as_deref()
-        && sdk::is_valid_push_target_id(push_target_id)
-    {
+    if let Some(push_target_id) = notification.push_target_id.as_ref() {
         data.insert(
             "push_target_id".to_owned(),
-            serde_json::Value::String(push_target_id.to_owned()),
+            serde_json::Value::String(push_target_id.as_str().to_owned()),
         );
     }
     if let Some(wakeup_kind) = notification.wakeup_kind()
@@ -811,7 +809,12 @@ mod sanitize_tests {
                 ..Default::default()
             }),
             user_is_target: None,
-            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some(
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
+            ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],

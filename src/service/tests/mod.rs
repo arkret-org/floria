@@ -239,7 +239,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             "route_tokens": {
                 "realm_route_token": "realm_route_token_000000001"
             },
-            "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+            "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
             "timing_profile_hint": "default",
             "push_hint": "new_message",
@@ -310,8 +310,8 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
         .await
         .unwrap();
     assert_eq!(
-        body.push_target_id,
-        "ak:pseudonym:push:01HYZ8Z000000000000000"
+        body.push_target_id.as_str(),
+        "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8"
     );
     assert!(!body.outcomes.is_empty());
     assert_eq!(

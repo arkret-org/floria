@@ -485,7 +485,12 @@ mod tests {
                 ..Default::default()
             }),
             user_is_target: Some(true),
-            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some(
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
+            ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -567,7 +572,7 @@ mod tests {
         );
         assert!(
             payload_blob
-                .contains("\"push_target_id\":\"ak:pseudonym:push:01HYZ8Z000000000000000\""),
+                .contains("\"push_target_id\":\"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8\""),
             "xiaomi payload must carry push_target_id: {payload_blob}"
         );
     }

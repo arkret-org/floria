@@ -396,7 +396,10 @@ pub(super) fn normalized_notify_dedup_key(
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));
     }
     if let Some(value) = notification.push_target_id.as_ref() {
-        normalized.insert("push_target_id".to_owned(), Value::String(value.clone()));
+        normalized.insert(
+            "push_target_id".to_owned(),
+            Value::String(value.as_str().to_owned()),
+        );
     }
     if let Some(value) = notification.wakeup_kind() {
         normalized.insert("wakeup_kind".to_owned(), Value::String(value.to_owned()));
@@ -421,7 +424,7 @@ pub(super) fn normalized_notify_dedup_key(
         let mut sorted = notification
             .mention_redirect_target_route_tokens()
             .iter()
-            .map(|token| token.trim().to_owned())
+            .map(|token| token.as_str().to_owned())
             .filter(|token| !token.is_empty())
             .collect::<Vec<_>>();
         sorted.sort();

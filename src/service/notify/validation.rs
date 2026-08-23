@@ -176,7 +176,10 @@ pub(super) fn validate_plaintext_identity_metadata(
 
     validate_optional_plaintext_identity_string(
         "notification.push_target_id",
-        notification.push_target_id.as_deref(),
+        notification
+            .push_target_id
+            .as_ref()
+            .map(arkret_wire::PushTargetId::as_str),
     )?;
     validate_optional_plaintext_identity_string(
         "notification.wakeup_kind",

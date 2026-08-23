@@ -815,7 +815,12 @@ mod tests {
                 ..Default::default()
             }),
             user_is_target: None,
-            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some(
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
+            ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
@@ -841,7 +846,7 @@ mod tests {
         assert_eq!(
             payload,
             json!({
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "wakeup_kind": "message",
                 "aps": {
                     "alert": {
@@ -892,7 +897,12 @@ mod tests {
                 ..Default::default()
             }),
             user_is_target: None,
-            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some(
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
+            ),
             wakeup_kind: None,
             push_hint: None,
             devices: vec![device.clone()],
@@ -912,7 +922,7 @@ mod tests {
         assert_eq!(
             payload,
             json!({
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "aps": {
                     "content-available": 1
                 }

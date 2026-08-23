@@ -16,7 +16,12 @@ fn e2ee_late_recovery_access_kind_matches_push_wire_repr() {
 fn notify_request_with_wakeup_kind(kind: &str) -> arkret_models_integration::PushNotifyRequestBody {
     arkret_models_integration::PushNotifyRequestBody {
         notification: arkret_models_integration::PushNotificationEnvelope {
-            push_target_id: Some("ak:pseudonym:push:01HYZ8Z000000000000000".to_owned()),
+            push_target_id: Some(
+                arkret_wire::PushTargetId::new(
+                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                )
+                .unwrap(),
+            ),
             wakeup_kind: Some(kind.to_owned()),
             timing_profile_hint: Some(arkret_models_integration::PushTimingProfileHint::Default),
             devices: vec![arkret_models_integration::PushDeviceRoute {
@@ -69,7 +74,7 @@ fn notify_ingress_accepts_hardened_timing_profile_hint() {
     let request =
         serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
                 "notification": {
-                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "traffic_metadata_hardened",
                     "devices": [{
@@ -85,8 +90,12 @@ fn notify_ingress_accepts_hardened_timing_profile_hint() {
         Some(arkret_models_integration::PushTimingProfileHint::TrafficMetadataHardened)
     );
     assert_eq!(
-        request.notification.push_target_id.as_deref(),
-        Some("ak:pseudonym:push:01HYZ8Z000000000000000")
+        request
+            .notification
+            .push_target_id
+            .as_ref()
+            .map(arkret_wire::PushTargetId::as_str),
+        Some("ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8")
     );
 }
 
@@ -94,7 +103,7 @@ fn notify_ingress_accepts_hardened_timing_profile_hint() {
 fn notify_ingress_rejects_unknown_timing_profile_hint() {
     let err = serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
             "notification": {
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "minimal_metadata",
                 "devices": []

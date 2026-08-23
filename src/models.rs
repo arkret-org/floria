@@ -17,13 +17,13 @@ pub struct NotifyDispatchResult {
 impl NotifyDispatchResult {
     pub fn new(
         request_id: impl Into<String>,
-        push_target_id: impl Into<String>,
+        push_target_id: arkret_wire::PushTargetId,
         outcomes: Vec<PushNotifyDeviceOutcome>,
     ) -> Self {
         Self {
             request_id: request_id.into(),
             wire_outcome: PushNotifyOutcome {
-                push_target_id: push_target_id.into(),
+                push_target_id,
                 outcomes,
             },
         }
@@ -328,7 +328,7 @@ mod tests {
                 "event_kind": "ak.message",
                 "notification": {
                     "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-                    "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                     "wakeup_kind": "message",
                     "realm_id": "ak:realm:AYZQCyAMEvY_8vHSQUIly6vISE8zV9kwLHkd17skJdyW",
                     "route_tokens": {
@@ -380,7 +380,10 @@ mod tests {
     fn notify_response_carries_no_provider_identifiers() {
         let response = NotifyDispatchResult::new(
             "ak:request:0196419b-0000-7000-8000-000000000010",
-            "ak:pseudonym:push:01HYZ8Z000000000000000",
+            arkret_wire::PushTargetId::new(
+                "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+            )
+            .unwrap(),
             vec![
                 arkret_models_integration::PushNotifyDeviceOutcome::accepted(
                     arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000004")

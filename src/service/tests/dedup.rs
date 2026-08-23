@@ -117,7 +117,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
                 },
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "default",
                 "push_hint": "new_message",
@@ -136,7 +136,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "default",
-                "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
                 },
