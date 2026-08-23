@@ -24,7 +24,7 @@ fn notify_request_with_wakeup_kind(kind: &str) -> arkret_models_integration::Pus
                     "ak:device:0196419b-0000-7000-8000-000000000001",
                 )
                 .unwrap(),
-                push_key: Some("token-1".to_owned()),
+                push_key: Some(arkret_models_integration::PushKey::new("token-1").unwrap()),
                 app_id: Some("com.example.app".to_owned()),
                 platform: None,
                 target_route_token: None,

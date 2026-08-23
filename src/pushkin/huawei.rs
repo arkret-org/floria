@@ -2,6 +2,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use prometheus::{
     Histogram, IntGauge, register_histogram, register_int_counter_vec, register_int_gauge,
@@ -20,7 +21,7 @@ use super::reqwest_support::{
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
+use crate::models::{DeviceExt, NotificationContext};
 
 static HUAWEI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -132,7 +133,7 @@ impl HuaweiPushkin {
 
     fn build_request_body(
         &self,
-        device: &Device,
+        device: &PushDeviceRoute,
         payload: AndroidNotificationPayload,
     ) -> Result<Map<String, Value>, DispatchError> {
         hms_family::build_request_body("Huawei Push", &self.config, device, payload)
@@ -140,7 +141,7 @@ impl HuaweiPushkin {
 
     async fn send_once(
         &self,
-        device: &Device,
+        device: &PushDeviceRoute,
         payload: AndroidNotificationPayload,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.token_grant.access_token(&self.client).await?;
@@ -200,7 +201,7 @@ impl HuaweiPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &Device,
+        device: &PushDeviceRoute,
     ) -> Result<Vec<String>, DispatchError> {
         hms_family::handle_response(
             "Huawei Push",
@@ -229,8 +230,8 @@ impl Pushkin for HuaweiPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -268,25 +269,27 @@ impl Pushkin for HuaweiPushkin {
 
 #[cfg(test)]
 mod tests {
+    use arkret_models_integration::{
+        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+    };
     use serde_json::json;
 
     use super::*;
-    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
-    fn device() -> Device {
-        Device {
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.huawei".to_owned()),
-            push_key: Some("hw-token".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("hw-token").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
 
-    fn notification() -> PushNotification {
-        PushNotification {
+    fn notification() -> PushNotificationEnvelope {
+        PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),
@@ -308,8 +311,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -317,7 +323,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),

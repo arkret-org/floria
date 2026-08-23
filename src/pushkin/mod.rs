@@ -18,6 +18,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_integration::push::ProviderCapabilityDescriptor;
+use arkret_models_integration::{PushCounts, PushDeviceRoute, PushKey, PushNotificationEnvelope};
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
@@ -26,9 +27,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{
-    Counts, Device, DeviceExt, NotificationContext, NotificationExt, PushNotification,
-};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt};
 
 static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
@@ -55,7 +54,7 @@ pub const DEFAULT_MAX_CONNECTIONS: usize = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DispatchTarget {
-    pub push_key: String,
+    pub push_key: PushKey,
     pub app_id: String,
 }
 
@@ -79,21 +78,21 @@ pub trait Pushkin: Send + Sync {
     }
     fn dispatch_targets(
         &self,
-        _notification: &PushNotification,
-        device: &Device,
+        _notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
     ) -> Vec<DispatchTarget> {
-        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
+        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key.as_ref()) else {
             return Vec::new();
         };
         vec![DispatchTarget {
             app_id: app_id.to_owned(),
-            push_key: push_key.to_owned(),
+            push_key: push_key.clone(),
         }]
     }
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
 }
@@ -543,7 +542,7 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
     }
 }
 
-/// Build a base data map from a [`PushNotification`] using only the
+/// Build a base data map from a [`PushNotificationEnvelope`] using only the
 /// SDK-allowed blind-wakeup fields. Adapters that want a blind-only
 /// payload (FCM, WebPush blind path, Chinese OEM blind path) can start
 /// from this and append their own provider-specific wrappers — they
@@ -557,7 +556,9 @@ fn strip_value_recursive(value: &mut serde_json::Value) {
 ///   * `wakeup_kind` (closed enum)
 ///   * `push_hint` ONLY when it's an allow-listed literal (not l10n_key)
 ///   * `badge` as a boolean unread indicator, plus bucketed `unread_count`
-pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, serde_json::Value> {
+pub fn build_blind_routing_data(
+    notification: &PushNotificationEnvelope,
+) -> Map<String, serde_json::Value> {
     use arkret_push_policy::blind_payload_sanitizer as sdk;
 
     let mut data = Map::new();
@@ -589,7 +590,7 @@ pub fn build_blind_routing_data(notification: &PushNotification) -> Map<String, 
 }
 
 pub fn build_blind_provider_data(
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
 ) -> Map<String, serde_json::Value> {
     let mut data = build_blind_routing_data(notification);
 
@@ -605,7 +606,7 @@ pub fn build_blind_provider_data(
     data
 }
 
-pub fn notification_unread_increment(notification: &PushNotification) -> Option<u64> {
+pub fn notification_unread_increment(notification: &PushNotificationEnvelope) -> Option<u64> {
     notification
         .counts
         .as_ref()
@@ -613,11 +614,11 @@ pub fn notification_unread_increment(notification: &PushNotification) -> Option<
         .map(crate::sanitize::bucket_count)
 }
 
-pub fn notification_badge_count(notification: &PushNotification) -> Option<u64> {
+pub fn notification_badge_count(notification: &PushNotificationEnvelope) -> Option<u64> {
     notification.counts.as_ref().and_then(counts_badge_count)
 }
 
-fn counts_badge_count(counts: &Counts) -> Option<u64> {
+fn counts_badge_count(counts: &PushCounts) -> Option<u64> {
     counts
         .badge
         .as_ref()
@@ -632,10 +633,10 @@ fn counts_badge_count(counts: &Counts) -> Option<u64> {
 
 #[cfg(test)]
 mod sanitize_tests {
+    use arkret_models_integration::PushRouteTokens;
     use serde_json::json;
 
     use super::*;
-    use crate::models::RouteTokens;
 
     #[test]
     fn sanitized_provider_payload_strips_event_id() {
@@ -780,7 +781,7 @@ mod sanitize_tests {
 
     #[test]
     fn build_blind_provider_data_keeps_only_allowed_fields() {
-        let notification = PushNotification {
+        let notification = PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -802,8 +803,11 @@ mod sanitize_tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -811,7 +815,7 @@ mod sanitize_tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: Some("new_message".to_owned()),
             devices: vec![],
-            counts: Some(crate::models::Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
@@ -846,8 +850,8 @@ mod sanitize_tests {
             (None, Some(Present(false)), Some(0_u64)),
             (None, None, None),
         ] {
-            let notification = PushNotification {
-                counts: Some(crate::models::Counts {
+            let notification = PushNotificationEnvelope {
+                counts: Some(PushCounts {
                     badge,
                     unread_increment: None,
                     missed_call,

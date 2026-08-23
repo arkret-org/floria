@@ -3,6 +3,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use prometheus::{
@@ -24,7 +25,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt};
 
 static FCM_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -175,8 +176,8 @@ impl FcmPushkin {
 
     async fn dispatch_v1(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         data: Map<String, Value>,
     ) -> Result<Vec<String>, DispatchError> {
         let service_account = self
@@ -304,7 +305,7 @@ impl FcmPushkin {
 
     fn build_data(
         &self,
-        notification: &PushNotification,
+        notification: &PushNotificationEnvelope,
     ) -> Result<Option<Map<String, Value>>, DispatchError> {
         // T4.3 — the FCM data dictionary used to auto-copy event_id /
         // message_id / strand_id / realm_id / sender / names / push_hint
@@ -315,8 +316,8 @@ impl FcmPushkin {
         //     so the client knows it has work to pick up.
         //   * `push_hint` survives ONLY when it's one of the SDK's allow-listed literals (no
         //     l10n_key:* form that could embed a stable token).
-        //   * Counts are bucketed (0 / 1 / 2-5 / 6-20 / 21+) per §5.1 so the absolute figure can't
-        //     ride the wire as a per-`push_target_id` activity correlator.
+        //   * PushCounts are bucketed (0 / 1 / 2-5 / 6-20 / 21+) per §5.1 so the absolute figure
+        //     can't ride the wire as a per-`push_target_id` activity correlator.
         //
         let mut data = Map::new();
 
@@ -392,22 +393,22 @@ impl Pushkin for FcmPushkin {
 
     fn dispatch_targets(
         &self,
-        _notification: &PushNotification,
-        device: &Device,
+        _notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
     ) -> Vec<DispatchTarget> {
-        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key()) else {
+        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key.as_ref()) else {
             return Vec::new();
         };
         vec![DispatchTarget {
             app_id: app_id.to_owned(),
-            push_key: push_key.to_owned(),
+            push_key: push_key.clone(),
         }]
     }
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -544,8 +545,11 @@ fn classify_fcm_v1_response(
 
 #[cfg(test)]
 mod tests {
+    use arkret_models_integration::{
+        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+    };
+
     use super::*;
-    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
     fn pushkin() -> FcmPushkin {
         FcmPushkin {
@@ -562,20 +566,20 @@ mod tests {
         }
     }
 
-    fn device() -> Device {
-        Device {
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.fcm".to_owned()),
-            push_key: Some("spqr".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("spqr").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
 
-    fn notification() -> PushNotification {
-        PushNotification {
+    fn notification() -> PushNotificationEnvelope {
+        PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),
@@ -597,8 +601,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -606,7 +613,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
@@ -680,11 +687,11 @@ mod tests {
     fn dispatch_targets_include_only_the_current_device() {
         let pushkin = pushkin();
         let primary = device();
-        let secondary = Device {
+        let secondary = PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.fcm".to_owned()),
-            push_key: Some("spqr2".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("spqr2").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
@@ -696,7 +703,7 @@ mod tests {
             pushkin.dispatch_targets(&notification, &primary),
             vec![DispatchTarget {
                 app_id: "com.example.fcm".to_owned(),
-                push_key: "spqr".to_owned(),
+                push_key: arkret_models_integration::PushKey::new("spqr").unwrap(),
             }]
         );
     }
@@ -707,7 +714,7 @@ mod tests {
         // SDK-allowed blind fields (push_target_id, wakeup_kind,
         // push_hint) AND no nonzero counts. Without push_target_id the
         // dispatch is dropped entirely.
-        let notification = PushNotification {
+        let notification = PushNotificationEnvelope {
             strand_title: None,
             realm_title: None,
             priority: None,
@@ -721,7 +728,7 @@ mod tests {
             wakeup_kind: None,
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: None,
                 unread_increment: None,
                 missed_call: None,

@@ -1,13 +1,9 @@
 use std::time::Instant;
 
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope, PushRouteToken};
 use blake2::Blake2s256;
 use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
-
-pub type Counts = arkret_models_integration::PushCounts;
-pub type Device = arkret_models_integration::PushDeviceRoute;
-pub type PushNotification = arkret_models_integration::PushNotificationEnvelope;
-pub type RouteTokens = arkret_models_integration::PushRouteTokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FloriaPushNotifyOutcome {
@@ -88,7 +84,7 @@ pub trait NotificationExt {
     fn realm_route_token(&self) -> Option<&str>;
     fn scope_route_token(&self) -> Option<&str>;
     fn delivery_binding_frontier_token(&self) -> Option<&str>;
-    fn mention_redirect_target_route_tokens(&self) -> &[String];
+    fn mention_redirect_target_route_tokens(&self) -> &[PushRouteToken];
     fn strand_id(&self) -> Option<&str>;
     fn message_id(&self) -> Option<&str>;
     fn realm_id(&self) -> Option<&str>;
@@ -100,7 +96,7 @@ pub trait NotificationExt {
     fn is_low_priority(&self) -> bool;
 }
 
-impl NotificationExt for PushNotification {
+impl NotificationExt for PushNotificationEnvelope {
     fn scope_title(&self) -> Option<&str> {
         self.strand_title().or_else(|| self.realm_title())
     }
@@ -126,7 +122,7 @@ impl NotificationExt for PushNotification {
             .and_then(non_empty)
     }
 
-    fn mention_redirect_target_route_tokens(&self) -> &[String] {
+    fn mention_redirect_target_route_tokens(&self) -> &[PushRouteToken] {
         self.route_tokens
             .as_ref()
             .map(|routing| routing.mention_redirect_target_route_tokens.as_slice())
@@ -189,7 +185,7 @@ pub trait DeviceExt {
     fn redacted_push_key(&self) -> String;
 }
 
-impl DeviceExt for Device {
+impl DeviceExt for PushDeviceRoute {
     fn app_id(&self) -> Option<&str> {
         self.app_id.as_deref().and_then(non_empty)
     }
@@ -237,15 +233,14 @@ pub fn redact_push_token(token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use arkret_models_integration::{PushCounts, PushNotificationEnvelope};
     use serde_json::json;
 
-    use super::{
-        Counts, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt, PushNotification,
-    };
+    use super::{FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt};
 
     #[test]
     fn notification_uses_priority_wire_field() {
-        let notification: PushNotification = serde_json::from_value(json!({
+        let notification: PushNotificationEnvelope = serde_json::from_value(json!({
             "priority": "low",
             "devices": []
         }))
@@ -257,7 +252,7 @@ mod tests {
 
     #[test]
     fn counts_accept_active_fields() {
-        let counts: Counts = serde_json::from_value(json!({
+        let counts: PushCounts = serde_json::from_value(json!({
             "badge": "2-5",
             "unread_increment": 2,
             "missed_call": false
@@ -282,7 +277,7 @@ mod tests {
     #[test]
     fn counts_reject_absolute_integer_indicators() {
         for absolute_count in [0, 1, 99] {
-            let result = serde_json::from_value::<Counts>(json!({
+            let result = serde_json::from_value::<PushCounts>(json!({
                 "missed_call": absolute_count
             }));
 
@@ -293,7 +288,9 @@ mod tests {
     #[test]
     fn counts_accept_boolean_and_bucket_indicators() {
         for indicator in [json!(false), json!(true), json!("2-5")] {
-            assert!(serde_json::from_value::<Counts>(json!({ "missed_call": indicator })).is_ok());
+            assert!(
+                serde_json::from_value::<PushCounts>(json!({ "missed_call": indicator })).is_ok()
+            );
         }
     }
 

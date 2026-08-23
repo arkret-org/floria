@@ -18,12 +18,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use floria::AppState;
 use floria::auth::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER};
 use floria::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 use floria::error::DispatchError;
-use floria::models::{Device, NotificationContext, PushNotification as Notification};
+use floria::models::NotificationContext;
 use floria::pushkin::{
     Pushkin, PushkinRegistry, build_blind_provider_data, sanitized_provider_payload,
 };
@@ -135,11 +136,11 @@ fn sanitizer_rejects_did_literal() {
 
 #[test]
 fn build_blind_provider_data_emits_only_allowed_fields() {
-    // Drive build_blind_provider_data with a fully-populated Notification
+    // Drive build_blind_provider_data with a fully-populated PushNotificationEnvelope
     // (via serde_json::from_value to avoid the recipient_service_id /
     // delivery_binding_frontier struct-literal hazard) and assert that
     // only the SDK-allowed blind fields make it out.
-    let notification: Notification = serde_json::from_value(json!({
+    let notification: PushNotificationEnvelope = serde_json::from_value(json!({
         "strand_title": "Mission Control",
         // Security-boundary label.
         "realm_title": "Apollo",
@@ -323,7 +324,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     // Any Realm/Circle identifiers in provider-facing scope data must remain
     // complete typed 44-character event tokens; this blind payload carries
     // only opaque route tokens.
-    let notification: Notification = serde_json::from_value(json!({
+    let notification: PushNotificationEnvelope = serde_json::from_value(json!({
         "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
         "wakeup_kind": "message",
         "timing_profile_hint": "default",
@@ -374,8 +375,8 @@ impl Pushkin for AcceptPushkin {
     }
     async fn dispatch_notification(
         &self,
-        _notification: &Notification,
-        _device: &Device,
+        _notification: &PushNotificationEnvelope,
+        _device: &PushDeviceRoute,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         Ok(vec![])

@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use base64::Engine;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -25,7 +26,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt};
 
 static APNS_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -236,7 +237,7 @@ impl ApnsPushkin {
 
     async fn send_once(
         &self,
-        device: &Device,
+        device: &PushDeviceRoute,
         payload: &Value,
         priority: u8,
     ) -> Result<Vec<String>, DispatchError> {
@@ -303,7 +304,7 @@ impl ApnsPushkin {
         classify_apns_response(status, &reason, device.push_key().unwrap_or_default())
     }
 
-    fn device_token(&self, device: &Device) -> Result<String, DispatchError> {
+    fn device_token(&self, device: &PushDeviceRoute) -> Result<String, DispatchError> {
         let push_key = device.push_key().unwrap_or_default();
         if !self.convert_device_token_to_hex {
             return Ok(push_key.to_owned());
@@ -327,7 +328,7 @@ impl ApnsPushkin {
 
     fn build_payload(
         &self,
-        notification: &PushNotification,
+        notification: &PushNotificationEnvelope,
         provider_payload: Map<String, Value>,
         allow_visible_notification: bool,
     ) -> Result<Option<Value>, DispatchError> {
@@ -336,7 +337,7 @@ impl ApnsPushkin {
 
     fn payload_full(
         &self,
-        notification: &PushNotification,
+        notification: &PushNotificationEnvelope,
         mut provider_payload: Map<String, Value>,
         allow_visible_notification: bool,
     ) -> Option<Value> {
@@ -488,8 +489,8 @@ impl Pushkin for ApnsPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -749,17 +750,19 @@ fn epoch_now() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use arkret_models_integration::{
+        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+    };
     use serde_json::json;
 
     use super::*;
-    use crate::models::{Counts, Device, PushNotification, RouteTokens};
 
-    fn device() -> Device {
-        Device {
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.apns".to_owned()),
-            push_key: Some("spqr".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("spqr").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
@@ -782,7 +785,7 @@ mod tests {
     #[test]
     fn builds_message_payload() {
         let pushkin = pushkin();
-        let notification = PushNotification {
+        let notification = PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -804,8 +807,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -813,7 +819,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
@@ -856,7 +862,7 @@ mod tests {
     fn builds_event_id_only_payload() {
         let pushkin = pushkin();
         let device = device();
-        let notification = PushNotification {
+        let notification = PushNotificationEnvelope {
             strand_title: None,
             realm_title: None,
             priority: None,
@@ -878,8 +884,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: None,
@@ -887,7 +896,7 @@ mod tests {
             wakeup_kind: None,
             push_hint: None,
             devices: vec![device.clone()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: None,
                 unread_increment: None,
                 missed_call: None,

@@ -1,3 +1,4 @@
+use arkret_models_integration::PushDeviceRoute;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -6,7 +7,7 @@ use super::android::{AndroidNotificationPayload, AndroidPriority};
 use super::reqwest_support::looks_like_invalid_token;
 use crate::config::AppConfig;
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt};
+use crate::models::DeviceExt;
 
 #[derive(Debug, Clone)]
 pub(super) struct HmsAndroidConfig {
@@ -34,7 +35,7 @@ impl HmsAndroidConfig {
 pub(super) fn build_request_body(
     provider: &str,
     config: &HmsAndroidConfig,
-    device: &Device,
+    device: &PushDeviceRoute,
     payload: AndroidNotificationPayload,
 ) -> Result<Map<String, Value>, DispatchError> {
     let data = serde_json::to_string(&payload.data).map_err(|error| {
@@ -125,7 +126,7 @@ pub(super) fn handle_response(
     status: StatusCode,
     retry_after: Option<std::time::Duration>,
     body: &str,
-    device: &Device,
+    device: &PushDeviceRoute,
 ) -> Result<Vec<String>, DispatchError> {
     match status.as_u16() {
         429 => Err(DispatchError::temporary(

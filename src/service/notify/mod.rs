@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arkret_models_integration::{
-    AgentEventRouting, PushNotifyDeviceOutcome, PushNotifyReasonCode, classify_agent_event_kind,
-    validate_push_notify_contract_shape,
+    AgentEventRouting, PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyReasonCode,
+    classify_agent_event_kind, validate_push_notify_contract_shape,
 };
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
@@ -19,7 +19,6 @@ use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
 use crate::models::{
     DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationContext, NotificationExt,
-    PushNotification,
 };
 use crate::{AppState, metrics as app_metrics};
 
@@ -78,7 +77,7 @@ async fn wait_for_provider_timing_bucket(request_id: &str, bucket: Duration) {
     tokio::time::sleep(delay).await;
 }
 
-fn provider_timing_bucket_for_notification(notification: &PushNotification) -> Duration {
+fn provider_timing_bucket_for_notification(notification: &PushNotificationEnvelope) -> Duration {
     if notification_uses_high_privacy_timing(notification) {
         HIGH_PRIVACY_PROVIDER_TIMING_BUCKET
     } else {
@@ -86,7 +85,7 @@ fn provider_timing_bucket_for_notification(notification: &PushNotification) -> D
     }
 }
 
-fn notification_uses_high_privacy_timing(notification: &PushNotification) -> bool {
+fn notification_uses_high_privacy_timing(notification: &PushNotificationEnvelope) -> bool {
     notification
         .timing_profile_hint
         .is_some_and(arkret_models_integration::PushTimingProfileHint::is_traffic_metadata_hardened)
@@ -116,11 +115,11 @@ fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
     Duration::from_nanos((bucket_nanos - elapsed_in_bucket).min(u64::MAX as u128) as u64)
 }
 
-fn push_target_id(notification: &PushNotification) -> String {
+fn push_target_id(notification: &PushNotificationEnvelope) -> String {
     notification.push_target_id.clone().unwrap_or_default()
 }
 
-fn accepted_outcomes(notification: &PushNotification) -> Vec<PushNotifyDeviceOutcome> {
+fn accepted_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyDeviceOutcome> {
     notification
         .devices
         .iter()
@@ -132,7 +131,10 @@ fn duration_millis(duration: Duration) -> u64 {
     duration.as_millis().clamp(1, u64::MAX as u128) as u64
 }
 
-fn no_fanout_response(request_id: &str, notification: &PushNotification) -> PushNotifyOutcome {
+fn no_fanout_response(
+    request_id: &str,
+    notification: &PushNotificationEnvelope,
+) -> PushNotifyOutcome {
     let outcomes = accepted_outcomes(notification);
     PushNotifyOutcome {
         request_id: request_id.to_owned(),
@@ -143,7 +145,7 @@ fn no_fanout_response(request_id: &str, notification: &PushNotification) -> Push
 
 fn circuit_breaker_key(
     pushkin: &str,
-    notification: &crate::models::PushNotification,
+    notification: &PushNotificationEnvelope,
 ) -> crate::circuit_breaker::BreakerKey {
     crate::circuit_breaker::BreakerKey::new(
         pushkin,
@@ -154,9 +156,7 @@ fn circuit_breaker_key(
     )
 }
 
-fn circuit_breaker_scope(
-    notification: &crate::models::PushNotification,
-) -> (&'static str, Option<&str>) {
+fn circuit_breaker_scope(notification: &PushNotificationEnvelope) -> (&'static str, Option<&str>) {
     if notification.scope_route_token().is_some() {
         ("scope", None)
     } else {
@@ -902,7 +902,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             .collect::<HashSet<String>>();
                         let delivered_targets = dispatch_targets
                             .iter()
-                            .filter(|target| !rejected_set.contains(&target.push_key))
+                            .filter(|target| !rejected_set.contains(target.push_key.as_str()))
                             .cloned()
                             .collect::<Vec<_>>();
                         if !delivered_targets.is_empty() {

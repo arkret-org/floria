@@ -1,9 +1,10 @@
+use arkret_models_integration::PushNotificationEnvelope;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
 use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER};
 use crate::config::NotifyAuthConfig;
-use crate::models::{DeviceExt, PushNotification};
+use crate::models::DeviceExt;
 
 /// SPEC-CR-016: the originating service core id rides the `Source-Service-ID`
 /// transport header (`SOURCE_SERVICE_ID_HEADER`), which the auth layer
@@ -100,7 +101,7 @@ pub(in crate::service) const VISIBLE_DEVICE_OPT_IN_REASON: &str =
     "visible_notification_device_opt_in_required";
 
 pub(super) fn validate_notification_contract(
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
@@ -129,7 +130,7 @@ pub(super) fn validate_notification_contract(
 }
 
 fn validate_visible_notification_device_opt_in(
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata || !notification_has_visible_metadata(notification) {
@@ -151,7 +152,7 @@ fn validate_visible_notification_device_opt_in(
     Ok(())
 }
 
-fn notification_has_visible_metadata(notification: &PushNotification) -> bool {
+fn notification_has_visible_metadata(notification: &PushNotificationEnvelope) -> bool {
     notification.event_id.is_some()
         || notification.realm_id.is_some()
         || notification.sender_actor_id.is_some()
@@ -166,7 +167,7 @@ fn notification_has_visible_metadata(notification: &PushNotification) -> bool {
 }
 
 pub(super) fn validate_plaintext_identity_metadata(
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     caller: &AuthenticatedNotifyCaller,
 ) -> Result<(), String> {
     if caller.allow_plaintext_metadata {

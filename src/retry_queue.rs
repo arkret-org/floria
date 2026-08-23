@@ -22,6 +22,7 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use arkret_models_integration::PushKey;
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -207,7 +208,7 @@ pub struct RetryEnvelope {
     pub request_id: String,
     pub pushkin: String,
     pub app_id: String,
-    pub push_key: String,
+    pub push_key: PushKey,
     pub retry_at_unix_ms: u64,
     pub attempts: u32,
     pub last_error: String,
@@ -218,7 +219,7 @@ impl RetryEnvelope {
         request_id: impl Into<String>,
         pushkin: impl Into<String>,
         app_id: impl Into<String>,
-        push_key: impl Into<String>,
+        push_key: PushKey,
         retry_after: Duration,
         last_error: impl Into<String>,
     ) -> Self {
@@ -226,7 +227,7 @@ impl RetryEnvelope {
             request_id: request_id.into(),
             pushkin: pushkin.into(),
             app_id: app_id.into(),
-            push_key: push_key.into(),
+            push_key,
             retry_at_unix_ms: now_unix_ms()
                 .saturating_add(u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX)),
             attempts: 1,
@@ -809,8 +810,10 @@ pub async fn run_worker(
 ) {
     use std::time::Instant;
 
+    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+
     use crate::error::DispatchError;
-    use crate::models::{Device, NotificationContext, PushNotification};
+    use crate::models::NotificationContext;
 
     loop {
         if shutdown.has_changed().unwrap_or(false) && *shutdown.borrow() {
@@ -865,12 +868,12 @@ pub async fn run_worker(
                 }
             };
 
-            // Reconstruct a minimal PushNotification + Device shell. We
+            // Reconstruct a minimal PushNotificationEnvelope + PushDeviceRoute shell. We
             // intentionally do not persist the original notification
             // body — the retry exists to re-attempt the wakeup, not
             // to replay payload metadata. Provider implementations
             // accept blind-wakeup defaults.
-            let device = Device {
+            let device = PushDeviceRoute {
                 device_id: arkret_wire::DeviceId::new(format!(
                     "ak:device:0196419b-0000-7000-8000-{:012}",
                     1
@@ -882,11 +885,11 @@ pub async fn run_worker(
                 target_route_token: None,
                 visible_notification_opt_in: false,
             };
-            let notification = PushNotification {
+            let notification = PushNotificationEnvelope {
                 devices: vec![device.clone()],
                 priority: Some("low".to_owned()),
                 push_hint: Some("new_message".to_owned()),
-                ..PushNotification::default()
+                ..PushNotificationEnvelope::default()
             };
             let context = NotificationContext {
                 request_id: envelope.request_id.clone(),
@@ -949,7 +952,7 @@ mod tests {
                 "req",
                 "apns",
                 "com.example.app",
-                "push_key",
+                PushKey::new("push_key").unwrap(),
                 Duration::ZERO,
                 "boom",
             )
@@ -960,7 +963,7 @@ mod tests {
                 "req",
                 "apns",
                 "com.example.app",
-                "push_key",
+                PushKey::new("push_key").unwrap(),
                 Duration::ZERO,
                 "boom",
             )
@@ -985,7 +988,7 @@ mod tests {
             "req",
             "apns",
             "com.example.app",
-            "push_key",
+            PushKey::new("push_key").unwrap(),
             Duration::ZERO,
             "boom",
         ));
@@ -993,7 +996,7 @@ mod tests {
             "req",
             "apns",
             "com.example.app",
-            "push_key",
+            PushKey::new("push_key").unwrap(),
             Duration::from_secs(3600),
             "boom",
         ));

@@ -2,6 +2,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use md5::{Digest, Md5};
 use prometheus::{
@@ -20,7 +21,7 @@ use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_aft
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
+use crate::models::{DeviceExt, NotificationContext};
 
 static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -298,8 +299,8 @@ impl VivoPushkin {
 
     fn build_request_body(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         allow_visible_notification: bool,
     ) -> Result<Map<String, Value>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
@@ -397,8 +398,8 @@ impl VivoPushkin {
 
     async fn send_once(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         allow_visible_notification: bool,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.access_token().await?;
@@ -470,7 +471,7 @@ impl VivoPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &Device,
+        device: &PushDeviceRoute,
     ) -> Result<Vec<String>, DispatchError> {
         match status.as_u16() {
             429 => Err(DispatchError::temporary(
@@ -519,8 +520,8 @@ impl Pushkin for VivoPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -676,7 +677,7 @@ struct VivoSendResponse {
 }
 
 impl VivoSendResponse {
-    fn is_invalid_registration(&self, device: &Device) -> bool {
+    fn is_invalid_registration(&self, device: &PushDeviceRoute) -> bool {
         let push_key = device.push_key().unwrap_or_default();
         self.result == 10302
             || self
@@ -699,23 +700,26 @@ struct VivoInvalidUser {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::models::{Counts, Device, PushNotification, RouteTokens};
+    use arkret_models_integration::{
+        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+    };
 
-    fn device() -> Device {
-        Device {
+    use super::*;
+
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.vivo".to_owned()),
-            push_key: Some("regid".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("regid").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
 
-    fn notification() -> PushNotification {
-        PushNotification {
+    fn notification() -> PushNotificationEnvelope {
+        PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -737,8 +741,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -746,7 +753,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),

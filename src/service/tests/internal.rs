@@ -80,7 +80,7 @@ fn dead_letter_envelope(request_id: &str) -> RetryEnvelope {
         request_id,
         "test-pushkin",
         "app-1",
-        "push-key-1",
+        arkret_models_integration::PushKey::new("push-key-1").unwrap(),
         std::time::Duration::from_secs(30),
         "provider timeout",
     )

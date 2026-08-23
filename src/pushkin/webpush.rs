@@ -6,6 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes128Gcm, KeyInit, Nonce};
 use anyhow::{Context, Result, anyhow};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
@@ -33,7 +34,7 @@ use super::{
 };
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, NotificationExt, PushNotification};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt};
 
 static WEBPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -318,7 +319,10 @@ impl WebpushPushkin {
     /// Build the WebPush JSON payload that goes into the encrypted
     /// `aes128gcm` body. Only SDK-allowed blind-wakeup fields survive
     /// on the provider wire.
-    fn build_payload(notification: &PushNotification, device: &Device) -> Map<String, Value> {
+    fn build_payload(
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
+    ) -> Map<String, Value> {
         let _ = device;
         let mut payload = Map::new();
 
@@ -375,7 +379,10 @@ impl WebpushPushkin {
         crate::egress::validate_url_for_egress(&url, "webpush endpoint")
     }
 
-    fn subscription_from_device(&self, device: &Device) -> Result<SubscriptionInfo, DispatchError> {
+    fn subscription_from_device(
+        &self,
+        device: &PushDeviceRoute,
+    ) -> Result<SubscriptionInfo, DispatchError> {
         let push_key = device
             .push_key()
             .ok_or_else(|| DispatchError::remote("webpush device is missing push_key"))?;
@@ -456,8 +463,8 @@ impl WebpushPushkin {
     async fn send_message(
         &self,
         subscription: &SubscriptionInfo,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
     ) -> Result<Vec<String>, DispatchError> {
         let payload =
             serde_json::to_vec(&Self::build_payload(notification, device)).map_err(|error| {
@@ -563,8 +570,8 @@ impl Pushkin for WebpushPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -806,18 +813,18 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use arkret_models_integration::{PushCounts, PushRouteTokens};
     use serde_json::json;
 
     use super::*;
     use crate::config::{AppConfig, Config};
-    use crate::models::{Counts, RouteTokens};
 
-    fn device() -> Device {
-        Device {
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.web".to_owned()),
-            push_key: Some("p256dh-key".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("p256dh-key").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
@@ -835,12 +842,14 @@ mod tests {
         .to_string()
     }
 
-    fn network_device(endpoint: &str) -> Device {
-        Device {
+    fn network_device(endpoint: &str) -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.web".to_owned()),
-            push_key: Some(subscription_push_key(endpoint)),
+            push_key: Some(
+                arkret_models_integration::PushKey::new(subscription_push_key(endpoint)).unwrap(),
+            ),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
@@ -866,8 +875,8 @@ mod tests {
         }
     }
 
-    fn notification(_body: &str) -> PushNotification {
-        PushNotification {
+    fn notification(_body: &str) -> PushNotificationEnvelope {
+        PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: Some("low".to_owned()),
@@ -889,8 +898,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -898,7 +910,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),

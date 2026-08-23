@@ -12,6 +12,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use base64::Engine;
 use hmac::{Hmac, KeyInit, Mac};
@@ -31,7 +32,7 @@ use super::{
 use crate::auth::redact_url_credentials;
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, PushNotification};
+use crate::models::{DeviceExt, NotificationContext};
 
 static CUSTOM_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(
@@ -146,7 +147,7 @@ impl CustomPushkin {
         })
     }
 
-    fn resolve_url(&self, device: &Device) -> Result<String, DispatchError> {
+    fn resolve_url(&self, device: &PushDeviceRoute) -> Result<String, DispatchError> {
         if !self.url_template.contains(PUSH_KEY_PLACEHOLDER) {
             return Ok(self.url_template.clone());
         }
@@ -156,8 +157,8 @@ impl CustomPushkin {
 
     fn build_body(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
     ) -> Result<Map<String, Value>, DispatchError> {
         // T4.3 — the custom-URL pushkin used to forward `event_id` /
         // `message_id` to the operator's webhook. Both are stable
@@ -195,8 +196,8 @@ impl CustomPushkin {
 
     async fn send_once(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
     ) -> Result<Vec<String>, DispatchError> {
         let url = self.resolve_url(device)?;
         let parsed_url =
@@ -289,8 +290,8 @@ impl Pushkin for CustomPushkin {
 
     async fn dispatch_notification(
         &self,
-        notification: &PushNotification,
-        device: &Device,
+        notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -369,11 +370,11 @@ mod tests {
             url_template: "https://example.com/notify/{push_key}".to_owned(),
             auth: CustomAuth::None,
         };
-        let device = Device {
+        let device = PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.custom".to_owned()),
-            push_key: Some("user/abc".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("user/abc").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,

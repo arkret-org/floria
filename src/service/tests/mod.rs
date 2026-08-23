@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use salvo::test::ResponseExt;
 use serde_json::{Value, json};
@@ -12,7 +13,7 @@ use super::*;
 use crate::config::{NotifyAuthConfig, NotifyRateLimitConfig};
 use crate::dedup::NotifyDeduplicator;
 use crate::error::DispatchError;
-use crate::models::{Device, DeviceExt, NotificationContext, PushNotification, RejectedDevice};
+use crate::models::{DeviceExt, NotificationContext, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
@@ -86,8 +87,8 @@ impl Pushkin for TestPushkin {
 
     async fn dispatch_notification(
         &self,
-        _notification: &PushNotification,
-        device: &Device,
+        _notification: &PushNotificationEnvelope,
+        device: &PushDeviceRoute,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         self.calls.fetch_add(1, Ordering::SeqCst);

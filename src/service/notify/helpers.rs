@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use arkret_models_integration::{PushDeviceRoute, PushKey, PushNotificationEnvelope};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, Value};
@@ -14,7 +15,7 @@ use crate::auth::{
 use crate::dedup::request_hash;
 use crate::models::{
     DeliveryReceipt, DeviceExt, FloriaPushNotifyOutcome as PushNotifyOutcome, NotificationExt,
-    PushNotification, RejectedDevice, redact_push_token,
+    RejectedDevice, redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
@@ -45,7 +46,7 @@ pub(super) fn resolve_idempotency_key(req: &Request) -> Result<Option<String>, S
 pub(super) fn notify_rate_limit_checks(
     req: &Request,
     state: &AppState,
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
 ) -> Vec<NotifyRateLimitCheck> {
     let Some(rate_limiter) = state.notify_rate_limiter.as_ref() else {
         return vec![];
@@ -178,7 +179,7 @@ async fn record_rejected_devices_audit(
     state: &Arc<AppState>,
     request_id: &str,
     caller: &AuthenticatedNotifyCaller,
-    _notification: &PushNotification,
+    _notification: &PushNotificationEnvelope,
     rejected: &[RejectedDevice],
 ) -> Result<(), String> {
     if rejected.is_empty() {
@@ -224,7 +225,7 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
     state: &Arc<AppState>,
     request_id: &str,
     caller: &AuthenticatedNotifyCaller,
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     rejected: &[RejectedDevice],
     res: &mut Response,
     started: Instant,
@@ -297,10 +298,7 @@ pub(super) async fn mark_delivered_devices(
     }
 }
 
-pub(super) fn rejected_device(
-    device: &crate::models::Device,
-    push_key: Option<&str>,
-) -> RejectedDevice {
+pub(super) fn rejected_device(device: &PushDeviceRoute, push_key: Option<&str>) -> RejectedDevice {
     RejectedDevice::new(
         device.app_id(),
         push_key.or_else(|| device.push_key()).unwrap_or_default(),
@@ -337,7 +335,9 @@ pub(super) fn idempotency_cache_key(idempotency_key: &str) -> String {
     request_hash(format!("idempotency-key\0{idempotency_key}").as_bytes())
 }
 
-pub(super) fn normalized_notify_dedup_key(notification: &PushNotification) -> Option<String> {
+pub(super) fn normalized_notify_dedup_key(
+    notification: &PushNotificationEnvelope,
+) -> Option<String> {
     let mut normalized = Map::new();
 
     if let Some(value) = notification.strand_title() {
@@ -489,7 +489,7 @@ pub(super) async fn enqueue_retry(
     request_id: &str,
     pushkin: &str,
     app_id: &str,
-    push_key: &str,
+    push_key: &PushKey,
     retry_after: Option<Duration>,
     error: &crate::error::DispatchError,
 ) {
@@ -501,7 +501,7 @@ pub(super) async fn enqueue_retry(
         request_id,
         pushkin,
         app_id,
-        push_key,
+        push_key.clone(),
         backoff,
         error.to_string(),
     );

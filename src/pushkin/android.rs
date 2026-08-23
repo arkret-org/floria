@@ -1,10 +1,11 @@
+use arkret_models_integration::PushNotificationEnvelope;
 use serde_json::{Map, Value};
 
 use super::{
     build_blind_routing_data, notification_badge_count, notification_unread_increment,
     sanitized_provider_payload, truncate_str,
 };
-use crate::models::{NotificationExt, PushNotification};
+use crate::models::NotificationExt;
 
 const TITLE_MAX_BYTES: usize = 128;
 const BODY_MAX_BYTES: usize = 512;
@@ -24,7 +25,7 @@ pub(super) enum AndroidPriority {
 }
 
 pub(super) fn build_android_notification_payload(
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     mut provider_payload: Map<String, Value>,
     allow_visible_notification: bool,
     send_badge_counts: bool,
@@ -65,7 +66,7 @@ pub(super) fn build_android_notification_payload(
 
 fn merge_notification_data(
     payload: &mut Map<String, Value>,
-    notification: &PushNotification,
+    notification: &PushNotificationEnvelope,
     send_badge_counts: bool,
 ) {
     // T4.3 - only emit fields that the SDK blind-wakeup contract allows.
@@ -109,7 +110,7 @@ fn merge_notification_data(
     // sanitizer guards.
 }
 
-fn derive_alert(notification: &PushNotification) -> Option<(String, String)> {
+fn derive_alert(notification: &PushNotificationEnvelope) -> Option<(String, String)> {
     let sender = notification
         .sender_label()
         .map(str::to_owned)
@@ -147,12 +148,12 @@ fn derive_alert(notification: &PushNotification) -> Option<(String, String)> {
     Some((title, summary))
 }
 
-fn message_summary(notification: &PushNotification, sender: &str) -> String {
+fn message_summary(notification: &PushNotificationEnvelope, sender: &str) -> String {
     let _ = notification;
     format!("{sender} sent a message")
 }
 
-fn fallback_summary(notification: &PushNotification, sender: &str) -> String {
+fn fallback_summary(notification: &PushNotificationEnvelope, sender: &str) -> String {
     match notification_unread_increment(notification) {
         Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_TWENTY_ONE_PLUS => {
             "You have 21+ unread messages".to_owned()
@@ -170,23 +171,26 @@ fn fallback_summary(notification: &PushNotification, sender: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::models::{Counts, Device, PushNotification, RouteTokens};
+    use arkret_models_integration::{
+        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+    };
 
-    fn device() -> Device {
-        Device {
+    use super::*;
+
+    fn device() -> PushDeviceRoute {
+        PushDeviceRoute {
             device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
                 .unwrap(),
             app_id: Some("com.example.cn".to_owned()),
-            push_key: Some("push_key".to_owned()),
+            push_key: Some(arkret_models_integration::PushKey::new("push_key").unwrap()),
             platform: None,
             target_route_token: None,
             visible_notification_opt_in: false,
         }
     }
 
-    fn message_notification() -> PushNotification {
-        PushNotification {
+    fn message_notification() -> PushNotificationEnvelope {
+        PushNotificationEnvelope {
             strand_title: Some("Mission Control".to_owned()),
             realm_title: None,
             priority: None,
@@ -208,8 +212,11 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            route_tokens: Some(RouteTokens {
-                realm_route_token: Some("realm_route_token_000000001".to_owned()),
+            route_tokens: Some(PushRouteTokens {
+                realm_route_token: Some(
+                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
+                        .unwrap(),
+                ),
                 ..Default::default()
             }),
             user_is_target: Some(true),
@@ -217,7 +224,7 @@ mod tests {
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
             devices: vec![device()],
-            counts: Some(Counts {
+            counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
@@ -299,7 +306,7 @@ mod tests {
     #[test]
     fn invitation_uses_human_readable_summary() {
         let payload = build_android_notification_payload(
-            &PushNotification {
+            &PushNotificationEnvelope {
                 strand_title: Some("Nebula".to_owned()),
                 realm_title: None,
                 priority: None,
@@ -323,7 +330,7 @@ mod tests {
                 wakeup_kind: Some("member".to_owned()),
                 push_hint: None,
                 devices: vec![device()],
-                counts: Some(Counts::default()),
+                counts: Some(PushCounts::default()),
                 ..Default::default()
             },
             Map::new(),
