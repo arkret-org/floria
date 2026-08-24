@@ -79,21 +79,21 @@ impl RejectedDevice {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DeliveryReceipt {
+pub(crate) struct DeliveryReceipt {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    pub(crate) provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_message_id: Option<String>,
+    pub(crate) provider_message_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub push_key_hash: Option<String>,
+    pub(crate) push_key_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    pub(crate) status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub retry_after_ms: Option<u64>,
+    pub(crate) retry_after_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub(crate) timestamp: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
+    pub(crate) request_id: Option<String>,
 }
 
 pub trait NotificationExt {
