@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use arkret_models_integration::PushKey;
+use arkret_retry::{Jitter, RetryPolicy};
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -486,13 +487,13 @@ impl RetryQueue {
 
     /// Compute the next retry timestamp for an envelope that should
     /// be re-enqueued, applying exponential backoff capped by
-    /// `max_backoff` and adding ±10% jitter so a stampede of clients
-    /// hitting the same provider doesn't synchronise their retries.
+    /// `max_backoff` and adding the shared policy's 0–20% jitter so a
+    /// stampede of clients hitting the same provider does not synchronise
+    /// retries.
     pub fn next_retry_at(&self, attempts: u32) -> Duration {
-        let base = self.config.default_backoff;
-        let factor = 1u32 << attempts.min(10);
-        let backoff = base.saturating_mul(factor).min(self.config.max_backoff);
-        apply_jitter(backoff)
+        let policy = RetryPolicy::exponential(self.config.default_backoff, self.config.max_backoff);
+        let mut jitter = Jitter::from_seed(rand::rng().random());
+        policy.delay(attempts, &mut jitter)
     }
 }
 
@@ -724,24 +725,6 @@ fn normalize_key_prefix(key_prefix: &str) -> String {
     } else {
         trimmed.to_owned()
     }
-}
-
-/// Apply ±10% jitter to a backoff duration. The implementation uses
-/// `rand::rng` so a fork-bombed process won't pin every retry
-/// to the same `Instant`.
-fn apply_jitter(backoff: Duration) -> Duration {
-    let millis = backoff.as_millis().min(u64::MAX as u128) as u64;
-    if millis == 0 {
-        return backoff;
-    }
-    let jitter_span = millis / 10; // ±10%
-    if jitter_span == 0 {
-        return backoff;
-    }
-    let mut rng = rand::rng();
-    let offset_raw = (rng.random::<u64>() % (jitter_span * 2 + 1)) as i64 - jitter_span as i64;
-    let adjusted = (millis as i64).saturating_add(offset_raw).max(0) as u64;
-    Duration::from_millis(adjusted)
 }
 
 fn now_unix_ms() -> u64 {
@@ -1017,10 +1000,11 @@ mod tests {
             max_backoff: Duration::from_secs(60),
             ..RetryQueueConfig::default()
         });
-        // ±10% jitter around the 60s cap
+        // arkret-retry applies the spec-default 0–20% additive jitter on top
+        // of the saturated 60s base.
         let backoff = queue.next_retry_at(20);
         assert!(
-            backoff >= Duration::from_millis(54_000) && backoff <= Duration::from_millis(66_000),
+            backoff >= Duration::from_millis(60_000) && backoff <= Duration::from_millis(72_000),
             "backoff {backoff:?} outside expected jitter window"
         );
     }
