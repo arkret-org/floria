@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -10,12 +9,6 @@ use crate::auth::redact_url_credentials;
 use crate::config::NotifyRateLimitConfig;
 use crate::nonce_store::RedisFailurePolicy;
 use crate::redis_support::{RedisConnection, RedisPool};
-
-/// Default fallback for `notify_rate_limits.per_provider_concurrency`
-/// when the operator leaves the field unset. Mirrors the
-/// `NotifyRateLimitConfig::default()` value; kept in one place so the
-/// limiter and the config crate cannot disagree on the silent default.
-pub const DEFAULT_PER_PROVIDER_CONCURRENCY: u64 = 100;
 
 #[derive(Debug, Clone)]
 pub struct NotifyRateLimitCheck {
@@ -164,137 +157,6 @@ impl NotifyRateLimiter {
                 tokio::task::spawn_blocking(move || this.check_many(&checks))
                     .await
                     .unwrap_or(Ok(()))
-            }
-        }
-    }
-}
-
-/// Per-provider concurrent-dispatch limiter. Enforces a max number of
-/// simultaneously-running dispatches against any single provider so a
-/// misbehaving backend cannot monopolise the fanout worker pool. The
-/// limit is process-local — clustered enforcement (e.g. Redis-backed
-/// fairness across replicas) is intentionally out of scope; replicas
-/// should size their per-pod limits accordingly.
-///
-/// Each `try_acquire(provider)` returns either a [`ConcurrencyPermit`]
-/// (decremented on `Drop`) or [`ConcurrencyRejection`] when the
-/// configured cap is full. `limit == 0` disables the cap entirely so
-/// operators can opt-out without touching the call sites.
-#[derive(Debug)]
-pub struct ProviderConcurrencyLimiter {
-    limit: u64,
-    inflight: Mutex<HashMap<String, u64>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ConcurrencyRejection {
-    pub provider: String,
-    pub limit: u64,
-}
-
-/// RAII permit returned by [`ProviderConcurrencyLimiter::try_acquire`].
-/// Holding the permit counts against the per-provider in-flight
-/// budget; dropping it releases the slot. Permits are `Send`/`Sync`
-/// so callers can hand them to spawned futures.
-#[derive(Debug)]
-pub struct ConcurrencyPermit {
-    inner: Option<Arc<PermitInner>>,
-}
-
-#[derive(Debug)]
-struct PermitInner {
-    provider: String,
-    limiter: Arc<ProviderConcurrencyLimiter>,
-}
-
-impl ProviderConcurrencyLimiter {
-    /// `limit == 0` means "disabled". A disabled limiter still hands
-    /// out permits but never tracks counts, so `try_acquire` is
-    /// effectively free.
-    pub fn new(limit: u64) -> Arc<Self> {
-        Arc::new(Self {
-            limit,
-            inflight: Mutex::new(HashMap::new()),
-        })
-    }
-
-    pub fn from_config(config: &NotifyRateLimitConfig) -> Arc<Self> {
-        let limit = config
-            .per_provider_concurrency
-            .unwrap_or(DEFAULT_PER_PROVIDER_CONCURRENCY);
-        Self::new(limit)
-    }
-
-    pub fn limit(&self) -> u64 {
-        self.limit
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.limit > 0
-    }
-
-    /// Attempt to claim one in-flight slot for `provider`. Returns
-    /// `Ok(permit)` when room is available, or `Err(rejection)` when
-    /// the per-provider cap is full.
-    pub fn try_acquire(
-        self: &Arc<Self>,
-        provider: &str,
-    ) -> Result<ConcurrencyPermit, ConcurrencyRejection> {
-        if !self.is_enabled() {
-            return Ok(ConcurrencyPermit { inner: None });
-        }
-        let mut guard = self
-            .inflight
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let counter = guard.entry(provider.to_owned()).or_insert(0);
-        if *counter >= self.limit {
-            return Err(ConcurrencyRejection {
-                provider: provider.to_owned(),
-                limit: self.limit,
-            });
-        }
-        *counter += 1;
-        Ok(ConcurrencyPermit {
-            inner: Some(Arc::new(PermitInner {
-                provider: provider.to_owned(),
-                limiter: Arc::clone(self),
-            })),
-        })
-    }
-
-    /// Current in-flight count for `provider`. Test/diagnostic hook —
-    /// not used on the hot path.
-    pub fn in_flight(&self, provider: &str) -> u64 {
-        let guard = self
-            .inflight
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.get(provider).copied().unwrap_or(0)
-    }
-
-    fn release(&self, provider: &str) {
-        let mut guard = self
-            .inflight
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(counter) = guard.get_mut(provider) {
-            *counter = counter.saturating_sub(1);
-            if *counter == 0 {
-                guard.remove(provider);
-            }
-        }
-    }
-}
-
-impl Drop for ConcurrencyPermit {
-    fn drop(&mut self) {
-        if let Some(inner) = self.inner.take() {
-            // Only release when this is the last clone — Arc is used
-            // so spawned futures can hold the permit. In the simple
-            // single-owner path Arc::strong_count == 1.
-            if Arc::strong_count(&inner) == 1 {
-                inner.limiter.release(&inner.provider);
             }
         }
     }
@@ -658,64 +520,5 @@ mod tests {
             RateLimiterBackend::Memory(backend) => backend.counters.entry_count(),
             RateLimiterBackend::Redis(_) => unreachable!("soak scaffold uses memory backend"),
         }
-    }
-
-    // ----- ProviderConcurrencyLimiter -----
-
-    #[test]
-    fn provider_concurrency_default_from_config_is_100() {
-        let limiter = ProviderConcurrencyLimiter::from_config(&NotifyRateLimitConfig::default());
-        assert_eq!(limiter.limit(), 100);
-        assert!(limiter.is_enabled());
-    }
-
-    #[test]
-    fn provider_concurrency_zero_means_disabled() {
-        let limiter = ProviderConcurrencyLimiter::new(0);
-        assert!(!limiter.is_enabled());
-        // Should hand out permits forever without tracking.
-        let permits: Vec<_> = (0..1000)
-            .map(|_| {
-                limiter
-                    .try_acquire("apns")
-                    .expect("disabled limiter allows all")
-            })
-            .collect();
-        assert_eq!(limiter.in_flight("apns"), 0);
-        drop(permits);
-    }
-
-    #[test]
-    fn provider_concurrency_rejects_when_full() {
-        let limiter = ProviderConcurrencyLimiter::new(2);
-        let p1 = limiter.try_acquire("apns").expect("slot 1");
-        let p2 = limiter.try_acquire("apns").expect("slot 2");
-        let rejection = limiter
-            .try_acquire("apns")
-            .expect_err("slot 3 must be rejected");
-        assert_eq!(rejection.provider, "apns");
-        assert_eq!(rejection.limit, 2);
-
-        // Other providers are not affected.
-        let _other = limiter
-            .try_acquire("fcm")
-            .expect("different provider has its own budget");
-
-        // Dropping a permit frees a slot.
-        drop(p1);
-        let _p3 = limiter
-            .try_acquire("apns")
-            .expect("freed slot must be available");
-        drop(p2);
-    }
-
-    #[test]
-    fn provider_concurrency_release_clears_empty_entries() {
-        let limiter = ProviderConcurrencyLimiter::new(4);
-        {
-            let _permit = limiter.try_acquire("webpush").unwrap();
-            assert_eq!(limiter.in_flight("webpush"), 1);
-        }
-        assert_eq!(limiter.in_flight("webpush"), 0);
     }
 }

@@ -113,12 +113,6 @@ fn http_schema() -> Value {
                     "per_provider": {"type": ["integer", "null"], "minimum": 0},
                     "per_push_key_hash": {"type": ["integer", "null"], "minimum": 0},
                     "per_endpoint": {"type": ["integer", "null"], "minimum": 0},
-                    "per_provider_concurrency": {
-                        "type": ["integer", "null"],
-                        "minimum": 0,
-                        "default": 100,
-                        "description": "Max concurrent in-flight notify dispatches per provider. 0 disables; null falls back to the 100 default."
-                    },
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
                     "key_prefix": {"type": "string", "default": "floria"},
