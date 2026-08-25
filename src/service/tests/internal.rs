@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use arkret_push_policy::blind_payload_sanitizer::PROVIDER_EGRESS_STRIP_KEYS;
 use salvo::test::{RequestBuilder, ResponseExt, TestClient};
 use serde_json::{Value, json};
 
@@ -16,7 +17,6 @@ use crate::deactivation::{
 };
 use crate::pushkin::PushkinRegistry;
 use crate::retry_queue::{RetryEnvelope, RetryQueue, RetryQueueConfig};
-use crate::sanitize::STRIP_ONLY_KEYS;
 
 const INTERNAL_TOKEN: &str = "internal-test-token";
 
@@ -291,7 +291,7 @@ async fn dead_letters_full_ring_returns_newest_first_and_strips_egress_keys() {
     // Egress hygiene: no strip-only routing/audit key may appear
     // anywhere in the rendered snapshot.
     let rendered = serde_json::to_string(&body).unwrap().to_ascii_lowercase();
-    for name in STRIP_ONLY_KEYS {
+    for name in PROVIDER_EGRESS_STRIP_KEYS {
         assert!(
             !rendered.contains(*name),
             "strip-only key `{name}` leaked into dead-letter snapshot"

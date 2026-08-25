@@ -284,7 +284,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 return;
             }
         };
-    // SPEC-CR-016: `operation_id` is determined by the URL path
+    // `push-notifications.md` §5.1: `operation_id` is determined by the URL path
     // (operationId `ak.edge.push.command.notify`) and is no longer a body
     // field, so there is nothing to validate here.
     if let Err(error) = validate_origin_service_id(req, &caller, state.notify_auth.enabled()) {

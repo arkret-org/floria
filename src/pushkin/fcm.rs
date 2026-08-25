@@ -668,7 +668,7 @@ mod tests {
             // security id (`realm_id`) AND the renamed container id
             // (`space_id`).
             "space_id",
-            // AKP-0007 — Circle routing identifiers MUST NOT reach
+            // `push-notifications.md` §5.1/§6.2 — Circle routing identifiers MUST NOT reach
             // the provider plaintext payload.
             "circle_id",
             "effective_scope",

@@ -227,7 +227,7 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
 }
 
 pub(super) fn payload(devices: Vec<Value>) -> Value {
-    // SPEC-CR-016: transport fields (operation_id / origin_service_id /
+    // The push notify endpoint schema keeps transport fields (operation_id / origin_service_id /
     // destination_service_id / idempotency_key) ride HTTP headers, not the
     // body. Gateway-internal routing ids (realm_id / circle_id / ...) live
     // under notification.route_tokens.

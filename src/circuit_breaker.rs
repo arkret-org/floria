@@ -35,7 +35,7 @@ pub struct CircuitBreakerConfig {
     /// Number of consecutive failures before the breaker opens.
     pub failure_threshold: u32,
     /// How long the breaker stays open before it auto-resets to closed.
-    /// There is no manual reset RPC yet (TODO(circle-rollout-P2C.5)), so
+    /// There is no manual reset RPC in the current gateway contract, so
     /// the only reset path today is `open_for` elapsing. Operators should
     /// size `open_for` accordingly and watch the
     /// `floria_circuit_breaker_state` metric; do not configure a very

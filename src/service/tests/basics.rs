@@ -469,7 +469,7 @@ async fn notify_response_conserves_every_requested_device_id() {
 
 #[tokio::test]
 async fn notify_rejects_operation_id_in_body() {
-    // SPEC-CR-016: `operation_id` is determined by the URL path and is no
+    // The push notify endpoint schema determines `operation_id` from the URL; it is no
     // longer a body field. A caller that still puts it in the body is
     // rejected as an unknown field (deny_unknown_fields), not validated.
     let service = test_service(vec![]);

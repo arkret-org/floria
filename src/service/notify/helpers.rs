@@ -35,7 +35,7 @@ pub(super) fn parse_optional_idempotency_key(
 }
 
 pub(super) fn resolve_idempotency_key(req: &Request) -> Result<Option<String>, String> {
-    // SPEC-CR-016: the idempotency key rides the `Idempotency-Key`
+    // `push-notifications.md` §5.1: the idempotency key rides the `Idempotency-Key`
     // transport header only; it is no longer accepted as a body field.
     parse_optional_idempotency_key(
         req.header::<String>("idempotency-key").as_deref(),
@@ -140,7 +140,7 @@ pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
 }
 
 pub(super) fn request_destination_service_id(req: &Request) -> Option<String> {
-    // SPEC-CR-016: destination service DID rides the
+    // `push-notifications.md` §5.1: destination service DID rides the
     // `Destination-Service-ID` transport header only.
     req.header::<String>(DESTINATION_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
@@ -370,7 +370,7 @@ pub(super) fn normalized_notify_dedup_key(
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // AKP-0007 — the wakeup carries no Circle or scope identifier, so the
+    // `push-notifications.md` §5.1/§6.2 — the wakeup carries no Circle or scope identifier, so the
     // opaque `scope_route_token` is the only thing that separates two
     // pushes for the same Strand in different Circles. It is therefore
     // dedup-affecting and must be part of the normalized fingerprint.

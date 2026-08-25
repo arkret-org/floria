@@ -1,85 +1,20 @@
 //! Shared helpers for floria's blind-wakeup provider egress payload
 //! hygiene.
 //!
-//!   * [`STRIP_ONLY_KEYS`] — names accepted at ingress but never sent to an external provider. Some
-//!     are consumed by floria for routing/audit, others are protocol payload names that remain
-//!     outside the blind provider surface.
-//!   * Egress also strips everything the SDK's own `is_forbidden_payload_key` covers.
-//!
-//! These names are floria-local defence-in-depth for identifiers the
-//! SDK's `is_forbidden_payload_key` does not yet cover (rounds R2/R3,
-//! AKP-0007, the 9dabf26 carrier split). Names the SDK already rejects
-//! (e.g. `encrypted_content`, `sender_actor_display_name`, `realm_id`,
-//! `space_id`) are intentionally NOT duplicated here.
-// TODO(circle-rollout-P2C.5): once the SDK ships `is_forbidden_payload_key`
-// coverage for these names, drop the local egress list and route provider
-// stripping straight at the SDK predicate.
+//! The shared SDK owns both blind-payload forbidden names and fields accepted
+//! at gateway ingress but stripped before an external provider sees them.
 
 use arkret_push_policy::blind_payload_sanitizer as sdk;
 
-/// Names accepted inbound but silently stripped before a provider sees
-/// them. Matched case-insensitively.
-///
-///   * SPEC-CR-016 gateway-internal routing fragment (`route_tokens` and its leaves) — consumed by
-///     floria for routing/dedup, opaque by construction, never forwarded.
-///   * R2/R3 governance / correlation identifiers (moderation appeal, audit attestation posture,
-///     policy-frontier hash) — meaningful to the audit pipeline, a stable correlator on the
-///     provider wire.
-pub const STRIP_ONLY_KEYS: &[&str] = &[
-    // --- SPEC-CR-016 gateway-internal routing fragment ---
-    // The whole `route_tokens` wrapper plus its leaf routing fields are
-    // consumed inbound for gateway-side routing / dedup but MUST be stripped
-    // before any provider sees them. `build_blind_provider_data` is
-    // allow-list based so they never reach a provider by construction; these
-    // entries are the defense-in-depth egress backstop.
-    "route_tokens",
-    "realm_route_token",
-    "scope_route_token",
-    "mention_redirect_target_route_tokens",
-    "delivery_binding_frontier_token",
-    "target_route_token",
-    "timing_profile_hint",
-    // --- Protocol payload names kept off the provider surface ---
-    "attestation_evidence",
-    "attestation_chain",
-    "size",
-    "strand_body",
-    "encrypted_payload",
-    "encrypted_metadata",
-    "metadata",
-    "fields",
-    "track",
-    "track_name",
-    // --- Actor-private notification preference state ---
-    "push_rules",
-    "dnd",
-    "dnd_schedule",
-    "dnd_enabled",
-    "dnd_exceptions",
-    "snooze",
-    "snoozed",
-    "snooze_expires_at",
-    "snooze_until",
-    // --- R2/R3 governance / correlation identifiers ---
-    "appeal_id",
-    "audit_purpose",
-    "audit_policy_version_digest",
-    "policy_frontier_digest",
-    "trust_domain",
-];
-
 /// Returns `true` if `key` must be stripped before a provider sees it:
-/// the strip-only routing/audit tail OR the SDK's own forbidden-payload
-/// list.
+/// the shared routing/audit strip set or the forbidden blind-payload set.
 pub fn is_forbidden_egress_key(key: &str) -> bool {
-    sdk::is_forbidden_payload_key(key)
-        || STRIP_ONLY_KEYS
-            .iter()
-            .any(|name| name.eq_ignore_ascii_case(key))
+    sdk::is_forbidden_provider_egress_key(key)
 }
 
-/// Recursively remove every [`STRIP_ONLY_KEYS`] name (case-insensitive)
-/// from a JSON value, descending into nested objects and arrays.
+/// Recursively remove every provider-egress-forbidden name
+/// (case-insensitive) from a JSON value, descending into nested objects and
+/// arrays.
 ///
 /// Used by egress-adjacent surfaces that serialize internal structures
 /// for an external reader — e.g. the operator dead-letter snapshot
@@ -88,11 +23,7 @@ pub fn is_forbidden_egress_key(key: &str) -> bool {
 pub fn strip_egress_only_keys(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
-            map.retain(|key, _| {
-                !STRIP_ONLY_KEYS
-                    .iter()
-                    .any(|name| name.eq_ignore_ascii_case(key))
-            });
+            map.retain(|key, _| !sdk::is_forbidden_provider_egress_key(key));
             for child in map.values_mut() {
                 strip_egress_only_keys(child);
             }
@@ -195,7 +126,7 @@ mod tests {
         });
         strip_egress_only_keys(&mut value);
         let rendered = serde_json::to_string(&value).unwrap();
-        for name in STRIP_ONLY_KEYS {
+        for name in sdk::PROVIDER_EGRESS_STRIP_KEYS {
             assert!(
                 !rendered.to_ascii_lowercase().contains(*name),
                 "stripped key `{name}` leaked into `{rendered}`"

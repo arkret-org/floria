@@ -6,7 +6,7 @@ use crate::auth::{AuthFailure, AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID
 use crate::config::NotifyAuthConfig;
 use crate::models::DeviceExt;
 
-/// SPEC-CR-016: the originating service core id rides the `Source-Service-ID`
+/// `push-notifications.md` §5.1: the originating service core id rides the `Source-Service-ID`
 /// transport header (`SOURCE_SERVICE_ID_HEADER`), which the auth layer
 /// already resolved into `caller.origin_service_id`. We keep a
 /// defense-in-depth check that the header is present and consistent with
@@ -40,7 +40,7 @@ pub(super) fn validate_origin_service_id(
     Ok(())
 }
 
-/// SPEC-CR-016: the destination service core id rides the
+/// `push-notifications.md` §5.1: the destination service core id rides the
 /// `Destination-Service-ID` transport header only (the body field is
 /// removed). The recipient-service-id scope binding reuses the same
 /// header value — `push_target_id` is a per-`(recipient_service_id, ...)`

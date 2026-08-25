@@ -148,7 +148,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "event_id":   "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
         "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
         "strand_id":    "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
-        // SPEC-CR-016: gateway-internal routing ids live under route_tokens.
+        // push-notifications.md §5.1: gateway-internal routing ids stay in route_tokens.
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001"
         },
@@ -451,7 +451,7 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
     });
     let obj = notification.as_object_mut().unwrap();
     obj.extend(extra_notification_fields);
-    // SPEC-CR-016: transport fields (operation_id / origin_service_id /
+    // The push notify endpoint schema keeps transport fields (operation_id / origin_service_id /
     // destination_service_id) ride HTTP headers, not the body.
     json!({
         "notification": notification,

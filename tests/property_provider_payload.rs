@@ -14,92 +14,23 @@
 //!
 //! Each block is capped at 64 cases to keep CI fast.
 
+use arkret_push_policy::blind_payload_sanitizer::{
+    FORBIDDEN_BLIND_PAYLOAD_KEYS, PROVIDER_EGRESS_STRIP_KEYS, is_forbidden_provider_egress_key,
+};
 use floria::pushkin::sanitized_provider_payload;
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
 const PROPTEST_CASES: u32 = 64;
 
-/// SDK forbidden keys mirrored locally so we can drive proptest inputs.
-const FORBIDDEN_NAMES: &[&str] = &[
-    "event_id",
-    "message_id",
-    "strand_id",
-    "space_id",
-    "realm_id",
-    "thread_id",
-    "correlation_id",
-    "sender",
-    "sender_did",
-    "sender_actor_display_name",
-    "from",
-    "to",
-    "target_did",
-    "device_id",
-    "device_did",
-    "body",
-    "content",
-    "title",
-    "subtitle",
-    "preview",
-    "summary",
-    "alert",
-    "filename",
-    "file_name",
-    "attachment_name",
-    "attachment_filename",
-    "mime_type",
-    "media_url",
-    "space_name",
-    "strand_name",
-    "room_name",
-    "provider_payload",
-    "provider_data",
-    "ciphertext",
-    "encrypted_payload",
-    "encrypted_content",
-    "encrypted_metadata",
-    "metadata",
-    "fields",
-    "track",
-    "track_name",
-    "sdp",
-    "offer",
-    "candidate",
-    "ice_candidate",
-    "facet",
-    "view_renderer",
-    // Actor-private notification preference state.
-    "push_rules",
-    "dnd",
-    "dnd_schedule",
-    "dnd_enabled",
-    "dnd_exceptions",
-    "snooze",
-    "snoozed",
-    "snooze_expires_at",
-    "snooze_until",
-    "target_ref",
-    "target_key",
-    // Round R2/R3 (2026-05-20) additions — stripped locally by floria
-    // ahead of the SDK forbidden-list update (T07/T10/T06).
-    "appeal_id",
-    "attestation_evidence",
-    "audit_purpose",
-    "attestation_chain",
-    "audit_policy_version_digest",
-    "policy_frontier_digest",
-    "trust_domain",
-    "route_tokens",
-    "realm_route_token",
-    "scope_route_token",
-    "mention_redirect_target_route_tokens",
-    "delivery_binding_frontier_token",
-    "target_route_token",
-];
-
 fn arb_forbidden_key() -> impl Strategy<Value = &'static str> {
-    proptest::sample::select(FORBIDDEN_NAMES.to_vec())
+    proptest::sample::select(
+        FORBIDDEN_BLIND_PAYLOAD_KEYS
+            .iter()
+            .chain(PROVIDER_EGRESS_STRIP_KEYS)
+            .copied()
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn arb_leaf() -> impl Strategy<Value = Value> {
@@ -116,9 +47,9 @@ fn arb_leaf() -> impl Strategy<Value = Value> {
 /// Recursively scan a value for any forbidden key by name.
 fn contains_forbidden_key(value: &Value) -> bool {
     match value {
-        Value::Object(map) => map.iter().any(|(k, v)| {
-            FORBIDDEN_NAMES.iter().any(|f| f.eq_ignore_ascii_case(k)) || contains_forbidden_key(v)
-        }),
+        Value::Object(map) => map
+            .iter()
+            .any(|(k, v)| is_forbidden_provider_egress_key(k) || contains_forbidden_key(v)),
         Value::Array(arr) => arr.iter().any(contains_forbidden_key),
         _ => false,
     }

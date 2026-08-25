@@ -683,12 +683,10 @@ mod sanitize_tests {
         assert_eq!(out.get("wakeup_kind"), Some(&json!("mention")));
     }
 
-    /// Round R2/R3 (T07/T10/T06) — the appeal / attestation / audit /
-    /// policy-frontier-hash / trust-domain field names added by rounds
-    /// 2+3 MUST be stripped from any provider payload before it leaves
-    /// floria. They are all stable correlators that would let an
-    /// observer link the push back to a moderation appeal or audit
-    /// agent.
+    /// `push-notifications.md` §5.1 — audit, policy, preference, routing,
+    /// and encrypted protocol fields MUST be stripped from any provider
+    /// payload before it leaves floria. They are stable correlators that
+    /// would let an observer link a push back to private state.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields() {
         // We stage values that are safe (no `did:` / `ak:` literals)
@@ -724,15 +722,15 @@ mod sanitize_tests {
         ] {
             assert!(
                 out.get(forbidden).is_none(),
-                "round R2/R3 forbidden field `{forbidden}` survived sanitization"
+                "provider-egress forbidden field `{forbidden}` survived sanitization"
             );
         }
         assert_eq!(out.get("client"), Some(&json!("android")));
         assert_eq!(out.get("wakeup_kind"), Some(&json!("message")));
     }
 
-    /// Round R2/R3 — the same field names buried inside a nested object
-    /// are also stripped by the recursive sweep.
+    /// `push-notifications.md` §5.1 — the same field names buried inside a
+    /// nested object are also stripped by the recursive sweep.
     #[test]
     fn sanitized_provider_payload_strips_forbidden_fields_when_nested() {
         let payload = json!({
@@ -757,7 +755,7 @@ mod sanitize_tests {
         for forbidden in ["appeal_id", "trust_domain"] {
             assert!(
                 !encoded.contains(forbidden),
-                "nested round R2/R3 forbidden field `{forbidden}` survived: {encoded}"
+                "nested provider-egress forbidden field `{forbidden}` survived: {encoded}"
             );
         }
         assert!(encoded.contains("ok_key"));

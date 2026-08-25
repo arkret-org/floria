@@ -62,7 +62,7 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
 
 #[tokio::test]
 async fn notify_rejects_idempotency_key_in_body() {
-    // SPEC-CR-016: the idempotency key rides the `Idempotency-Key` header
+    // The push notify endpoint schema carries the idempotency key in the `Idempotency-Key` header
     // only; it is no longer a body field. A body `idempotency_key` is now
     // rejected as an unknown field (deny_unknown_fields).
     let service = test_service_with_dedup(vec![], Duration::from_secs(60));

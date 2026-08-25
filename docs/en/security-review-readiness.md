@@ -76,7 +76,7 @@ The review focuses on the following adversaries and capabilities:
 
 1. **Untrusted /notify caller** — can craft arbitrary JSON / headers; goal is
    to bypass auth, replay a notification, smuggle plaintext metadata, or
-   inject forbidden Round R2/R3/AKP-0007 keys into the provider wire.
+   inject keys forbidden by `push-notifications.md` §5.1 into the provider wire.
 2. **Compromised provider credential** — has access to a single APNs key,
    FCM service account, or VAPID private key; goal is to widen the blast
    radius through floria's caches or rate-limit state.

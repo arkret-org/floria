@@ -958,7 +958,7 @@ mod tests {
             // renamed container id (`space_id`) are off-wire — SDK
             // sanitizer covers both since spec 59ac1d4.
             "space_id",
-            // AKP-0007 — Circle routing identifiers MUST NOT surface
+            // `push-notifications.md` §5.1/§6.2 — Circle routing identifiers MUST NOT surface
             // on the webpush plaintext envelope.
             "circle_id",
             "effective_scope",

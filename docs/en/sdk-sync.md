@@ -1,13 +1,10 @@
 # SDK Sync Gate
 
-floria still carries a local provider-payload sweep for forbidden egress
-fields that are stricter than the SDK's generic blind-payload helper. The
-SDK exposes `arkret::blind_payload_sanitizer::is_forbidden_payload_key`,
-but the exported list is not yet sufficient for the gateway-internal
-routing fragment, appeal, attestation, policy-frontier, or the
-actor-private DND / snooze preference field names.
+The SDK owns the canonical blind-payload and provider-egress forbidden-key
+sets. floria applies that shared policy recursively immediately before an
+external provider sees a payload.
 
-## Local Sweep
+## Provider Egress Sweep
 
 The local sweep is implemented in `src/sanitize.rs` as
 `is_forbidden_egress_key` and runs recursively through
@@ -17,21 +14,20 @@ Realm/Space/Circle identifiers stay off the provider wire.
 
 ### Governance / correlation identifiers
 
-`src/sanitize.rs`'s `STRIP_ONLY_KEYS` is the authoritative list; the
-table below records the rationale for the R2/R3 governance and
-correlation names only. Names the SDK helper already rejects (for
-example `realm_id`, `space_id`, `encrypted_content`,
-`sender_actor_display_name`) are deliberately not duplicated locally.
+`arkret_push_policy::blind_payload_sanitizer` is authoritative. It exports
+the ingress-forbidden names and the additional provider-egress strip set;
+floria deliberately carries no local mirror. The table below records the
+rationale for governance and correlation names in the shared strip set.
 
-| Field | Round | Rationale |
-|-------|-------|-----------|
-| `appeal_id` | R2 | Links a push to a moderation appeal thread; visible in provider logs would expose that the user is under review |
-| `attestation_evidence` | R3 | Reveals audit-agent or device posture (TPM PCR digests, key attestation chain) |
-| `audit_purpose` | R3 | Reveals audit routing intent (which downstream audit channel the push will divert to) |
-| `attestation_chain` | R3 | Reveals attestation chain material; same leak class as `attestation_evidence` |
-| `audit_policy_version_digest` | R3 | Stable audit policy correlator — long-lived, cross-request linkability |
-| `policy_frontier_digest` | R3 | Stable policy frontier correlator — same linkability class as the audit policy version |
-| `trust_domain` | R3 | Deployment-scope leakage — exposes whether the principal is on a federation edge |
+| Field | Rationale |
+|-------|-----------|
+| `appeal_id` | Links a push to a moderation appeal thread; visible in provider logs would expose that the user is under review |
+| `attestation_evidence` | Reveals audit-agent or device posture (TPM PCR digests, key attestation chain) |
+| `audit_purpose` | Reveals audit routing intent (which downstream audit channel the push will divert to) |
+| `attestation_chain` | Reveals attestation chain material; same leak class as `attestation_evidence` |
+| `audit_policy_version_digest` | Stable audit policy correlator — long-lived, cross-request linkability |
+| `policy_frontier_digest` | Stable policy frontier correlator — same linkability class as the audit policy version |
+| `trust_domain` | Deployment-scope leakage — exposes whether the principal is on a federation edge |
 
 The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
@@ -59,45 +55,29 @@ message rendering, not to `ak.edge.push.command.notify`. floria keeps the typed
 payload closed with `serde(deny_unknown_fields)`, so those fields are
 rejected with `schema_violation`.
 
-## Upgrade Gate
+## Spec Update Checklist
 
-Do not remove the local sweep until all of these are true:
+Use this when `push-notifications.md` changes its provider-visible payload
+rules:
 
-1. The SDK helper rejects every `STRIP_ONLY_KEYS` name
-   case-insensitively.
-2. The SDK helper is documented as the canonical blind-wakeup
-   forbidden-key source for Round R2/R3 and AKP-0007 and later.
-3. floria tests pass after deleting the local `is_forbidden_egress_key` extension list and
-   changing `sanitized_provider_payload` to rely on the SDK helper
-   only.
-4. The adapter tests continue to assert `realm_id` and `space_id` are
-   absent from provider payloads.
-
-## Spec round upgrade checklist
-
-Use this when bumping floria to a newer arkret-spec round (R4 →
-R5, AKP-0007 → AKP-0008, etc.):
-
-- [ ] Diff the new round's `forbidden_payload_keys` table against
-      `is_forbidden_egress_key`. Add any newly forbidden names to
-      the local list with a rationale row in this doc.
+- [ ] Update the SDK's exported forbidden-key sets; do not add a floria-local
+      mirror.
 - [ ] Add a property test in `tests/property_provider_payload.rs`
       that fuzzes the new field name into request bodies and asserts
       the provider wire does not contain it (case-insensitive).
 - [ ] Update `docs/en/server-integration.md` if the new round
       changes the request wire shape that callers see.
-- [ ] Run the local supply-chain script with the new round:
-      `.\scripts\local-supply-chain.ps1 -Image floria:local-round-bump`.
+- [ ] Run the local supply-chain script:
+      `.\scripts\local-supply-chain.ps1 -Image floria:local-spec-update`.
 - [ ] Confirm `cargo test sanitized_provider_payload --lib` and
       `cargo test provider_payload_strictness --test provider_payload_strictness`
       both still pass.
 
-Suggested local check before removal of the local sweep:
+Suggested local check:
 
 ```powershell
 cargo test sanitized_provider_payload --lib
 cargo test provider_payload_strictness --test provider_payload_strictness
 ```
 
-Keep this file updated with the SDK commit or release that satisfies
-the gate.
+Keep this file aligned with the shared SDK policy surface.

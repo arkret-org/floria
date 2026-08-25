@@ -1,4 +1,4 @@
-//! Round R2/R3 (T07) — account deactivation fanout integration.
+//! Account-deactivation fanout integration for the deactivation protocol.
 //!
 //! soland broadcasts an `account_deactivate_fanout` event to every
 //! downstream service-bound subscriber when a Principal Server starts
