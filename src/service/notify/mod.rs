@@ -26,12 +26,12 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
+pub(super) use helpers::idempotency_cache_key;
 use helpers::{
     cache_success_response, delivery_receipt, enqueue_retry, finish_standard_notify_json,
-    idempotency_cache_key, mark_delivered_devices, normalized_notify_dedup_key,
-    notify_rate_limit_checks, optional_owned_string, record_rejected_devices_audit_or_finish,
-    record_required_audit_event, rejected_device, request_destination_service_id,
-    resolve_idempotency_key,
+    mark_delivered_devices, normalized_notify_dedup_key, notify_rate_limit_checks,
+    optional_owned_string, record_rejected_devices_audit_or_finish, record_required_audit_event,
+    rejected_device, request_destination_service_id, resolve_idempotency_key,
 };
 use validation::{
     BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_id,
@@ -762,14 +762,18 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 continue;
             }
             [pushkin] => {
-                if state
-                    .notify_deduplicator
-                    .as_ref()
-                    .is_some_and(|deduplicator| {
-                        !taken_over_this_request.contains(&(app_id.to_owned(), push_key.to_owned()))
-                            && deduplicator.contains_delivered_device(&dedup_key, app_id, push_key)
-                    })
+                let delivered_before = if taken_over_this_request
+                    .contains(&(app_id.to_owned(), push_key.to_owned()))
                 {
+                    false
+                } else if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
+                    deduplicator
+                        .contains_delivered_device_async(&dedup_key, app_id, push_key)
+                        .await
+                } else {
+                    false
+                };
+                if delivered_before {
                     skipped_delivered += 1;
                     outcomes.push(PushNotifyDeviceOutcome::duplicate(device.device_id.clone()));
                     app_metrics::notify_device_skip_hit(1);
@@ -892,7 +896,6 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 app_metrics::notify_delivery_outcome_by_app(app_id, dispatch_outcome, 1);
                 match dispatch_result {
                     Ok(mut pushkin_rejected) => {
-                        outcomes.push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
                         let rejected_set = pushkin_rejected
                             .iter()
                             .cloned()
@@ -902,6 +905,16 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             .filter(|target| !rejected_set.contains(target.push_key.as_str()))
                             .cloned()
                             .collect::<Vec<_>>();
+                        if delivered_targets.is_empty() && !pushkin_rejected.is_empty() {
+                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                                device.device_id.clone(),
+                                PushNotifyReasonCode::PushTokenUnknown,
+                                None,
+                            ));
+                        } else {
+                            outcomes
+                                .push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
+                        }
                         if !delivered_targets.is_empty() {
                             delivered_now += delivered_targets.len();
                             for target in &delivered_targets {
@@ -972,7 +985,11 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                             .get_or_insert_with(|| (error.to_string(), retry_after));
                     }
                     Err(error) if error.is_remote() => {
-                        outcomes.push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
+                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            device.device_id.clone(),
+                            PushNotifyReasonCode::PushGatewayUnreachable,
+                            Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
+                        ));
                         tracing::warn!(
                             error = %error,
                             request_id = %context.request_id,

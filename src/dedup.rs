@@ -272,6 +272,30 @@ impl NotifyDeduplicator {
         }
     }
 
+    pub async fn contains_delivered_device_async(
+        self: &Arc<Self>,
+        notification_key: &str,
+        app_id: &str,
+        push_key: &str,
+    ) -> bool {
+        match &self.backend {
+            NotifyDedupBackend::Memory(_) => {
+                self.contains_delivered_device(notification_key, app_id, push_key)
+            }
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let notification_key = notification_key.to_owned();
+                let app_id = app_id.to_owned();
+                let push_key = push_key.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    this.contains_delivered_device(&notification_key, &app_id, &push_key)
+                })
+                .await
+                .unwrap_or(false)
+            }
+        }
+    }
+
     pub fn mark_delivered_device(&self, notification_key: &str, app_id: &str, push_key: &str) {
         if self.ttl.is_zero() {
             return;
@@ -381,6 +405,19 @@ impl NotifyDeduplicator {
             last_error,
             request_id: Some(response.request_id),
         })
+    }
+
+    pub async fn status_for_async(self: &Arc<Self>, key: &str) -> Option<NotifyStatus> {
+        match &self.backend {
+            NotifyDedupBackend::Memory(_) => self.status_for(key),
+            NotifyDedupBackend::Redis(_) => {
+                let this = Arc::clone(self);
+                let key = key.to_owned();
+                tokio::task::spawn_blocking(move || this.status_for(&key))
+                    .await
+                    .unwrap_or(None)
+            }
+        }
     }
 }
 

@@ -149,11 +149,8 @@ pub(super) async fn push_status(req: &mut Request, depot: &mut Depot, res: &mut 
         );
         return;
     };
-    // The dedup cache is keyed by SHA-256 of the idempotency key, so we
-    // re-hash here. We accept the raw idempotency key on the wire to
-    // match what callers used for /notify.
-    let hashed_key = crate::dedup::request_hash(key.as_bytes());
-    match deduplicator.status_for(&hashed_key) {
+    let hashed_key = crate::service::notify::idempotency_cache_key(&key);
+    match deduplicator.status_for_async(&hashed_key).await {
         Some(status) => finish_json(res, StatusCode::OK, status, started),
         None => finish_error(
             res,

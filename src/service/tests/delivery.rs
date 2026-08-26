@@ -49,7 +49,7 @@ async fn ambiguous_app_ids_are_rejected() {
 }
 
 #[tokio::test]
-async fn remote_provider_errors_do_not_reopen_caller_ownership() {
+async fn remote_provider_errors_are_not_reported_as_accepted() {
     let service = test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new(
@@ -64,7 +64,18 @@ async fn remote_provider_errors_do_not_reopen_caller_ownership() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, vec![]).await;
+    let body = response
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert_eq!(
+        body.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Rejected
+    );
+    assert_eq!(
+        body.outcomes[0].reason_code,
+        Some(arkret_models_integration::PushNotifyReasonCode::PushGatewayUnreachable)
+    );
 }
 
 #[tokio::test]

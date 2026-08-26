@@ -328,7 +328,7 @@ fn unix_timestamp_string() -> String {
         .to_string()
 }
 
-pub(super) fn idempotency_cache_key(idempotency_key: &str) -> String {
+pub(in crate::service) fn idempotency_cache_key(idempotency_key: &str) -> String {
     request_hash(format!("idempotency-key\0{idempotency_key}").as_bytes())
 }
 
