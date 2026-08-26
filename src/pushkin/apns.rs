@@ -758,15 +758,7 @@ mod tests {
     use super::*;
 
     fn device() -> PushDeviceRoute {
-        PushDeviceRoute {
-            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                .unwrap(),
-            app_id: Some("com.example.apns".to_owned()),
-            push_key: Some(arkret_models_integration::PushKey::new("spqr").unwrap()),
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        }
+        crate::pushkin::test_fixtures::device("com.example.apns", "spqr")
     }
 
     fn pushkin() -> ApnsPushkin {

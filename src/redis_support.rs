@@ -43,6 +43,23 @@ impl RedisPool {
             .get()
             .with_context(|| format!("failed to get Redis connection {}", self.target_label))
     }
+
+    /// One readiness probe shared by every Redis-backed store so a backend
+    /// that answers `PING` with anything else fails the same way everywhere.
+    pub(crate) fn ready(&self) -> Result<()> {
+        let mut connection = self.connection()?;
+        let pong: String = redis::cmd("PING")
+            .query(&mut connection)
+            .with_context(|| format!("failed to ping Redis backend {}", self.target_label))?;
+        if pong == "PONG" {
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "Redis backend {} returned unexpected PING response `{pong}`",
+                self.target_label
+            );
+        }
+    }
 }
 
 #[derive(Clone)]

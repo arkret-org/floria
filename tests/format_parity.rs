@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 use floria::config::Config;
 use serde_json::Value;
 
+mod common;
+use common::collect_sample_files;
+
 #[test]
 fn sample_kdl_and_yaml_parse_to_equivalent_config() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -229,40 +232,5 @@ fn path_with_swapped_extension(path: &Path, from: &str, to: &str) -> PathBuf {
         path.with_extension(to)
     } else {
         path.to_path_buf()
-    }
-}
-
-fn collect_sample_files(root: &Path, extension: &str) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    walk(root, &mut out);
-    out.into_iter()
-        .filter(|path| {
-            path.extension().and_then(OsStr::to_str) == Some(extension)
-                && path
-                    .file_name()
-                    .and_then(OsStr::to_str)
-                    .is_some_and(|name| name.contains(".sample."))
-        })
-        .collect()
-}
-
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(read_dir) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in read_dir.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        let path = entry.path();
-        if file_type.is_dir() {
-            let name = path.file_name().and_then(OsStr::to_str).unwrap_or_default();
-            if matches!(name, "target" | ".git" | ".claude" | "node_modules") {
-                continue;
-            }
-            walk(&path, out);
-        } else if file_type.is_file() {
-            out.push(path);
-        }
     }
 }

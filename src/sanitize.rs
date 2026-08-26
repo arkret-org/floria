@@ -12,18 +12,30 @@ pub fn is_forbidden_egress_key(key: &str) -> bool {
     sdk::is_forbidden_provider_egress_key(key)
 }
 
-/// Recursively remove every provider-egress-forbidden name
+/// Recursively remove every **strip-only** routing/audit name
 /// (case-insensitive) from a JSON value, descending into nested objects and
 /// arrays.
 ///
-/// Used by egress-adjacent surfaces that serialize internal structures
-/// for an external reader — e.g. the operator dead-letter snapshot
-/// route — as a defense-in-depth backstop: even if the serialized shape
-/// later grows a routing/audit field, it never leaves the process.
+/// Used by egress-adjacent surfaces that serialize internal structures for an
+/// operator reader — e.g. the dead-letter snapshot route — as a
+/// defense-in-depth backstop: even if the serialized shape later grows a
+/// routing/audit field, it never leaves the process.
+///
+/// This is deliberately [`sdk::PROVIDER_EGRESS_STRIP_KEYS`] and **not**
+/// [`is_forbidden_egress_key`]. The forbidden blind-payload set is the
+/// contract against an external push provider and includes gateway
+/// correlation identifiers such as `request_id`; an authenticated operator
+/// diagnostic is not that reader, and stripping its correlation id would
+/// leave the snapshot unusable without protecting anything.
 pub fn strip_egress_only_keys(value: &mut serde_json::Value) {
+    fn is_strip_only(key: &str) -> bool {
+        sdk::PROVIDER_EGRESS_STRIP_KEYS
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(key))
+    }
     match value {
         serde_json::Value::Object(map) => {
-            map.retain(|key, _| !sdk::is_forbidden_provider_egress_key(key));
+            map.retain(|key, _| !is_strip_only(key));
             for child in map.values_mut() {
                 strip_egress_only_keys(child);
             }

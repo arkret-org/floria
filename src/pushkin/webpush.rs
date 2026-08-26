@@ -820,15 +820,7 @@ mod tests {
     use crate::config::{AppConfig, Config};
 
     fn device() -> PushDeviceRoute {
-        PushDeviceRoute {
-            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                .unwrap(),
-            app_id: Some("com.example.web".to_owned()),
-            push_key: Some(arkret_models_integration::PushKey::new("p256dh-key").unwrap()),
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        }
+        crate::pushkin::test_fixtures::device("com.example.web", "p256dh-key")
     }
 
     fn subscription_push_key(endpoint: &str) -> String {

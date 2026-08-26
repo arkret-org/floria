@@ -8,6 +8,8 @@ mod huawei;
 mod jpush;
 mod oppo;
 mod reqwest_support;
+#[cfg(test)]
+mod test_fixtures;
 mod vivo;
 mod webpush;
 mod xiaomi;

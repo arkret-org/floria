@@ -436,73 +436,16 @@ impl XiaomiSendResponse {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{
-        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
-    };
+    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 
     use super::*;
 
     fn device() -> PushDeviceRoute {
-        PushDeviceRoute {
-            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                .unwrap(),
-            app_id: Some("com.example.xiaomi".to_owned()),
-            push_key: Some(arkret_models_integration::PushKey::new("regid").unwrap()),
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        }
+        crate::pushkin::test_fixtures::device("com.example.xiaomi", "regid")
     }
 
     fn notification() -> PushNotificationEnvelope {
-        PushNotificationEnvelope {
-            strand_title: Some("Mission Control".to_owned()),
-            realm_title: None,
-            priority: None,
-            membership: None,
-            sender_actor_display_name: Some("Major Tom".to_owned()),
-            event_id: Some(
-                arkret_wire::EventId::new("ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS")
-                    .unwrap(),
-            ),
-            message_id: Some(
-                arkret_wire::MessageId::new(
-                    "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
-                )
-                .unwrap(),
-            ),
-            strand_id: Some(
-                arkret_wire::StrandId::new(
-                    "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
-                )
-                .unwrap(),
-            ),
-            route_tokens: Some(PushRouteTokens {
-                realm_route_token: Some(
-                    arkret_models_integration::PushRouteToken::new("realm_route_token_000000001")
-                        .unwrap(),
-                ),
-                ..Default::default()
-            }),
-            user_is_target: Some(true),
-            push_target_id: Some(
-                arkret_wire::PushTargetId::new(
-                    "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-                )
-                .unwrap(),
-            ),
-            wakeup_kind: Some("message".to_owned()),
-            push_hint: None,
-            devices: vec![device()],
-            counts: Some(PushCounts {
-                badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
-                    "2-5".to_owned(),
-                )),
-                unread_increment: Some(2),
-                missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
-            }),
-            ..Default::default()
-        }
+        crate::pushkin::test_fixtures::notification(vec![device()], None, Some(true))
     }
 
     fn pushkin() -> XiaomiPushkin {

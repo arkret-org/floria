@@ -196,18 +196,7 @@ impl MemoryNonceStore {
 
 impl RedisNonceStore {
     fn ready(&self) -> Result<()> {
-        let mut connection = self.connection()?;
-        let pong: String = redis::cmd("PING")
-            .query(&mut connection)
-            .with_context(|| format!("failed to ping Redis backend {}", self.target_label))?;
-        if pong == "PONG" {
-            Ok(())
-        } else {
-            anyhow::bail!(
-                "Redis backend {} returned unexpected PING response `{pong}`",
-                self.target_label
-            );
-        }
+        self.pool.ready()
     }
 
     fn observe(&self, ttl: Duration, fingerprint: &str) -> NonceCheck {
