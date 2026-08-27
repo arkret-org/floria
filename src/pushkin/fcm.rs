@@ -383,10 +383,6 @@ impl Pushkin for FcmPushkin {
         self.matcher.name()
     }
 
-    fn kind(&self) -> &'static str {
-        "fcm"
-    }
-
     fn handles_app_id(&self, app_id: &str) -> bool {
         self.matcher.handles_app_id(app_id)
     }

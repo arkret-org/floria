@@ -85,24 +85,6 @@
         }
       }
     },
-    "/_floria/push/bridge/describe": {
-      "get": {
-        "operationId": "bridgeDescribe",
-        "summary": "Describe configured provider bridge capabilities",
-        "responses": {
-          "200": {
-            "description": "Provider capability matrix",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BridgeDescribeResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/_floria/integration/describe": {
       "get": {
         "operationId": "integrationDescribe",
@@ -171,21 +153,6 @@
       },
       "NotifyResponse": {
         "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyOutcome"
-      },
-      "BridgeDescribeResponse": {
-        "type": "object",
-        "additionalProperties": true,
-        "properties": {
-          "provider_capabilities": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "provider_capabilities_version": {
-            "type": "string"
-          }
-        }
       },
       "IntegrationDescribeResponse": {
         "type": "object",

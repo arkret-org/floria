@@ -1,6 +1,4 @@
-use arkret_models_integration::{
-    IntegrationDependencyDescriptor, IntegrationDescribeOutcome, IntegrationSurfaceDescriptor,
-};
+use arkret_models_integration::{IntegrationDescribeOutcome, IntegrationSurfaceDescriptor};
 use arkret_wire::{ProfileId, ServiceContractId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
@@ -24,40 +22,8 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
         service_kind: "push_gateway".to_owned(),
         api_base_path: "/_floria".to_owned(),
         describe_path: "/_floria/integration/describe".to_owned(),
-        dependencies: vec![
-            IntegrationDependencyDescriptor {
-                service: "soland".to_owned(),
-                purpose: "principal_outbound_push_delivery".to_owned(),
-                // Names the contract soland actually publishes at the
-                // discovery path below; it is a product-local soland id with
-                // no SDK/spec counterpart, so it is quoted verbatim rather
-                // than mapped onto an invented `ak.*` id.
-                required_contract: "arkret.rest.outbound_push_bridge.v1".to_owned(),
-                discovery_path: "/_soland/edge/push/outbound/bridge/describe".to_owned(),
-                mode: "remote_principal_contract".to_owned(),
-            },
-            IntegrationDependencyDescriptor {
-                service: "chime".to_owned(),
-                purpose: "client_sdk_consumption".to_owned(),
-                required_contract: ServiceContractId::PUSH_BRIDGE_V1.to_owned(),
-                discovery_path: "/_floria/push/bridge/describe".to_owned(),
-                mode: "sdk_contract_discovery".to_owned(),
-            },
-        ],
+        dependencies: Vec::new(),
         surfaces: vec![
-            IntegrationSurfaceDescriptor {
-                name: "push_bridge".to_owned(),
-                method: "GET".to_owned(),
-                path: "/_floria/push/bridge/describe".to_owned(),
-                // The contract this surface serves is the contract of the
-                // payload it returns. There is exactly one, and it is the id
-                // `bridge_describe.rs` actually emits and chime's
-                // `BridgeContractCache` compares — so the surface must not
-                // carry a second, unregistered `ak.push.bridge.describe` label.
-                contract: ServiceContractId::PUSH_BRIDGE_V1.to_owned(),
-                stability: "active".to_owned(),
-                todo: "the provider capability matrix is self-declared and unattested; consumers must pin provider_capabilities_version to detect a silent matrix change.".to_owned(),
-            },
             IntegrationSurfaceDescriptor {
                 name: "push_notify".to_owned(),
                 method: "POST".to_owned(),
@@ -100,21 +66,14 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             },
         ],
         examples: serde_json::json!({
-            "compose_strand": {
-                "step_1": {
-                    "service": "soland",
-                    "path": "/_soland/edge/push/outbound/bridge/fetch",
-                    "method": "POST"
+            "canonical_discovery": {
+                "describe": {
+                    "path": "/_arkret/describe",
+                    "operation_bundle": "ak.operation_bundle.push_gateway.describe.v1"
                 },
-                "step_2": {
-                    "service": "floria",
-                    "path": "/_floria/push/bridge/describe",
-                    "method": "GET"
-                },
-                "step_3": {
-                    "service": "floria",
+                "notify": {
                     "path": "/_arkret/edge/push/notify",
-                    "method": "POST"
+                    "operation_id": ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1
                 }
             }
         }),

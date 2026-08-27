@@ -334,10 +334,6 @@ impl Pushkin for XiaomiPushkin {
         self.matcher.name()
     }
 
-    fn kind(&self) -> &'static str {
-        "xiaomi"
-    }
-
     fn handles_app_id(&self, app_id: &str) -> bool {
         self.matcher.handles_app_id(app_id)
     }

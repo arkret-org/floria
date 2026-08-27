@@ -9,7 +9,6 @@ use crate::AppState;
 use crate::auth::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER};
 use crate::config::AccessLogConfig;
 
-mod bridge_describe;
 mod health;
 mod integration_describe;
 mod internal;
@@ -35,10 +34,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .push(
             Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),
-        )
-        .push(
-            Router::with_path("_floria/push/bridge/describe")
-                .get(bridge_describe::bridge_describe),
         )
         .push(Router::with_path("_arkret/describe").get(server_describe::describe))
         // Internal account-lifecycle broadcast endpoint.

@@ -458,13 +458,6 @@ impl Pushkin for OppoPushkin {
         self.matcher.name()
     }
 
-    fn kind(&self) -> &'static str {
-        match self.vendor {
-            OppoVendor::Oppo => "oppo",
-            OppoVendor::Oneplus => "oneplus",
-        }
-    }
-
     fn handles_app_id(&self, app_id: &str) -> bool {
         self.matcher.handles_app_id(app_id)
     }

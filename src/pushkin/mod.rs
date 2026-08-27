@@ -19,12 +19,10 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_integration::push::ProviderCapabilityDescriptor;
 use arkret_models_integration::{PushCounts, PushDeviceRoute, PushKey, PushNotificationEnvelope};
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
-use serde::Serialize;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::{AppConfig, Config};
@@ -63,21 +61,7 @@ pub struct DispatchTarget {
 #[async_trait]
 pub trait Pushkin: Send + Sync {
     fn name(&self) -> &str;
-    fn kind(&self) -> &'static str;
     fn handles_app_id(&self, app_id: &str) -> bool;
-    /// Whether this adapter actually emits a provider-side collapse /
-    /// replace key. `ProviderCapabilities::supports_collapse` only states
-    /// that the upstream protocol has such a field; the bridge descriptor
-    /// advertises collapse support as the AND of the two, so an adapter that
-    /// does not emit the key never claims it.
-    ///
-    /// An implementation that starts emitting one MUST mint a fresh
-    /// per-message random value: never derive an APNS `apns-collapse-id`,
-    /// FCM `collapse_key`, WebPush topic or OEM equivalent from `realm_id`,
-    /// `strand_id`, route tokens, or any other stable scope identifier.
-    fn emits_collapse_key(&self) -> bool {
-        false
-    }
     fn dispatch_targets(
         &self,
         _notification: &PushNotificationEnvelope,
@@ -97,179 +81,6 @@ pub trait Pushkin: Send + Sync {
         device: &PushDeviceRoute,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
-}
-
-/// Frozen capability snapshot for a provider kind, surfaced through
-/// `bridge/describe` so principal servers (soland, chime SDK) and
-/// cotest matrices can plan payload shape, TTL caps, and credential
-/// rotation without per-provider knowledge.
-///
-/// Values describe the *kind* (apns, fcm, ...) — per-app overrides
-/// (e.g. tighter admin TTL caps) are intentionally not included here.
-///
-/// Contract version is exposed as `PROVIDER_CAPABILITIES_VERSION`;
-/// bumping it signals downstream snapshots (soland drift detection,
-/// chime typed DTO, cotest push matrix) that the matrix changed and
-/// they must refresh.
-#[derive(Debug, Clone, Serialize)]
-pub struct ProviderCapabilities {
-    /// Stable provider kind, e.g. `"apns"`, `"fcm"`, `"oppo"`.
-    pub kind: &'static str,
-    /// Multi-recipient send shape: `"none"`, `"multicast"`, or `"topic"`.
-    pub batch: &'static str,
-    /// Maximum TTL in seconds the upstream provider accepts, or `None`
-    /// when the provider does not document a hard cap.
-    pub ttl_seconds_max: Option<u64>,
-    /// Whether the upstream provider supports a collapse / replace key.
-    /// The bridge descriptor additionally requires the concrete adapter
-    /// to emit that key before advertising support.
-    pub supports_collapse: bool,
-    /// Whether the provider has first-class badge / unread count support.
-    pub supports_badge: bool,
-    /// Outbound provider payload shape - informs blind-wakeup vs.
-    /// service-visible plaintext emission.
-    pub provider_payload_shape: &'static str,
-    /// Credential material this provider expects.
-    pub credential_kinds: &'static [&'static str],
-    /// Documented credential rotation cadence for this provider kind.
-    pub credential_rotation: &'static str,
-    /// Whether the provider can carry an encrypted body that the
-    /// gateway must NOT inspect (controls plaintext-policy gating).
-    pub blind_wakeup_required: bool,
-}
-
-/// Contract version for the frozen `provider_capabilities` matrix.
-///
-/// Bump on any field/value change so soland drift detection, chime
-/// typed DTOs, and cotest push matrices know to refresh.
-pub const PROVIDER_CAPABILITIES_VERSION: &str = "2026-05-07";
-
-pub fn provider_kind_capabilities(kind: &str) -> Option<ProviderCapabilities> {
-    let kind = match kind {
-        "apns" => ProviderCapabilities {
-            kind: "apns",
-            batch: "none",
-            ttl_seconds_max: Some(28 * 24 * 60 * 60),
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "encrypted_or_blind_wakeup",
-            credential_kinds: &["jwt_p8", "cert_p12"],
-            credential_rotation: "rotate_jwt_p8_yearly_cert_p12_per_apple_lifecycle",
-            blind_wakeup_required: true,
-        },
-        "fcm" => ProviderCapabilities {
-            kind: "fcm",
-            batch: "multicast",
-            ttl_seconds_max: Some(28 * 24 * 60 * 60),
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "data_only_blind_wakeup",
-            credential_kinds: &["service_account_v1"],
-            credential_rotation: "rotate_service_account_yearly_or_on_compromise",
-            blind_wakeup_required: true,
-        },
-        "webpush" => ProviderCapabilities {
-            kind: "webpush",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: false,
-            provider_payload_shape: "encrypted_aes128gcm",
-            credential_kinds: &["vapid_keypair"],
-            credential_rotation: "rotate_vapid_keypair_quarterly",
-            blind_wakeup_required: true,
-        },
-        "honor" => ProviderCapabilities {
-            kind: "honor",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["client_id_secret"],
-            credential_rotation: "rotate_client_secret_yearly",
-            blind_wakeup_required: false,
-        },
-        "huawei" => ProviderCapabilities {
-            kind: "huawei",
-            batch: "multicast",
-            ttl_seconds_max: Some(15 * 24 * 60 * 60),
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["client_id_secret"],
-            credential_rotation: "rotate_client_secret_yearly",
-            blind_wakeup_required: false,
-        },
-        "jpush" => ProviderCapabilities {
-            kind: "jpush",
-            batch: "multicast",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["app_key_master_secret"],
-            credential_rotation: "rotate_master_secret_quarterly",
-            blind_wakeup_required: false,
-        },
-        "oppo" => ProviderCapabilities {
-            kind: "oppo",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["app_key_master_secret"],
-            credential_rotation: "rotate_master_secret_yearly",
-            blind_wakeup_required: false,
-        },
-        "oneplus" => ProviderCapabilities {
-            kind: "oneplus",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["app_key_master_secret"],
-            credential_rotation: "rotate_master_secret_yearly",
-            blind_wakeup_required: false,
-        },
-        "vivo" => ProviderCapabilities {
-            kind: "vivo",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["app_id_app_key"],
-            credential_rotation: "rotate_app_key_yearly",
-            blind_wakeup_required: false,
-        },
-        "xiaomi" => ProviderCapabilities {
-            kind: "xiaomi",
-            batch: "multicast",
-            ttl_seconds_max: None,
-            supports_collapse: true,
-            supports_badge: true,
-            provider_payload_shape: "rich_android",
-            credential_kinds: &["app_secret"],
-            credential_rotation: "rotate_app_secret_yearly",
-            blind_wakeup_required: false,
-        },
-        "custom" => ProviderCapabilities {
-            kind: "custom",
-            batch: "none",
-            ttl_seconds_max: None,
-            supports_collapse: false,
-            supports_badge: false,
-            provider_payload_shape: "operator_defined",
-            credential_kinds: &["bearer_token", "hmac_secret", "client_certificate"],
-            credential_rotation: "operator_defined",
-            blind_wakeup_required: true,
-        },
-        _ => return None,
-    };
-    Some(kind)
 }
 
 #[derive(Clone)]
@@ -309,36 +120,6 @@ impl PushkinRegistry {
         let mut names = self.pushkins.keys().cloned().collect::<Vec<_>>();
         names.sort_unstable();
         names
-    }
-
-    pub fn provider_capabilities(&self) -> Vec<ProviderCapabilityDescriptor> {
-        let mut out = self
-            .pushkins
-            .iter()
-            .filter_map(|(name, pushkin)| {
-                provider_kind_capabilities(pushkin.kind()).map(|capabilities| {
-                    ProviderCapabilityDescriptor {
-                        name: name.clone(),
-                        kind: capabilities.kind.to_owned(),
-                        batch: capabilities.batch.to_owned(),
-                        ttl_seconds_max: capabilities.ttl_seconds_max,
-                        supports_collapse: capabilities.supports_collapse
-                            && pushkin.emits_collapse_key(),
-                        supports_badge: capabilities.supports_badge,
-                        provider_payload_shape: capabilities.provider_payload_shape.to_owned(),
-                        credential_kinds: capabilities
-                            .credential_kinds
-                            .iter()
-                            .map(|kind| (*kind).to_owned())
-                            .collect(),
-                        credential_rotation: capabilities.credential_rotation.to_owned(),
-                        blind_wakeup_required: capabilities.blind_wakeup_required,
-                    }
-                })
-            })
-            .collect::<Vec<_>>();
-        out.sort_by(|a, b| a.name.cmp(&b.name));
-        out
     }
 
     pub fn find_pushkins(&self, app_id: &str) -> Vec<Arc<dyn Pushkin>> {

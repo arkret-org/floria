@@ -25,10 +25,6 @@ impl Pushkin for NoopPushkin {
         "noop"
     }
 
-    fn kind(&self) -> &'static str {
-        "noop"
-    }
-
     fn handles_app_id(&self, app_id: &str) -> bool {
         app_id == "com.example.app"
     }

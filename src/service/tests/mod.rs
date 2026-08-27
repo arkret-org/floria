@@ -41,7 +41,6 @@ pub(super) struct TestPushkin {
     gate: Option<ConcurrencyGate>,
     behavior: TestBehavior,
     pub(super) calls: Arc<AtomicUsize>,
-    kind: &'static str,
 }
 
 impl TestPushkin {
@@ -51,7 +50,6 @@ impl TestPushkin {
             gate: None,
             behavior,
             calls: Arc::new(AtomicUsize::new(0)),
-            kind: "test",
         }
     }
 
@@ -61,13 +59,7 @@ impl TestPushkin {
             gate: Some(ConcurrencyGate::new(limit)),
             behavior,
             calls: Arc::new(AtomicUsize::new(0)),
-            kind: "test",
         }
-    }
-
-    pub(super) fn with_kind(mut self, kind: &'static str) -> Self {
-        self.kind = kind;
-        self
     }
 }
 
@@ -75,10 +67,6 @@ impl TestPushkin {
 impl Pushkin for TestPushkin {
     fn name(&self) -> &str {
         self.matcher.name()
-    }
-
-    fn kind(&self) -> &'static str {
-        self.kind
     }
 
     fn handles_app_id(&self, app_id: &str) -> bool {

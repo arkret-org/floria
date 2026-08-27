@@ -102,7 +102,10 @@ async fn describe_endpoint_advertises_gateway_profile() {
     );
     assert_eq!(
         body["supported_operation_bundles"],
-        json!(["ak.operation_bundle.push_gateway.http_notify.v1"])
+        json!([
+            "ak.operation_bundle.push_gateway.describe.v1",
+            "ak.operation_bundle.push_gateway.http_notify.v1"
+        ])
     );
     assert_eq!(body["transport_bindings"][0]["kind"], "http_json");
     assert_eq!(
@@ -327,12 +330,22 @@ async fn integration_describe_lists_operational_surfaces() {
         .iter()
         .filter_map(|surface| surface["name"].as_str())
         .collect::<Vec<_>>();
-    assert!(surface_names.contains(&"push_bridge"));
+    assert!(!surface_names.contains(&"push_bridge"));
     assert!(surface_names.contains(&"push_notify"));
     assert!(surface_names.contains(&"gateway_describe"));
     assert!(surface_names.contains(&"ready"));
     assert!(surface_names.contains(&"readyz"));
     assert!(surface_names.contains(&"metrics"));
+    assert!(body.get("dependencies").is_none());
+
+    let removed_private_describe =
+        TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
+            .send(&service)
+            .await;
+    assert_eq!(
+        removed_private_describe.status_code.unwrap(),
+        StatusCode::NOT_FOUND
+    );
 
     let push_notify_surface = surfaces
         .iter()
@@ -353,107 +366,6 @@ async fn integration_describe_lists_operational_surfaces() {
         .expect("metrics surface");
     assert_eq!(metrics_surface["path"], json!("/metrics"));
     assert_eq!(metrics_surface["contract"], json!("prometheus.text.0.0.4"));
-}
-
-#[tokio::test]
-async fn bridge_describe_lists_failure_reason_codes() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
-    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<Value>().await.unwrap();
-    let failure_reason_codes = body["failure_reason_codes"]
-        .as_array()
-        .expect("failure_reason_codes array");
-    assert!(
-        failure_reason_codes
-            .iter()
-            .any(|entry| entry["code"] == json!("capability_denied")
-                && entry["http_status"] == json!(403)
-                && entry["retryable"] == json!(false))
-    );
-    assert!(
-        failure_reason_codes
-            .iter()
-            .any(|entry| entry["code"] == json!("rate_limited")
-                && entry["http_status"] == json!(429)
-                && entry["retryable"] == json!(true))
-    );
-    assert!(
-        failure_reason_codes
-            .iter()
-            .any(|entry| entry["code"] == json!("temporarily_unavailable")
-                && entry["http_status"] == json!(503)
-                && entry["retryable"] == json!(true))
-    );
-}
-
-#[tokio::test]
-async fn bridge_describe_exposes_provider_capability_matrix() {
-    let pushkin =
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept).with_kind("fcm"));
-    let service = test_service(vec![("com.example.app", pushkin as Arc<dyn Pushkin>)]);
-
-    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<Value>().await.unwrap();
-    let capabilities = body["provider_capabilities"]
-        .as_array()
-        .expect("provider_capabilities must be an array");
-    assert_eq!(capabilities.len(), 1);
-    let entry = &capabilities[0];
-    assert_eq!(entry["name"], json!("com.example.app"));
-    assert_eq!(entry["kind"], json!("fcm"));
-    assert_eq!(entry["batch"], json!("multicast"));
-    assert_eq!(entry["supports_collapse"], json!(false));
-    assert_eq!(entry["supports_badge"], json!(true));
-    assert_eq!(
-        entry["provider_payload_shape"],
-        json!("data_only_blind_wakeup")
-    );
-    assert_eq!(entry["credential_kinds"], json!(["service_account_v1"]));
-    assert_eq!(
-        entry["credential_rotation"],
-        json!("rotate_service_account_yearly_or_on_compromise")
-    );
-    assert_eq!(entry["blind_wakeup_required"], json!(true));
-    assert!(entry.get("notes").is_none());
-    assert_eq!(
-        body["provider_capabilities_version"],
-        json!(crate::pushkin::PROVIDER_CAPABILITIES_VERSION)
-    );
-}
-
-#[tokio::test]
-async fn bridge_describe_omits_unknown_provider_kinds() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
-    let mut response = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
-        .send(&service)
-        .await;
-
-    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let body = response.take_json::<Value>().await.unwrap();
-    // The SDK `PushBridgeDescribeOutcome` skip-serializes an empty
-    // `provider_capabilities`, so an all-unknown-kind registry yields no
-    // such key at all (rather than an explicit `[]`).
-    let caps = body.get("provider_capabilities");
-    assert!(
-        caps.is_none() || caps == Some(&json!([])),
-        "unknown provider kinds must surface no capabilities, got: {caps:?}"
-    );
 }
 
 #[tokio::test]

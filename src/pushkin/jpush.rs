@@ -417,10 +417,6 @@ impl Pushkin for JpushPushkin {
         self.matcher.name()
     }
 
-    fn kind(&self) -> &'static str {
-        "jpush"
-    }
-
     fn handles_app_id(&self, app_id: &str) -> bool {
         self.matcher.handles_app_id(app_id)
     }
