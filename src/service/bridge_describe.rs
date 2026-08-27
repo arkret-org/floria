@@ -10,6 +10,7 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 
 use super::MAX_REQUEST_SIZE;
+use super::metrics::render_problem;
 use super::server_describe::{
     describe_auth_modes, describe_plaintext_visibility, describe_rate_limit_scopes,
     describe_supported_profiles,
@@ -25,14 +26,15 @@ fn owned(items: Vec<&'static str>) -> Vec<String> {
 #[handler]
 pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
     let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.render(Json(
+        render_problem(
+            res,
+            StatusCode::INTERNAL_SERVER_ERROR,
             arkret_wire::ErrorEnvelope::new(
                 arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
             )
             .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
-        ));
+        );
         return;
     };
 

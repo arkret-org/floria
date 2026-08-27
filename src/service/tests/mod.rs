@@ -289,16 +289,42 @@ pub(super) async fn assert_notify_error<T: ResponseExt + ?Sized>(
     expect_request_id: bool,
 ) -> Value {
     let body = response.take_json::<Value>().await.unwrap();
-    assert_eq!(body["ok"], json!(false));
-    assert_eq!(body["error"]["code"], json!(code));
-    match (expect_request_id, body.get("request_id")) {
+    assert_eq!(
+        body["type"],
+        json!(format!("https://arkret.org/problems/{code}"))
+    );
+    assert!(body["status"].as_u64().is_some_and(|status| status >= 400));
+    assert!(
+        body["detail"]
+            .as_str()
+            .is_some_and(|detail| !detail.is_empty())
+    );
+    match (expect_request_id, body.get("instance")) {
         (true, Some(Value::String(request_id))) => assert!(!request_id.is_empty()),
-        (true, _) => panic!("expected request_id in error response"),
+        (true, _) => panic!("expected instance in problem response"),
         (false, None) => {}
         (false, Some(Value::Null)) => {}
-        (false, Some(_)) => panic!("did not expect request_id in error response"),
+        (false, Some(_)) => panic!("did not expect instance in problem response"),
     }
-    body
+    // Preserve the older assertion helper projection for detailed tests while
+    // validating the actual wire object above as RFC 9457.
+    let core = ["type", "title", "status", "detail", "instance"];
+    let details = body
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.iter())
+        .filter(|(key, _)| !core.contains(&key.as_str()))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<serde_json::Map<_, _>>();
+    json!({
+        "ok": false,
+        "error": {
+            "code": code,
+            "message": body["detail"].clone(),
+            "details": details,
+        },
+        "request_id": body.get("instance").cloned().unwrap_or(Value::Null),
+    })
 }
 
 pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(

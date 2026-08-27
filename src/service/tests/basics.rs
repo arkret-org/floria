@@ -487,7 +487,7 @@ async fn notify_rejects_operation_id_in_body() {
 }
 
 #[tokio::test]
-async fn notify_method_not_allowed_returns_standard_error_envelope() {
+async fn notify_method_not_allowed_returns_problem_details() {
     let service = test_service(vec![]);
 
     let mut get_response = TestClient::get("http://127.0.0.1/_arkret/edge/push/notify")

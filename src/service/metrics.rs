@@ -205,6 +205,28 @@ fn canonical_outcome(status: &str) -> &'static str {
     }
 }
 
+pub(super) fn render_problem(
+    res: &mut Response,
+    status: StatusCode,
+    envelope: arkret_wire::ErrorEnvelope,
+) {
+    let problem = arkret_wire::Problem::from_error_envelope(&envelope, status.as_u16());
+    let mut output = salvo::http::Problem::new(status)
+        .kind(problem.problem_type)
+        .title(problem.title)
+        .detail(problem.detail)
+        .with_extensions(
+            problem
+                .extensions
+                .into_iter()
+                .collect::<serde_json::Map<_, _>>(),
+        );
+    if let Some(instance) = problem.instance {
+        output = output.instance(instance);
+    }
+    res.render(output);
+}
+
 pub(super) fn finish_error(
     res: &mut Response,
     status: StatusCode,
@@ -230,8 +252,7 @@ pub(super) fn finish_error(
         .with_retry_after_ms(
             retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
         );
-    res.status_code(status);
-    res.render(Json(body));
+    render_problem(res, status, body);
     app_metrics::pushgateway_response(status);
     app_metrics::observe_notify_handle(status, started.elapsed());
 }

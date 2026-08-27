@@ -6,6 +6,7 @@ use salvo::prelude::*;
 use serde_json::{Map, json};
 
 use super::MAX_REQUEST_SIZE;
+use super::metrics::render_problem;
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
@@ -65,14 +66,15 @@ fn floria_service_identity(
 #[handler]
 pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let Ok(state) = depot.get_typed::<Arc<AppState>>() else {
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.render(Json(
+        render_problem(
+            res,
+            StatusCode::INTERNAL_SERVER_ERROR,
             arkret_wire::ErrorEnvelope::new(
                 arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
             )
             .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
-        ));
+        );
         return;
     };
 
@@ -206,7 +208,12 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
-        supported_operations: vec![ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned()],
+        operation_bindings: vec![
+            arkret_models_discovery::OperationBinding::current_http_json(
+                ServiceOperationId::EdgePushCommandNotify,
+            )
+            .expect("generated push notify operation descriptor is valid"),
+        ],
         supported_bindings: vec![arkret_models_discovery::SupportedBinding::new(
             arkret_wire::BindingKind::HttpJson,
         )],

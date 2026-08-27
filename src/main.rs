@@ -243,7 +243,10 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         servers.spawn(async move {
             let acceptor = TcpListener::new(bind.clone()).bind().await;
             tracing::info!(listen = %bind, "starting server");
-            Server::new(acceptor).serve(router).await;
+            let service = Service::new(router).catcher(salvo::catcher::Catcher::new(
+                salvo::catcher::ProblemGoal::new(),
+            ));
+            Server::new(acceptor).serve(service).await;
             Result::<()>::Ok(())
         });
     }
