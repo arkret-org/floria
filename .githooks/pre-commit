@@ -8,5 +8,5 @@ if [ -z "$rust_touched" ]; then
     exit 0
 fi
 
-cargo fmt --all -- --check
+cargo +nightly fmt --all -- --check
 cargo clippy --no-deps -- -D warnings

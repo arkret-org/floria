@@ -245,7 +245,6 @@ dependencies = [
 name = "arkret-push-policy"
 version = "0.3.0"
 dependencies = [
- "arkret-identifiers",
  "arkret-models-integration",
  "serde",
  "serde_json",
