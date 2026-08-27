@@ -338,10 +338,9 @@ async fn integration_describe_lists_operational_surfaces() {
     assert!(surface_names.contains(&"metrics"));
     assert!(body.get("dependencies").is_none());
 
-    let removed_private_describe =
-        TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
-            .send(&service)
-            .await;
+    let removed_private_describe = TestClient::get("http://127.0.0.1/_floria/push/bridge/describe")
+        .send(&service)
+        .await;
     assert_eq!(
         removed_private_describe.status_code.unwrap(),
         StatusCode::NOT_FOUND
