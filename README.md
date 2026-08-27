@@ -1,7 +1,5 @@
 # floria
 
-> **Spec target**: [arkret-spec @ 1936d1c0](../arkret-spec) (fixed downstream baseline, 2026-08-03)
-
 Push gateway service in Rust.
 
 ## Pre-commit hook setup
@@ -225,4 +223,3 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 Licensed under Apache 2.0. See `LICENSE`.
-
