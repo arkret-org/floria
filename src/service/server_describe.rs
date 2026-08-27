@@ -133,7 +133,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     limits.insert("max_request_size_bytes".to_owned(), json!(MAX_REQUEST_SIZE));
     limits.insert(
         "x_floria_operation_id".to_owned(),
-        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY),
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1),
     );
     limits.insert(
         "x_floria_supported_providers".to_owned(),
@@ -208,22 +208,15 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
-        operation_bindings: vec![
-            arkret_models_discovery::OperationBinding::current_http_json(
-                ServiceOperationId::EdgePushCommandNotify,
-            )
-            .expect("generated push notify operation descriptor is valid"),
+        supported_operation_bundles: vec![
+            "ak.operation_bundle.push_gateway.describe.v1".to_owned(),
+            "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
         ],
-        supported_bindings: vec![arkret_models_discovery::SupportedBinding::new(
-            arkret_wire::BindingKind::HttpJson,
-        )],
-        supported_features: vec![
-            "push.notify".to_owned(),
-            "push.bridge_describe".to_owned(),
-            "push.dedup".to_owned(),
-            "push.rate_limit".to_owned(),
-            "push.provider_matrix".to_owned(),
-        ],
+        transport_bindings: vec![arkret_models_discovery::TransportBinding::HttpJson {
+            base_url: state.public_base_url.clone(),
+            extension_profile_required: (),
+        }],
+        supported_features: vec!["ak.feature.notifications.v1".to_owned()],
         // A push gateway claims no Calendar profile, so it advertises no
         // executable TZDB release set. `service-describe.schema.json` requires
         // this field only for a service that claims one.
@@ -235,19 +228,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         plaintext_visibility,
         privacy_derivation: None,
         receive_policy_constraints: None,
-        implemented_features: vec![
-            "push.notify".to_owned(),
-            "push.bridge_describe".to_owned(),
-            "push.dedup".to_owned(),
-            "push.rate_limit".to_owned(),
-            "push.provider_matrix".to_owned(),
-        ],
         claimed_profiles,
         verified_profiles,
-        experimental_features: vec![
-            "push.bridge.failure_reason_codes".to_owned(),
-            "push.notify.retry_queue".to_owned(),
-        ],
         interop_surfaces: vec![],
         development_mode,
         rate_limit_policy: Some(arkret_models_discovery::RateLimitPolicy::unspecified()),
@@ -256,7 +238,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults(),
         ),
         resource_kinds: vec![],
-        discovery_profiles: vec![],
         restricted_query_proof: None,
         ingest_modes: vec![],
         accept_policy_kind: None,
@@ -272,6 +253,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         frontier: Vec::new(),
         snapshot_frontier: Vec::new(),
         last_materialized_at: None,
+        invite_addressing: None,
+        private_contact_discovery: None,
         extensions: Default::default(),
     };
 

@@ -62,7 +62,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 name: "push_notify".to_owned(),
                 method: "POST".to_owned(),
                 path: "/_arkret/edge/push/notify".to_owned(),
-                contract: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned(),
+                contract: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1.to_owned(),
                 stability: "active".to_owned(),
                 todo: "dedup, rate limit, HTTP Message Signature and mTLS are enforced only for the modes the deployment configures; the contract itself mandates none of them.".to_owned(),
             },

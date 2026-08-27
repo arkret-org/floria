@@ -65,6 +65,7 @@ use retry_queue::RetryQueue;
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
+    pub public_base_url: String,
     pub audit_sink: Option<Arc<dyn AuditSink>>,
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
     pub notify_auth: NotifyAuthConfig,
@@ -85,6 +86,7 @@ impl AppState {
     pub fn new(registry: Arc<PushkinRegistry>) -> Self {
         Self {
             registry,
+            public_base_url: "http://127.0.0.1:5000/".to_owned(),
             audit_sink: None,
             notify_deduplicator: None,
             notify_auth: NotifyAuthConfig::default(),
@@ -105,6 +107,7 @@ impl AppState {
     ) -> Self {
         Self {
             registry,
+            public_base_url: "http://127.0.0.1:5000/".to_owned(),
             audit_sink: None,
             notify_deduplicator: Some(notify_deduplicator),
             notify_auth: NotifyAuthConfig::default(),

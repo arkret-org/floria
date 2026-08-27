@@ -44,6 +44,11 @@ async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
+        .add_header(
             SOURCE_SERVICE_ID_HEADER,
             "ak:did_core:web:sync.example.com",
             true,
@@ -54,6 +59,11 @@ async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
             "ak:did_core:web:sync.example.com",
@@ -84,12 +94,22 @@ async fn notify_rate_limit_can_apply_per_app_id() {
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
@@ -112,12 +132,22 @@ async fn notify_rate_limit_can_apply_per_provider() {
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
@@ -140,12 +170,22 @@ async fn notify_rate_limit_can_apply_per_push_key_hash() {
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "same-push-key")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "same-push-key")]))
         .send(&service)
         .await;
@@ -168,12 +208,22 @@ async fn notify_rate_limit_can_apply_per_endpoint() {
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
         .await;
@@ -198,6 +248,11 @@ async fn dedup_replay_bypasses_rate_limit() {
 
     for _ in 0..2 {
         let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                true,
+            )
             .add_header(
                 SOURCE_SERVICE_ID_HEADER,
                 "ak:did_core:web:sync.example.com",

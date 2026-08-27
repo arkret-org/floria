@@ -20,7 +20,7 @@ adapt to your local toolchain.
 
 ## Realm vs Space
 
-`floria` forwards `ak.device.push_route` and `ak.edge.push.command.notify` events that
+`floria` forwards `ak.device.push_route` and `ak.edge.push.command.notify.v1` events that
 target a specific security boundary:
 
 - **Realm:** security boundary membership, capability, E2EE, federation.
@@ -139,7 +139,7 @@ Quick notes:
 ## Arkret notify semantics
 
 - `/_arkret/edge/push/notify` accepts authenticated service calls and supports the `Idempotency-Key` header
-- `ak.edge.push.command.notify` accepts only the SDK `PushNotifyRequestBody`; operation identity and the source/destination service DIDs stay in the URL and signed transport headers, never in the body
+- `ak.edge.push.command.notify.v1` accepts only the SDK `PushNotifyRequestBody`; operation identity and the source/destination service DIDs stay in the URL and signed transport headers, never in the body
 - error responses use a JSON envelope with `capability_denied`, `unsupported_feature`, `schema_violation`, `payload_too_large`, `rate_limited`, or `temporarily_unavailable` for gateway contract failures
 - E2EE wakeups are validated as blind/minimized payloads: message body, encrypted payload bytes, SDP, ICE, and TURN credentials are rejected
 - unauthorized callers cannot attach `sender_actor_display_name`, `strand_name`, `space_name`, `sender`, `target_did`, or nested `did:` literals inside notification/default payload fields

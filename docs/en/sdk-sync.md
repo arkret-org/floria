@@ -51,7 +51,7 @@ guards on the allow-list builder.
 ROST-FLO-1..3 mention reference fields are intentionally not part of
 floria's push wire model. `subject_id`, `display_name_at_time`, and
 related Message AST preview fields belong to chime / principal-service
-message rendering, not to `ak.edge.push.command.notify`. floria keeps the typed
+message rendering, not to `ak.edge.push.command.notify.v1`. floria keeps the typed
 payload closed with `serde(deny_unknown_fields)`, so those fields are
 rejected with `schema_violation`.
 

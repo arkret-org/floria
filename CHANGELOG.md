@@ -22,7 +22,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 
 ## R3.3 — Spec sync 2026-05-28 (arkret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to arkret-spec @ cced4b8 (AKP-0011 shareable object addressing / `ak.find.directory.read.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to arkret-spec @ cced4b8 (AKP-0011 shareable object addressing / `ak.find.directory.read.resolve_target.v1`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (arkret-spec @ b56cab1)
@@ -33,7 +33,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (arkret-spec @ b47ff6ec)
 
-- MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
+- MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token.v1` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
 - MEDIA-2: Arkret-native binding token scaffolding (`ArkretNativeBackendToken`, `ArkretNativeTokenPayload`, `ArkretNativeMediaCaps`) per `bindings/arkret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.

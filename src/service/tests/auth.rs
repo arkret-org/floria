@@ -16,6 +16,11 @@ async fn notify_accepts_authenticated_allowlisted_service() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -46,6 +51,11 @@ async fn notify_requires_bearer_token_when_auth_enabled() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -69,6 +79,11 @@ async fn notify_rejects_invalid_bearer_token() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer wrong-token", true)
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
@@ -96,6 +111,11 @@ async fn notify_accepts_hashed_bearer_token() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -127,6 +147,11 @@ async fn notify_rejects_query_string_auth_material() {
 
     let mut response =
         TestClient::post("http://127.0.0.1/_arkret/edge/push/notify?access_token=secret-token")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                true,
+            )
             .add_header("authorization", "Bearer secret-token", true)
             .add_header(
                 SOURCE_SERVICE_ID_HEADER,
@@ -161,6 +186,11 @@ async fn notify_rejects_bearer_without_origin_service_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
@@ -185,6 +215,11 @@ async fn notify_rejects_non_allowlisted_origin_service_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -219,6 +254,11 @@ async fn notify_rejects_full_did_in_source_service_id_header() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(SOURCE_SERVICE_ID_HEADER, "did:web:sync.example.com", true)
         .add_header(
@@ -249,6 +289,11 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -291,6 +336,11 @@ async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&visible_payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -326,6 +376,11 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
     request_body["notification"]["sender"] = json!("@alice:example.com");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -363,6 +418,11 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -409,6 +469,11 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -446,6 +511,11 @@ async fn notify_rejects_mismatched_destination_service_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -482,6 +552,11 @@ async fn production_mode_rejects_anonymous_requests() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -512,6 +587,11 @@ async fn production_mode_rejects_bearer_only_principal() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer principal-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -548,6 +628,11 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer gateway-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,
@@ -594,6 +679,11 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("authorization", "Bearer principal-token", true)
         .add_header(
             SOURCE_SERVICE_ID_HEADER,

@@ -91,7 +91,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
         },
         notify: PushBridgeDescribeNotifyDescriptor {
             notify_path: "/_arkret/edge/push/notify".to_owned(),
-            operation_id: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY.to_owned(),
+            operation_id: ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1.to_owned(),
             request_id_header: "X-Arkret-Request-Id".to_owned(),
             idempotency_key_header: "Idempotency-Key".to_owned(),
             source_service_id_header: SOURCE_SERVICE_ID_HEADER.to_owned(),
@@ -149,7 +149,7 @@ pub(super) async fn bridge_describe(depot: &mut Depot, res: &mut Response) {
                 arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
                 StatusCode::BAD_REQUEST.as_u16(),
                 false,
-                "The request body or headers did not match the active ak.edge.push.command.notify contract.",
+                "The request body or headers did not match the active ak.edge.push.command.notify.v1 contract.",
             ),
             PushBridgeFailureCodeDescriptor::new(
                 arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,

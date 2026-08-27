@@ -24,6 +24,11 @@ async fn sanitizer_rejects_binding_proof_signature() {
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&body)
         .send(&service)
         .await;
@@ -46,6 +51,11 @@ async fn sanitizer_rejects_subject_proof_signature() {
     });
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&body)
         .send(&service)
         .await;

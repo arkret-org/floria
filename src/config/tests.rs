@@ -43,6 +43,7 @@ fn keeps_explicit_http_ports() {
     let config = HttpConfig {
         port: 5000,
         bind_addresses: vec!["127.0.0.1:7000".to_owned(), "example.com:7100".to_owned()],
+        public_base_url: "http://127.0.0.1:5000/".to_owned(),
         notify_dedup_ttl_seconds: 0,
         notify_dedup: NotifyDedupConfig::default(),
         notify_auth: NotifyAuthConfig::default(),
@@ -64,6 +65,7 @@ fn supports_bracketed_ipv6_without_explicit_port() {
     let config = HttpConfig {
         port: 5000,
         bind_addresses: vec!["[::1]".to_owned()],
+        public_base_url: "http://127.0.0.1:5000/".to_owned(),
         notify_dedup_ttl_seconds: 0,
         notify_dedup: NotifyDedupConfig::default(),
         notify_auth: NotifyAuthConfig::default(),
@@ -300,6 +302,7 @@ apps: {}
 #[test]
 fn production_mode_requires_signed_or_mtls_principal() {
     let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
@@ -324,6 +327,7 @@ fn production_mode_requires_signed_or_mtls_principal() {
 #[test]
 fn production_mode_rejects_gateway_wide_bearer_tokens() {
     let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
@@ -350,6 +354,7 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
 #[test]
 fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
     let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
@@ -378,6 +383,7 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
 #[test]
 fn production_mode_rejects_plaintext_for_non_eligible_kind() {
     let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
@@ -405,6 +411,7 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
 #[test]
 fn production_mode_accepts_signed_eligible_principal() {
     let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());

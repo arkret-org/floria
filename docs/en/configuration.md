@@ -135,6 +135,7 @@ http {
 |-------|------|---------|-------------|
 | `bind_addresses` | string[] | `["127.0.0.1"]` | Addresses to bind the HTTP listener; each entry may be a host/IP or an explicit `host:port` |
 | `port` | u16 | `5000` | HTTP listener port |
+| `public_base_url` | URL | `http://127.0.0.1:5000/` | Externally reachable canonical HTTP/JSON base advertised in ServiceDescribe; production mode requires HTTPS |
 | `notify_dedup_ttl_seconds` | u64 | `0` | Dedup TTL for successful `/notify` request bodies; `0` disables dedup entirely |
 | `notify_dedup.backend` | string | `"memory"` | Dedup backend: `"memory"` or `"redis"` |
 | `notify_dedup.redis_url` | string | — | Redis connection URL when `notify_dedup.backend=redis` |

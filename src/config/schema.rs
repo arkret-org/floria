@@ -13,7 +13,7 @@ use super::Config;
 pub fn config_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://arkret.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
+        "$id": "https://arkret.dev/schema/floria/2026-08-27.1/floria.config.schema.json",
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",
@@ -90,6 +90,12 @@ fn http_schema() -> Value {
                     {"type": "array", "items": {"type": "string"}, "minItems": 1}
                 ],
                 "default": "127.0.0.1"
+            },
+            "public_base_url": {
+                "type": "string",
+                "format": "uri",
+                "default": "http://127.0.0.1:5000/",
+                "description": "Externally reachable canonical HTTP/JSON base URL advertised by ServiceDescribe; production mode requires https."
             },
             "notify_dedup_ttl_seconds": {"type": "integer", "minimum": 0, "default": 0},
             "notify_dedup": {

@@ -39,7 +39,7 @@ The caller should set:
 ## Notify Request
 
 `POST /_arkret/edge/push/notify` accepts the body for
-`ak.edge.push.command.notify`. The operation and transport identity are selected
+`ak.edge.push.command.notify.v1`. The operation and transport identity are selected
 by the URL and headers, not repeated in the body:
 
 ```json

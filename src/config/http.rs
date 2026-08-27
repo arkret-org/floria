@@ -16,6 +16,8 @@ pub struct HttpConfig {
     pub port: u16,
     #[serde(deserialize_with = "string_or_vec")]
     pub bind_addresses: Vec<String>,
+    /// Canonical public Arkret transport root advertised in ServiceDescribe.
+    pub public_base_url: String,
     pub notify_dedup_ttl_seconds: u64,
     pub notify_dedup: NotifyDedupConfig,
     pub notify_auth: NotifyAuthConfig,
@@ -40,6 +42,7 @@ impl Default for HttpConfig {
         Self {
             port: 5000,
             bind_addresses: vec!["127.0.0.1".to_owned()],
+            public_base_url: "http://127.0.0.1:5000/".to_owned(),
             notify_dedup_ttl_seconds: 0,
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
@@ -77,6 +80,25 @@ impl HttpConfig {
 
     pub fn validate(&self) -> Result<()> {
         let _ = self.listen_addrs()?;
+        let public_base_url = reqwest::Url::parse(&self.public_base_url).map_err(|error| {
+            anyhow::anyhow!("http.public_base_url must be an absolute URL: {error}")
+        })?;
+        if !matches!(public_base_url.scheme(), "http" | "https")
+            || public_base_url.host_str().is_none()
+            || public_base_url.as_str() != self.public_base_url
+            || !public_base_url.path().ends_with('/')
+            || public_base_url.query().is_some()
+            || public_base_url.fragment().is_some()
+            || !public_base_url.username().is_empty()
+            || public_base_url.password().is_some()
+        {
+            bail!(
+                "http.public_base_url must be a canonical absolute HTTP(S) base URL with a trailing slash and no userinfo, query or fragment"
+            );
+        }
+        if self.notify_auth.production_mode && public_base_url.scheme() != "https" {
+            bail!("http.public_base_url must use https when notify_auth.production_mode=true");
+        }
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
         self.internal_auth.validate()?;

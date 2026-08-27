@@ -14,6 +14,11 @@ async fn accepted_devices_are_not_rejected() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device(
             "com.example.app",
             "plaintext-token-should-not-leak",
@@ -33,6 +38,11 @@ async fn notify_endpoint_accepts_active_payload_shape() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -49,6 +59,11 @@ async fn describe_endpoint_advertises_gateway_profile() {
     )]);
 
     let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
         .send(&service)
         .await;
 
@@ -60,7 +75,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(body["service_kind"], json!("push_gateway"));
     assert_eq!(
         body["limits"]["x_floria_operation_id"],
-        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY)
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1)
     );
     // The mandatory blind-wakeup baseline is always advertised alongside
     // the base profile; the visible-notification profile is only added
@@ -85,6 +100,52 @@ async fn describe_endpoint_advertises_gateway_profile() {
         body["limits"]["max_request_size_bytes"],
         json!(MAX_REQUEST_SIZE)
     );
+    assert_eq!(
+        body["supported_operation_bundles"],
+        json!(["ak.operation_bundle.push_gateway.http_notify.v1"])
+    );
+    assert_eq!(body["transport_bindings"][0]["kind"], "http_json");
+    assert_eq!(
+        body["transport_bindings"][0]["base_url"],
+        "http://127.0.0.1:5000/"
+    );
+    assert_eq!(
+        body["supported_features"],
+        json!(["ak.feature.notifications.v1"])
+    );
+}
+
+#[tokio::test]
+async fn operation_selector_is_required_and_route_bound_before_handlers() {
+    let service = test_service(vec![(
+        "com.example.app",
+        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+    )]);
+
+    let mut missing = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .send(&service)
+        .await;
+    assert_eq!(missing.status_code, Some(StatusCode::BAD_REQUEST));
+    let missing_body = missing.take_json::<Value>().await.unwrap();
+    assert_eq!(
+        missing_body["error"]["code"],
+        arkret_wire::ErrorCode::OPERATION_SELECTOR_REQUIRED
+    );
+
+    let mut mismatch = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
+        .send(&service)
+        .await;
+    assert_eq!(mismatch.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+    let mismatch_body = mismatch.take_json::<Value>().await.unwrap();
+    assert_eq!(
+        mismatch_body["error"]["code"],
+        arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION
+    );
 }
 
 #[tokio::test]
@@ -101,6 +162,11 @@ async fn describe_separates_claim_levels() {
     )]);
 
     let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -128,24 +194,6 @@ async fn describe_separates_claim_levels() {
         );
     }
 
-    let implemented = body["implemented_features"]
-        .as_array()
-        .expect("implemented_features present");
-    assert!(!implemented.is_empty());
-
-    // experimental_features and verified_profiles MUST NOT intersect.
-    let experimental: std::collections::HashSet<&str> = body["experimental_features"]
-        .as_array()
-        .expect("experimental_features present")
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
-    let verified_ids: std::collections::HashSet<&str> = verified
-        .iter()
-        .filter_map(|v| v["profile_id"].as_str())
-        .collect();
-    assert!(experimental.is_disjoint(&verified_ids));
-
     for surface in body["interop_surfaces"]
         .as_array()
         .expect("interop_surfaces present")
@@ -168,14 +216,19 @@ async fn describe_does_not_advertise_media_token_self_issue() {
     )]);
 
     let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response.take_json::<Value>().await.unwrap();
 
     for field in [
-        "implemented_features",
-        "experimental_features",
+        "supported_operation_bundles",
+        "supported_features",
         "interop_surfaces",
     ] {
         let encoded = serde_json::to_string(&body[field]).unwrap();
@@ -204,6 +257,11 @@ async fn describe_omits_bearer_mode_when_production_disables_bearer_fallback() {
     );
 
     let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
         .send(&service)
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
@@ -229,6 +287,11 @@ async fn gateway_describe_lives_at_root_meta_position() {
     )]);
 
     let mut server_response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
         .send(&service)
         .await;
     assert_eq!(server_response.status_code.unwrap(), StatusCode::OK);
@@ -236,7 +299,7 @@ async fn gateway_describe_lives_at_root_meta_position() {
     assert_eq!(server_body["service_kind"], json!("push_gateway"));
     assert_eq!(
         server_body["limits"]["x_floria_operation_id"],
-        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY)
+        json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1)
     );
 
     // The self-made /_arkret/edge/push/describe path MUST NOT exist;
@@ -281,7 +344,7 @@ async fn integration_describe_lists_operational_surfaces() {
     );
     assert_eq!(
         push_notify_surface["contract"],
-        json!("ak.edge.push.command.notify")
+        json!("ak.edge.push.command.notify.v1")
     );
 
     let metrics_surface = surfaces
@@ -401,6 +464,11 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(vec![device("com.example.app", "accept")]))
         .send(&service)
         .await;
@@ -449,6 +517,11 @@ async fn notify_response_conserves_every_requested_device_id() {
         .collect::<std::collections::HashSet<_>>();
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&payload(devices))
         .send(&service)
         .await;
@@ -475,9 +548,14 @@ async fn notify_rejects_operation_id_in_body() {
     let service = test_service(vec![]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .json(&with_operation_id(
             payload(vec![device("com.example.app", "one")]),
-            "ak.edge.push.command.notify",
+            "ak.edge.push.command.notify.v1",
         ))
         .send(&service)
         .await;

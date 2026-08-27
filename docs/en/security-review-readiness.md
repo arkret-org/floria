@@ -103,7 +103,7 @@ implemented:
 
 1. **ROST-FLO-1..3 mention references** — floria is a push gateway,
    not the Message AST authoring or rendering layer. The public
-   `ak.edge.push.command.notify` payload must not carry mention-preview fields such
+   `ak.edge.push.command.notify.v1` payload must not carry mention-preview fields such
    as `subject_id` or `display_name_at_time`; the typed wire model uses
    `serde(deny_unknown_fields)`, so the gateway rejects them with
    `schema_violation`. The only mention field

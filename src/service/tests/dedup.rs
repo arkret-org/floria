@@ -19,6 +19,11 @@ async fn notify_supports_header_idempotency_key_replay() {
 
     for _ in 0..2 {
         let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                true,
+            )
             .add_header("idempotency-key", "notify-123", true)
             .json(&request_body)
             .send(&service)
@@ -39,6 +44,11 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
     );
 
     let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("idempotency-key", "notify-123", true)
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service)
@@ -46,6 +56,11 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
     let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("idempotency-key", "notify-123", true)
         .json(&payload(vec![device("com.example.app", "two")]))
         .send(&service)
@@ -70,6 +85,11 @@ async fn notify_rejects_idempotency_key_in_body() {
         with_idempotency_key(payload(vec![device("com.example.app", "one")]), "body-key");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("idempotency-key", "header-key", true)
         .json(&request_body)
         .send(&service)
@@ -91,6 +111,11 @@ async fn notify_dedup_cache_serves_repeated_success_without_redispatch() {
 
     for _ in 0..2 {
         let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                true,
+            )
             .json(&request_body)
             .send(&service)
             .await;
@@ -148,6 +173,11 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
 
     for request_body in [first, second] {
         let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+            .add_header(
+                "Arkret-Operation",
+                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                true,
+            )
             .add_header("content-type", "application/json", true)
             .text(request_body)
             .send(&service)

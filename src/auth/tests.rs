@@ -142,6 +142,11 @@ async fn http_message_signature_authenticates_notify_request() {
     );
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -202,6 +207,11 @@ async fn mtls_profile_authenticates_notify_request() {
     );
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -263,6 +273,11 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -337,6 +352,11 @@ async fn rejects_tampered_body() {
     let tampered_body = json!({"hello": "world"});
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", content_digest, true)
         .add_header("signature-input", signature_input, true)
@@ -371,7 +391,7 @@ async fn rejects_signature_missing_required_components() {
     principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     let service = test_service_with_principal(principal);
-    let body = json!({"operation_id": "ak.edge.push.command.notify"});
+    let body = json!({"operation_id": "ak.edge.push.command.notify.v1"});
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
     let seed = hex::decode(seed_hex).unwrap();
@@ -412,6 +432,11 @@ async fn rejects_signature_missing_required_components() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
         .add_header("host", "127.0.0.1", true)
         .add_header("content-digest", digest, true)
         .add_header("signature-input", signature_input, true)

@@ -83,6 +83,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         deactivation_ledger,
     ))));
     state.notify_auth = config.http.notify_auth.clone();
+    state.public_base_url = config.http.public_base_url.clone();
     state.internal_auth = config.http.internal_auth.clone();
     if config.http.notify_auth.replay_window_seconds() > 0 {
         let ttl = std::time::Duration::from_secs(config.http.notify_auth.replay_window_seconds());

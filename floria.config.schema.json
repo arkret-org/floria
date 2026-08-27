@@ -1,5 +1,5 @@
 {
-  "$id": "https://arkret.dev/schema/floria/2026-06-03.1/floria.config.schema.json",
+  "$id": "https://arkret.dev/schema/floria/2026-08-27.1/floria.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -588,6 +588,12 @@
           "maximum": 65535,
           "minimum": 1,
           "type": "integer"
+        },
+        "public_base_url": {
+          "default": "http://127.0.0.1:5000/",
+          "description": "Externally reachable canonical HTTP/JSON base URL advertised by ServiceDescribe; production mode requires https.",
+          "format": "uri",
+          "type": "string"
         }
       },
       "type": "object"
@@ -778,5 +784,5 @@
   },
   "title": "floria gateway configuration",
   "type": "object",
-  "x-floria-schema-version": "2026-06-03.1"
+  "x-floria-schema-version": "2026-08-27.1"
 }

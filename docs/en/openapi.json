@@ -13,7 +13,7 @@
   "paths": {
     "/_arkret/edge/push/notify": {
       "post": {
-        "operationId": "ak.edge.push.command.notify",
+        "operationId": "ak.edge.push.command.notify.v1",
         "summary": "Submit a minimized push wakeup request",
         "security": [
           {

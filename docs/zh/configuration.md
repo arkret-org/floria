@@ -116,6 +116,7 @@ http {
 |------|------|--------|------|
 | `bind_addresses` | string[] | `["127.0.0.1"]` | HTTP 监听地址；每项既可以只写 host/IP，也可以直接写 `host:port` |
 | `port` | u16 | `5000` | HTTP 监听端口 |
+| `public_base_url` | URL | `http://127.0.0.1:5000/` | ServiceDescribe 广告的外部可达 canonical HTTP/JSON base；生产模式必须使用 HTTPS |
 | `notify_dedup_ttl_seconds` | u64 | `0` | 成功 `/notify` 请求体的去重 TTL；`0` 表示完全关闭去重 |
 | `notify_dedup.backend` | string | `"memory"` | 去重后端：`"memory"` 或 `"redis"` |
 | `notify_dedup.redis_url` | string | — | 当 `notify_dedup.backend=redis` 时使用的 Redis 连接 URL |
