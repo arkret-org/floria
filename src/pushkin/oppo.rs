@@ -65,7 +65,7 @@ static OPPO_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(||
 
 const OPPO_MAX_TRIES: usize = 3;
 const OPPO_RETRY_DELAY_BASE_SECS: u64 = 10;
-const OPPO_TOKEN_CACHE_SECS: u64 = 3600;
+const OPPO_TOKEN_CACHE_SECS: u64 = 24 * 60 * 60;
 const OPPO_AUTH_URL: &str = "https://api.push.oppomobile.com/server/v1/auth";
 const OPPO_API_BASE_URL: &str = "https://api.push.oppomobile.com";
 
@@ -550,6 +550,7 @@ fn oppo_error_message(vendor_name: &str, body: &str, status: StatusCode) -> Stri
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct OppoAuthResponse {
     #[serde(default)]
     code: Option<i64>,
@@ -569,9 +570,7 @@ impl OppoAuthResponse {
     }
 
     fn auth_token(&self) -> Option<String> {
-        self.data
-            .as_ref()
-            .and_then(|data| data.auth_token.clone())
+        self.data.as_ref().and_then(|data| data.auth_token.clone())
     }
 
     fn expires_in(&self) -> Duration {
@@ -580,9 +579,12 @@ impl OppoAuthResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct OppoAuthData {
     #[serde(default)]
     auth_token: Option<String>,
+    #[serde(default)]
+    create_time: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -717,12 +719,23 @@ mod tests {
 
         assert!(response.is_success());
         assert_eq!(response.auth_token().as_deref(), Some("token-value"));
-        assert_eq!(response.expires_in(), Duration::from_secs(OPPO_TOKEN_CACHE_SECS));
+        assert_eq!(
+            response.expires_in(),
+            Duration::from_secs(OPPO_TOKEN_CACHE_SECS)
+        );
+        assert_eq!(
+            response
+                .data
+                .as_ref()
+                .and_then(|data| data.create_time.as_ref()),
+            Some(&Value::String("1".to_owned()))
+        );
 
-        let legacy: OppoAuthResponse = serde_json::from_str(
-            r#"{"code":0,"authToken":"legacy","data":{"authToken":"legacy"}}"#,
-        )
-        .unwrap();
-        assert_eq!(legacy.auth_token(), None);
+        assert!(
+            serde_json::from_str::<OppoAuthResponse>(
+                r#"{"code":0,"authToken":"legacy","data":{"authToken":"legacy"}}"#,
+            )
+            .is_err()
+        );
     }
 }
