@@ -53,6 +53,6 @@
 ## Service Auth（caller → gateway）
 
 - bearer fallback 优先使用 `bearer_token_hashes`，避免在配置中保存 raw `bearer_tokens`。
-- HTTP Message Signature：为新的 Ed25519 公钥发布新的 `signature_key_id`，部署配置后再让调用方切换到对应私钥签名。gateway 通过 `notify_auth.nonce_store` 记录已用过的签名指纹；切换 key id 会自然地重置 Redis 中的 nonce 命名空间。
+- HTTP Message Signature：为新的 Ed25519 公钥发布新的 `signature_verification_method`，部署配置后再让调用方切换到对应私钥签名。gateway 通过 `notify_auth.nonce_store` 记录已用过的签名指纹；切换 key id 会自然地重置 Redis 中的 nonce 命名空间。
 - mTLS：先把新证书指纹加入 `mtls_cert_fingerprints`，重启并验证 `/ready`，待调用方迁移后再移除旧指纹。当配置了 `mtls_subject_dn` 或 `mtls_subject_alt_names` 时，请把它们与指纹一起更新 — gateway 要求两者同时匹配。
 - 重放窗口：`replay_window_seconds` 应 ≥ `signature_max_skew_seconds`，以便时钟偏差范围内的重放请求依然能被识别。使用较长签名有效期（5 分钟以上）的 operator 应启用 redis-backed nonce store，确保单实例重启不会丢失重放保护状态。

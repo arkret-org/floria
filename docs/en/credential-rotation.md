@@ -53,6 +53,6 @@ This runbook covers provider and service-auth credential rotation for a running 
 ## Service Auth (caller → gateway)
 
 - Prefer `bearer_token_hashes` over raw `bearer_tokens` for fallback credentials.
-- For HTTP Message Signature, publish the new Ed25519 public key under a new `signature_key_id`, deploy config, then switch callers to sign with the matching private key. The gateway tracks signed-request replays in `notify_auth.nonce_store`; bumping the key id resets the in-Redis nonce namespace automatically.
+- For HTTP Message Signature, publish the new Ed25519 public key under a new `signature_verification_method`, deploy config, then switch callers to sign with the matching private key. The gateway tracks signed-request replays in `notify_auth.nonce_store`; bumping the key id resets the in-Redis nonce namespace automatically.
 - For mTLS, add the new certificate fingerprint to `mtls_cert_fingerprints`, restart, verify `/ready`, then remove the old fingerprint after callers have migrated. When `mtls_subject_dn` or `mtls_subject_alt_names` are set, update those bindings together with the fingerprint — the gateway requires both to match.
 - For replay-window tuning: `replay_window_seconds` should be ≥ `signature_max_skew_seconds` so a clock-skewed retry inside the signature's expiry window still rejects on replay. Operators using long-lived signatures (5 min+) should run the redis-backed nonce store to ensure replay rejections survive a single-instance restart.

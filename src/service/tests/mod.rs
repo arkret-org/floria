@@ -187,7 +187,7 @@ pub(super) fn notify_auth_config() -> NotifyAuthConfig {
     config.bearer_tokens = vec!["secret-token".to_owned()];
     config.trusted_service_ids = vec!["ak:did_core:web:sync.example.com".to_owned()];
     config.plaintext_metadata_service_ids = vec!["ak:did_core:web:sync.example.com".to_owned()];
-    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config
 }
 
@@ -200,12 +200,12 @@ pub(super) fn restricted_notify_auth_config() -> NotifyAuthConfig {
 pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
-    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.gateway_service_version_id = Some("fixture-v1".to_owned());
     config.production_mode = true;
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some("deadbeef".repeat(8));
     principal.service_kind = Some("sync".to_owned());
     config

@@ -46,7 +46,7 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
     )]));
     let mut state = AppState::new(Arc::new(registry));
     let mut notify_auth = NotifyAuthConfig::default();
-    notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     notify_auth.require_message_signatures = true;
     notify_auth.replay_window_seconds = 300;
     notify_auth.service_principals =
@@ -106,7 +106,7 @@ async fn http_message_signature_authenticates_notify_request() {
     let seed_hex = "0101010101010101010101010101010101010101010101010101010101010101";
     let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     let service = test_service_with_principal(principal);
     let body = json!({
@@ -169,7 +169,7 @@ async fn mtls_profile_authenticates_notify_request() {
     let seed_hex = "0202020202020202020202020202020202020202020202020202020202020202";
     let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     principal.require_mtls = true;
     principal.mtls_cert_fingerprints = vec!["aa:bb:cc".to_owned()];
@@ -236,7 +236,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     let seed_hex = "0303030303030303030303030303030303030303030303030303030303030303";
     let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     principal.require_mtls = true;
     let service = test_service_with_principal(principal);
@@ -313,7 +313,7 @@ async fn rejects_tampered_body() {
     let seed_hex = "0404040404040404040404040404040404040404040404040404040404040404";
     let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     let service = test_service_with_principal(principal);
     let body = json!({
@@ -384,7 +384,7 @@ async fn rejects_signature_missing_required_components() {
     let seed_hex = "0505050505050505050505050505050505050505050505050505050505050505";
     let public_key_hex = signature_public_key_hex(seed_hex).unwrap();
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.signature_key_id = Some("did:web:sync.example.com#push".to_owned());
+    principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     let service = test_service_with_principal(principal);
     let body = json!({"operation_id": "ak.edge.push.command.notify.v1"});

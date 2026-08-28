@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use arkret_wire::{DidCoreId, DidFullId, ProfileId, ServiceOperationId};
+use arkret_wire::{Did, DidCoreId, ProfileId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
@@ -25,16 +25,16 @@ use crate::config::NotifyAuthConfig;
 /// fabricated here. The non-authoritative derivation profile hint remains
 /// mirrored under `limits.x_floria_privacy_derivation` until those inputs
 /// are available.
-fn floria_service_full_id(auth: &NotifyAuthConfig) -> DidFullId {
-    // production_mode enforces a configured gateway_service_id; in dev
+fn floria_service_did(auth: &NotifyAuthConfig) -> Did {
+    // production_mode enforces a configured gateway_service_did; in dev
     // postures it may be absent, so fall back to a stable, clearly
     // non-routable placeholder DID rather than failing the describe.
     let raw = auth
-        .gateway_service_id
+        .gateway_service_did
         .clone()
         .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    DidFullId::new(raw).unwrap_or_else(|_| {
-        DidFullId::new("did:web:floria.invalid".to_owned())
+    Did::new(raw).unwrap_or_else(|_| {
+        Did::new("did:web:floria.invalid".to_owned())
             .expect("static placeholder DID is well-formed")
     })
 }
@@ -42,9 +42,9 @@ fn floria_service_full_id(auth: &NotifyAuthConfig) -> DidFullId {
 fn floria_service_identity(
     auth: &NotifyAuthConfig,
 ) -> (DidCoreId, arkret_models_identity::ResolutionCommitment) {
-    let full_id = floria_service_full_id(auth);
-    let service_id = arkret_wire::project_full_id_to_core_id(&full_id)
-        .expect("configured full DID was validated at startup");
+    let did = floria_service_did(auth);
+    let service_id =
+        arkret_wire::project_did_to_core_id(&did).expect("configured DID was validated at startup");
     let method_history_head = auth
         .gateway_service_method_history_head
         .clone()
@@ -56,7 +56,7 @@ fn floria_service_identity(
     (
         service_id,
         arkret_models_identity::ResolutionCommitment {
-            full_id,
+            did,
             method_history_head,
             version_id,
         },
@@ -313,7 +313,8 @@ pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> 
     }
     if auth.require_message_signatures
         || auth.service_principals.values().any(|principal| {
-            principal.signature_key_id.is_some() && principal.signature_public_key_hex.is_some()
+            principal.signature_verification_method.is_some()
+                && principal.signature_public_key_hex.is_some()
         })
     {
         modes.push("http-message-signature");
@@ -325,7 +326,7 @@ pub(super) fn describe_auth_modes(auth: &NotifyAuthConfig) -> Vec<&'static str> 
     {
         modes.push("mtls");
     }
-    if !auth.trusted_service_ids.is_empty() || auth.gateway_service_id.is_some() {
+    if !auth.trusted_service_ids.is_empty() || auth.gateway_service_did.is_some() {
         modes.push("service-id");
     }
     modes.sort_unstable();

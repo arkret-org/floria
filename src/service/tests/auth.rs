@@ -244,7 +244,7 @@ async fn notify_rejects_non_allowlisted_origin_service_id() {
 }
 
 #[tokio::test]
-async fn notify_rejects_full_did_in_source_service_id_header() {
+async fn notify_rejects_did_in_source_service_id_header() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -660,7 +660,7 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
 async fn principal_plaintext_policy_requires_eligible_service_kind() {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
-    config.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.gateway_service_did = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.bearer_tokens = vec!["principal-token".to_owned()];
     principal.allow_plaintext_metadata = true;

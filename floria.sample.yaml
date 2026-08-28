@@ -30,7 +30,7 @@ http:
     #   - ak:did_core:web:sync.example.com
     # plaintext_metadata_service_ids:
     #   - ak:did_core:web:sync.example.com
-    # gateway_service_id: did:webvh:zQ3shGatewayScid:push.example.com
+    # gateway_service_did: did:webvh:zQ3shGatewayScid:push.example.com
     # gateway_service_method_history_head: sha256:<verified-log-head-digest>
     # gateway_service_version_id: 1-<verified-version-id>
     #
@@ -43,7 +43,7 @@ http:
     #     # bearer_tokens is non-production only; production_mode rejects it.
     #     bearer_token_hashes:
     #       - sha256:<hex-digest>
-    #     signature_key_id: did:web:sync.example.com#push
+    #     signature_verification_method: did:web:sync.example.com#push
     #     signature_public_key_hex: replace-with-ed25519-public-key-hex
     #     service_endpoint: https://push.example.com/_arkret/edge/push/notify
     #     require_mtls: true

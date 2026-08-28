@@ -18,10 +18,10 @@ pub struct NotifyAuthConfig {
     pub trusted_service_ids: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
     pub plaintext_metadata_service_ids: Vec<String>,
-    /// Resolvable full DID for this gateway. Transport headers continue to
+    /// Resolvable DID for this gateway. Transport headers continue to
     /// carry the derived service core id.
-    pub gateway_service_id: Option<String>,
-    /// Exact method-history head verified when the gateway full DID was
+    pub gateway_service_did: Option<String>,
+    /// Exact method-history head verified when the gateway DID was
     /// registered. Required together with `gateway_service_version_id` in
     /// production mode so Describe never invents resolution state.
     pub gateway_service_method_history_head: Option<String>,
@@ -71,7 +71,7 @@ impl fmt::Debug for NotifyAuthConfig {
                 "plaintext_metadata_service_ids",
                 &self.plaintext_metadata_service_ids,
             )
-            .field("gateway_service_id", &self.gateway_service_id)
+            .field("gateway_service_did", &self.gateway_service_did)
             .field(
                 "gateway_service_method_history_head",
                 &self.gateway_service_method_history_head,
@@ -106,17 +106,17 @@ impl fmt::Debug for NotifyAuthConfig {
 }
 
 impl NotifyAuthConfig {
-    /// Project the gateway's registered full DID to the stable service id
+    /// Project the gateway's registered DID to the stable service id
     /// carried by service-to-service transport headers.
     pub fn gateway_service_core_id(&self) -> Result<Option<arkret_wire::DidCoreId>> {
-        self.gateway_service_id
+        self.gateway_service_did
             .as_ref()
             .map(|raw| {
-                let full_id = arkret_wire::DidFullId::new(raw.clone()).with_context(
-                    || "http.notify_auth.gateway_service_id must be a resolvable full DID",
+                let did = arkret_wire::Did::new(raw.clone()).with_context(
+                    || "http.notify_auth.gateway_service_did must be a resolvable DID",
                 )?;
-                arkret_wire::project_full_id_to_core_id(&full_id).with_context(
-                    || "http.notify_auth.gateway_service_id uses an unsupported DID method",
+                arkret_wire::project_did_to_core_id(&did).with_context(
+                    || "http.notify_auth.gateway_service_did uses an unsupported DID method",
                 )
             })
             .transpose()
@@ -127,7 +127,7 @@ impl NotifyAuthConfig {
             || !self.bearer_token_hashes.is_empty()
             || !self.trusted_service_ids.is_empty()
             || !self.service_principals.is_empty()
-            || self.gateway_service_id.is_some()
+            || self.gateway_service_did.is_some()
             || self.require_message_signatures
     }
 
@@ -249,8 +249,8 @@ impl NotifyAuthConfig {
                 "http.notify_auth.production_mode requires authentication; configure service_principals or signed access"
             );
         }
-        if self.gateway_service_id.is_none() {
-            bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_id");
+        if self.gateway_service_did.is_none() {
+            bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_did");
         }
         if self.gateway_service_method_history_head.is_none()
             || self.gateway_service_version_id.is_none()
@@ -265,7 +265,7 @@ impl NotifyAuthConfig {
             );
         }
         for (did, principal) in &self.service_principals {
-            let has_signature = principal.signature_key_id.is_some()
+            let has_signature = principal.signature_verification_method.is_some()
                 && principal.signature_public_key_hex.is_some();
             if !has_signature && !principal.require_mtls {
                 bail!(
@@ -324,7 +324,7 @@ impl Default for NotifyAuthConfig {
             bearer_token_hashes: Vec::new(),
             trusted_service_ids: Vec::new(),
             plaintext_metadata_service_ids: Vec::new(),
-            gateway_service_id: None,
+            gateway_service_did: None,
             gateway_service_method_history_head: None,
             gateway_service_version_id: None,
             require_message_signatures: false,
@@ -444,7 +444,7 @@ pub struct NotifyServicePrincipalConfig {
     pub bearer_tokens: Vec<String>,
     #[serde(default, deserialize_with = "string_or_vec")]
     pub bearer_token_hashes: Vec<String>,
-    pub signature_key_id: Option<String>,
+    pub signature_verification_method: Option<String>,
     pub signature_public_key_hex: Option<String>,
     pub require_mtls: bool,
     #[serde(default, deserialize_with = "string_or_vec")]
@@ -475,7 +475,10 @@ impl fmt::Debug for NotifyServicePrincipalConfig {
             .field("allow_plaintext_metadata", &self.allow_plaintext_metadata)
             .field("bearer_tokens", &bearer_tokens)
             .field("bearer_token_hashes", &self.bearer_token_hashes.len())
-            .field("signature_key_id", &self.signature_key_id)
+            .field(
+                "signature_verification_method",
+                &self.signature_verification_method,
+            )
             .field("signature_public_key_hex", &self.signature_public_key_hex)
             .field("require_mtls", &self.require_mtls)
             .field("mtls_cert_fingerprints", &self.mtls_cert_fingerprints)
@@ -494,7 +497,7 @@ impl Default for NotifyServicePrincipalConfig {
             allow_plaintext_metadata: false,
             bearer_tokens: Vec::new(),
             bearer_token_hashes: Vec::new(),
-            signature_key_id: None,
+            signature_verification_method: None,
             signature_public_key_hex: None,
             require_mtls: false,
             mtls_cert_fingerprints: Vec::new(),
@@ -516,7 +519,7 @@ impl NotifyServicePrincipalConfig {
 
     fn validate(&self, did: &str) -> Result<()> {
         match (
-            self.signature_key_id.as_deref(),
+            self.signature_verification_method.as_deref(),
             self.signature_public_key_hex.as_deref(),
         ) {
             (Some(_), Some(public_key_hex)) => {
@@ -534,7 +537,7 @@ impl NotifyServicePrincipalConfig {
             (None, None) => {}
             _ => {
                 bail!(
-                    "http.notify_auth.service_principals.{did} must set both signature_key_id and signature_public_key_hex or neither"
+                    "http.notify_auth.service_principals.{did} must set both signature_verification_method and signature_public_key_hex or neither"
                 );
             }
         }

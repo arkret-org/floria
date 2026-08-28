@@ -33,11 +33,11 @@ pub(super) fn verify_message_signature(
             message: "signed JSON requests must not use Content-Encoding".to_owned(),
         });
     }
-    let key_id = principal.signature_key_id.as_deref().ok_or_else(|| {
+    let key_id = principal.signature_verification_method.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
             origin_service_id = %origin_did,
-            "rejecting /notify request because principal is missing signature_key_id"
+            "rejecting /notify request because principal is missing signature_verification_method"
         );
         AuthFailure {
             status: StatusCode::UNAUTHORIZED,

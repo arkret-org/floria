@@ -304,7 +304,7 @@ fn production_mode_requires_signed_or_mtls_principal() {
     let mut config = Config::default();
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
@@ -329,12 +329,12 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
     let mut config = Config::default();
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
     let principal = NotifyServicePrincipalConfig {
-        signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+        signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("a".repeat(64)),
         ..Default::default()
     };
@@ -356,12 +356,12 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
     let mut config = Config::default();
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
-        signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+        signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("d".repeat(64)),
         ..Default::default()
     };
@@ -385,11 +385,11 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
     let mut config = Config::default();
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
-        signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+        signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("b".repeat(64)),
         allow_plaintext_metadata: true,
         service_kind: Some("external_pusher".to_owned()),
@@ -413,11 +413,11 @@ fn production_mode_accepts_signed_eligible_principal() {
     let mut config = Config::default();
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
-    config.http.notify_auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
     config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
     let principal = NotifyServicePrincipalConfig {
-        signature_key_id: Some("did:web:sync.example.com#push".to_owned()),
+        signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("c".repeat(64)),
         allow_plaintext_metadata: true,
         service_kind: Some("sync".to_owned()),

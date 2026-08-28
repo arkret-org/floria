@@ -174,8 +174,8 @@
               "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_id.",
               "type": "boolean"
             },
-            "gateway_service_id": {
-              "description": "Resolvable full DID for this gateway; its stable core is derived for service_id and transport headers.",
+            "gateway_service_did": {
+              "description": "Resolvable DID for this gateway; its stable core is derived for service_id and transport headers.",
               "type": [
                 "string",
                 "null"
@@ -355,7 +355,7 @@
                       "null"
                     ]
                   },
-                  "signature_key_id": {
+                  "signature_verification_method": {
                     "type": [
                       "string",
                       "null"

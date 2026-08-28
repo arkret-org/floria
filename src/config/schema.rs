@@ -208,9 +208,9 @@ fn notify_auth_schema() -> Value {
                     {"type": "array", "items": {"type": "string"}}
                 ]
             },
-            "gateway_service_id": {
+            "gateway_service_did": {
                 "type": ["string", "null"],
-                "description": "Resolvable full DID for this gateway; its stable core is derived for service_id and transport headers."
+                "description": "Resolvable DID for this gateway; its stable core is derived for service_id and transport headers."
             },
             "gateway_service_method_history_head": {"type": ["string", "null"], "minLength": 1},
             "gateway_service_version_id": {"type": ["string", "null"], "minLength": 1},
@@ -265,7 +265,7 @@ fn service_principal_schema() -> Value {
             "allow_plaintext_metadata": {"type": "boolean", "default": false},
             "bearer_tokens": string_or_string_list_schema(),
             "bearer_token_hashes": string_or_string_list_schema(),
-            "signature_key_id": {"type": ["string", "null"]},
+            "signature_verification_method": {"type": ["string", "null"]},
             "signature_public_key_hex": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"},
             "require_mtls": {"type": "boolean", "default": false},
             "mtls_cert_fingerprints": string_or_string_list_schema(),

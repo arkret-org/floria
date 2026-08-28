@@ -392,7 +392,7 @@ fn blind_profile_service() -> salvo::Service {
     // resolve to false at the auth layer regardless of how the operator
     // flipped the flag.
     let mut auth = NotifyAuthConfig::default();
-    auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.service_kind = Some("push".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
@@ -415,7 +415,7 @@ fn visible_profile_service() -> salvo::Service {
     // allow_plaintext_metadata is set, so the visible-notification
     // profile is in effect.
     let mut auth = NotifyAuthConfig::default();
-    auth.gateway_service_id = Some("did:web:push.example.com".to_owned());
+    auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.service_kind = Some("sync".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];

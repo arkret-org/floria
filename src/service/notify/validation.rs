@@ -45,7 +45,7 @@ pub(super) fn validate_origin_service_id(
 /// removed). The recipient-service-id scope binding reuses the same
 /// header value — `push_target_id` is a per-`(recipient_service_id, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
-/// destination equals the core projection of its own `gateway_service_id` (spec
+/// destination equals the core projection of its own `gateway_service_did` (spec
 /// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
 /// decorative.
 pub(super) fn validate_destination_service_id(

@@ -81,7 +81,7 @@ http {
     // bearer_token_hashes "sha256:<hex-digest>"
     trusted_service_ids "ak:did_core:web:sync.example.com"
     plaintext_metadata_service_ids "ak:did_core:web:sync.example.com"
-    gateway_service_id "did:web:push.example.com"
+    gateway_service_did "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
@@ -89,7 +89,7 @@ http {
     //     allow_plaintext_metadata true
     //     // bearer_tokens 仅限非生产；production_mode 会拒绝
     //     bearer_token_hashes "sha256:<hex-digest>"
-    //     signature_key_id "did:web:sync.example.com#push"
+    //     signature_verification_method "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
     //     service_endpoint "https://push.example.com/_arkret/edge/push/notify"
     //     require_mtls true
@@ -125,7 +125,7 @@ http {
 | `notify_auth.bearer_token_hashes` | string/string[] | — | bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀 |
 | `notify_auth.trusted_service_ids` | string/string[] | — | `/notify` 允许调用的 origin service core ID 列表 |
 | `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的 service core ID 列表 |
-| `notify_auth.gateway_service_id` | string | — | gateway 的可解析 full DID；传输 header 使用其 core 投影 |
+| `notify_auth.gateway_service_did` | string | — | gateway 的可解析 DID；传输 header 使用其 core 投影 |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
 | `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
@@ -158,7 +158,7 @@ http {
     key_prefix "floria-prod"
   }
   notify_auth {
-    gateway_service_id "did:web:push.example.com"
+    gateway_service_did "did:web:push.example.com"
     gateway_service_method_history_head "sha256:<verified-log-head-digest>"
     gateway_service_version_id "1-<verified-version-id>"
     production_mode true
@@ -167,7 +167,7 @@ http {
       "ak:did_core:web:sync.example.com" {
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
-        signature_key_id "did:web:sync.example.com#push"
+        signature_verification_method "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
         service_endpoint "https://push.example.com/_arkret/edge/push/notify"
         require_mtls true

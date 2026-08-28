@@ -100,7 +100,7 @@ http {
     // bearer_token_hashes "sha256:<hex-digest>"
     trusted_service_ids "ak:did_core:web:sync.example.com"
     plaintext_metadata_service_ids "ak:did_core:web:sync.example.com"
-    gateway_service_id "did:web:push.example.com"
+    gateway_service_did "did:web:push.example.com"
     // require_message_signatures true
     // production_mode true
     // service_principals {
@@ -108,7 +108,7 @@ http {
     //     allow_plaintext_metadata true
     //     // bearer_tokens is non-production only; production_mode rejects it.
     //     bearer_token_hashes "sha256:<hex-digest>"
-    //     signature_key_id "did:web:sync.example.com#push"
+    //     signature_verification_method "did:web:sync.example.com#push"
     //     signature_public_key_hex "replace-with-ed25519-public-key-hex"
     //     service_endpoint "https://push.example.com/_arkret/edge/push/notify"
     //     require_mtls true
@@ -144,7 +144,7 @@ http {
 | `notify_auth.bearer_token_hashes` | string/string[] | — | SHA-256 bearer token digests, optionally prefixed with `sha256:` |
 | `notify_auth.trusted_service_ids` | string/string[] | — | Allowlisted origin service core IDs for `/notify` |
 | `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | Service core IDs allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
-| `notify_auth.gateway_service_id` | string | — | Resolvable gateway full DID; transport headers carry its core projection |
+| `notify_auth.gateway_service_did` | string | — | Resolvable gateway DID; transport headers carry its core projection |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
 | `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
@@ -177,7 +177,7 @@ http {
     key_prefix "floria-prod"
   }
   notify_auth {
-    gateway_service_id "did:web:push.example.com"
+    gateway_service_did "did:web:push.example.com"
     gateway_service_method_history_head "sha256:<verified-log-head-digest>"
     gateway_service_version_id "1-<verified-version-id>"
     production_mode true
@@ -186,7 +186,7 @@ http {
       "ak:did_core:web:sync.example.com" {
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
-        signature_key_id "did:web:sync.example.com#push"
+        signature_verification_method "did:web:sync.example.com#push"
         signature_public_key_hex "replace-with-ed25519-public-key-hex"
         service_endpoint "https://push.example.com/_arkret/edge/push/notify"
         require_mtls true
