@@ -137,7 +137,7 @@ http {
 | `internal_auth.bearer_tokens` | string/string[] | — | `/_floria/internal/*`、`/_floria/admin/push/status/*` 使用的内部/运维 bearer token |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | 内部 bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀；两组内部凭据都为空时内部/运维路由 fail-closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |
-| `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service DID 在单窗口内允许的 `/notify` 次数 |
+| `notify_rate_limits.per_origin_service` | u64 | — | 每个 origin service ID 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_app_id` | u64 | — | 每个 target app ID 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_provider` | u64 | — | 每个 resolved provider 在单窗口内允许的 `/notify` 次数 |
 | `notify_rate_limits.per_push_key_hash` | u64 | — | 每个 push token hash 在单窗口内允许的 `/notify` 次数 |

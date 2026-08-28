@@ -3,6 +3,7 @@ use std::sync::Arc;
 use arkret_signatures::http_signature::{
     self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
 };
+use arkret_wire::DidCoreId;
 use salvo::http::StatusCode;
 use salvo::prelude::Request;
 use sha2::{Digest, Sha256};
@@ -23,7 +24,7 @@ pub(super) fn verify_message_signature(
     body: &[u8],
     auth: &NotifyAuthConfig,
     principal: &NotifyServicePrincipalConfig,
-    origin_did: &str,
+    origin_id: &DidCoreId,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
     if req.header::<String>("content-encoding").is_some() {
@@ -36,7 +37,7 @@ pub(super) fn verify_message_signature(
     let key_id = principal.signature_verification_method.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
+            origin_id = %origin_id,
             "rejecting /notify request because principal is missing signature_verification_method"
         );
         AuthFailure {
@@ -51,7 +52,7 @@ pub(super) fn verify_message_signature(
         .ok_or_else(|| {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 "rejecting /notify request because principal is missing signature_public_key_hex"
             );
             AuthFailure {
@@ -367,13 +368,13 @@ pub(super) fn has_signature_headers(req: &Request) -> bool {
 pub(super) async fn verify_nonce_freshness(
     req: &Request,
     nonce_store: Option<&Arc<NonceStore>>,
-    origin_did: &str,
+    origin_id: &DidCoreId,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
     let Some(nonce_store) = nonce_store else {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
+            origin_id = %origin_id,
             "rejecting /notify request: nonce store is required for signed requests"
         );
         return Err(AuthFailure {
@@ -408,7 +409,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::Replayed => {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 "rejecting /notify request as a Signature replay within the expiry window"
             );
             Err(AuthFailure {
@@ -420,7 +421,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::BackendUnavailable => {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 "rejecting /notify request: nonce store backend unavailable (strict policy)"
             );
             Err(AuthFailure {

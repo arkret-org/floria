@@ -46,7 +46,7 @@ pub struct NotifyAuthConfig {
     /// an arbitrary tenant via the X-Arkret-Origin-Service-ID header.
     /// Has no effect in `production_mode` (which already disables the
     /// gateway-wide bearer fallback).
-    pub bind_bearer_to_origin_did: bool,
+    pub bind_bearer_to_origin_id: bool,
     #[serde(default)]
     pub service_principals: HashMap<String, NotifyServicePrincipalConfig>,
     pub nonce_store: NotifyNonceStoreConfig,
@@ -96,7 +96,7 @@ impl fmt::Debug for NotifyAuthConfig {
                 &self.mtls_subject_alt_names_header,
             )
             .field("production_mode", &self.production_mode)
-            .field("bind_bearer_to_origin_did", &self.bind_bearer_to_origin_did)
+            .field("bind_bearer_to_origin_id", &self.bind_bearer_to_origin_id)
             .field("service_principals", &service_principals)
             .field("nonce_store", &self.nonce_store)
             .field("replay_window_seconds", &self.replay_window_seconds)
@@ -334,7 +334,7 @@ impl Default for NotifyAuthConfig {
             mtls_subject_dn_header: "x-client-certificate-subject".to_owned(),
             mtls_subject_alt_names_header: "x-client-certificate-san".to_owned(),
             production_mode: false,
-            bind_bearer_to_origin_did: false,
+            bind_bearer_to_origin_id: false,
             service_principals: HashMap::new(),
             nonce_store: NotifyNonceStoreConfig::default(),
             replay_window_seconds: 0,

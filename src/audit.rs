@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, anyhow};
+use arkret_wire::DidCoreId;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -20,9 +21,13 @@ pub enum AuditEvent {
     #[serde(rename = "org.arkret.floria.audit.policy_access")]
     PolicyAccess {
         request_id: String,
-        origin_id: String,
+        /// Absent only for an explicitly auth-disabled development request.
         #[serde(skip_serializing_if = "Option::is_none")]
-        destination_id: Option<String>,
+        origin_id: Option<DidCoreId>,
+        /// Absent when the auth-disabled development path has no destination
+        /// binding or when no gateway destination identity is configured.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        destination_id: Option<DidCoreId>,
         access_kind: String,
     },
     // Floria's audit-sink record is an implementation event, not an Arkret
@@ -31,7 +36,9 @@ pub enum AuditEvent {
     #[serde(rename = "org.arkret.floria.audit.push_rejected_devices")]
     RejectedDevices {
         request_id: String,
-        origin_id: String,
+        /// Absent only for an explicitly auth-disabled development request.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        origin_id: Option<DidCoreId>,
         devices: Vec<RejectedDevice>,
     },
 }
@@ -159,8 +166,10 @@ mod tests {
         let sink = JsonlAuditSink::new(&path);
         let event = AuditEvent::PolicyAccess {
             request_id: "req-1".to_owned(),
-            origin_id: "ak:did_core:web:sync.example.com".to_owned(),
-            destination_id: Some("ak:did_core:web:push.example.com".to_owned()),
+            origin_id: Some(DidCoreId::new("ak:did_core:web:sync.example.com".to_owned()).unwrap()),
+            destination_id: Some(
+                DidCoreId::new("ak:did_core:web:push.example.com".to_owned()).unwrap(),
+            ),
             access_kind: "e2ee_late_recovery".to_owned(),
         };
 

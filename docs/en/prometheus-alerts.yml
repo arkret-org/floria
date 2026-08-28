@@ -43,7 +43,7 @@ groups:
         labels: { severity: ticket, service: floria }
         annotations:
           summary: "floria rate limit rejecting >50 req/s on scope={{ $labels.scope }}"
-          description: "Sustained rejection pressure usually means a misbehaving caller; check origin DIDs."
+          description: "Sustained rejection pressure usually means a misbehaving caller; check origin service IDs."
 
       - alert: FloriaDeadLetterGrowing
         expr: increase(floria_notify_dead_letter_total[1h]) > 100

@@ -156,7 +156,7 @@ http {
 | `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/_floria/internal/*` and `/_floria/admin/push/status/*` |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | SHA-256 internal bearer token digests, optionally prefixed with `sha256:`; when both internal credential lists are empty, internal/operator routes fail closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
-| `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service DID per window |
+| `notify_rate_limits.per_origin_service` | u64 | — | Max `/notify` requests per origin service ID per window |
 | `notify_rate_limits.per_app_id` | u64 | — | Max `/notify` requests per target app ID per window |
 | `notify_rate_limits.per_provider` | u64 | — | Max `/notify` requests per resolved provider per window |
 | `notify_rate_limits.per_push_key_hash` | u64 | — | Max `/notify` requests per push token hash per window |

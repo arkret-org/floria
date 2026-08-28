@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use arkret_wire::DidCoreId;
 use salvo::http::StatusCode;
 use salvo::prelude::Request;
 
@@ -33,7 +34,12 @@ const SIGNATURE_HEADER: &str = "signature";
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedNotifyCaller {
-    pub origin_id: String,
+    /// Stable identity of the authenticated origin service. This is absent
+    /// only for the explicit development-only anonymous path when notify
+    /// authentication is disabled.
+    pub origin_id: Option<DidCoreId>,
+    /// Stable destination service identity parsed from the transport header.
+    pub destination_id: Option<DidCoreId>,
     /// Whether this caller is gated for the visible-notification
     /// profile (`ak.profile.push_gateway.visible_notification.v1`).
     ///
@@ -76,33 +82,32 @@ pub async fn authenticate_notify_request(
             });
         }
         return Ok(AuthenticatedNotifyCaller {
-            origin_id: "<anonymous>".to_owned(),
+            origin_id: None,
+            destination_id: None,
             allow_plaintext_metadata: false,
         });
     }
 
-    let origin_did = optional_header(req, SOURCE_SERVICE_ID_HEADER);
-    if let Some(origin_id) = origin_did.as_ref()
-        && arkret_wire::DidCoreId::new(origin_id.clone()).is_err()
-    {
-        return Err(AuthFailure {
+    let origin_id = optional_header(req, SOURCE_SERVICE_ID_HEADER)
+        .map(DidCoreId::new)
+        .transpose()
+        .map_err(|_| AuthFailure {
             status: StatusCode::BAD_REQUEST,
             code: arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
             message: "Source-Service-ID must be a service core id".to_owned(),
-        });
-    }
+        })?;
 
-    if let Some(origin_did) = origin_did.as_deref()
-        && let Some(principal) = auth.service_principals.get(origin_did)
+    if let Some(origin_id) = origin_id.as_ref()
+        && let Some(principal) = auth.service_principals.get(origin_id.as_str())
     {
-        verify_principal_service_kind(principal, origin_did, request_id)?;
-        verify_destination_id(req, auth, origin_did, request_id)?;
+        verify_principal_service_kind(principal, origin_id, request_id)?;
+        let destination_id = verify_destination_id(req, auth, origin_id, request_id)?;
         if let Some(expected_endpoint) = principal.service_endpoint.as_deref() {
             let target_uri = helpers::target_uri(req)?;
             if !target_uri.starts_with(expected_endpoint) {
                 tracing::warn!(
                     request_id,
-                    origin_id = %origin_did,
+                    origin_id = %origin_id,
                     expected_service_endpoint = %expected_endpoint,
                     target_uri = %target_uri,
                     "rejecting /notify request that does not match configured service endpoint"
@@ -118,13 +123,13 @@ pub async fn authenticate_notify_request(
 
         let mut authenticated = false;
         if has_signature_headers(req) {
-            verify_message_signature(req, body, auth, principal, origin_did, request_id)?;
-            verify_nonce_freshness(req, nonce_store, origin_did, request_id).await?;
+            verify_message_signature(req, body, auth, principal, origin_id, request_id)?;
+            verify_nonce_freshness(req, nonce_store, origin_id, request_id).await?;
             authenticated = true;
         } else if auth.require_message_signatures {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 "rejecting /notify request without required HTTP Message Signature"
             );
             return Err(AuthFailure {
@@ -138,7 +143,7 @@ pub async fn authenticate_notify_request(
             if auth.production_mode {
                 tracing::warn!(
                     request_id,
-                    origin_id = %origin_did,
+                    origin_id = %origin_id,
                     "rejecting /notify request: production_mode requires HTTP Message Signature or mTLS, bearer fallback is disabled"
                 );
                 return Err(AuthFailure {
@@ -158,7 +163,7 @@ pub async fn authenticate_notify_request(
         if !authenticated {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 "rejecting /notify request without a valid principal credential"
             );
             return Err(AuthFailure {
@@ -168,7 +173,7 @@ pub async fn authenticate_notify_request(
             });
         }
 
-        verify_mtls_profile(req, auth, principal, origin_did, request_id)?;
+        verify_mtls_profile(req, auth, principal, origin_id, request_id)?;
 
         // RFC 9530 Content-Digest is verified inside verify_message_signature
         // when a signature was supplied. When the caller authenticated via
@@ -182,7 +187,8 @@ pub async fn authenticate_notify_request(
         let allow_plaintext =
             principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal);
         return Ok(AuthenticatedNotifyCaller {
-            origin_id: origin_did.to_owned(),
+            origin_id: Some(origin_id.clone()),
+            destination_id,
             allow_plaintext_metadata: allow_plaintext,
         });
     }
@@ -190,7 +196,10 @@ pub async fn authenticate_notify_request(
     if auth.production_mode {
         tracing::warn!(
             request_id,
-            origin_id = origin_did.as_deref().unwrap_or("<missing>"),
+            origin_id = origin_id
+                .as_ref()
+                .map(DidCoreId::as_str)
+                .unwrap_or("<missing>"),
             "rejecting /notify request: production_mode rejects gateway-wide bearer fallback"
         );
         return Err(AuthFailure {
@@ -200,7 +209,7 @@ pub async fn authenticate_notify_request(
         });
     }
 
-    authenticate_bearer_request(req, auth, origin_did.as_deref(), request_id)
+    authenticate_bearer_request(req, auth, origin_id.as_ref(), request_id)
 }
 
 fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> bool {
@@ -218,7 +227,7 @@ fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> 
 fn authenticate_bearer_request(
     req: &Request,
     auth: &NotifyAuthConfig,
-    origin_did: Option<&str>,
+    origin_id: Option<&DidCoreId>,
     request_id: &str,
 ) -> Result<AuthenticatedNotifyCaller, AuthFailure> {
     if auth.require_message_signatures {
@@ -233,34 +242,34 @@ fn authenticate_bearer_request(
         });
     }
 
-    // Multi-tenant isolation: when `bind_bearer_to_origin_did` is set,
+    // Multi-tenant isolation: when `bind_bearer_to_origin_id` is set,
     // a gateway-wide bearer token is NOT enough — the caller must
     // declare an origin_id and present a bearer credential
     // configured for THAT principal. This blocks a stolen gateway
     // bearer token from being used to impersonate an arbitrary tenant
     // by spoofing the X-Arkret-Origin-Service-ID header.
-    if auth.bind_bearer_to_origin_did {
-        let Some(origin_did) = origin_did else {
+    if auth.bind_bearer_to_origin_id {
+        let Some(origin_id) = origin_id else {
             tracing::warn!(
                 request_id,
-                "rejecting /notify request: bind_bearer_to_origin_did requires origin_id"
+                "rejecting /notify request: bind_bearer_to_origin_id requires origin_id"
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
                 code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
-                message: "origin service DID is required for bearer authentication".to_owned(),
+                message: "origin service id is required for bearer authentication".to_owned(),
             });
         };
-        let Some(principal) = auth.service_principals.get(origin_did) else {
+        let Some(principal) = auth.service_principals.get(origin_id.as_str()) else {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
-                "rejecting /notify request: bind_bearer_to_origin_did requires a configured service_principal for the origin DID"
+                origin_id = %origin_id,
+                "rejecting /notify request: bind_bearer_to_origin_id requires a configured service_principal for the origin id"
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
                 code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
-                message: "origin service DID does not have a configured principal".to_owned(),
+                message: "origin service id does not have a configured principal".to_owned(),
             });
         };
         match bearer_state(
@@ -272,8 +281,8 @@ fn authenticate_bearer_request(
             BearerState::Missing => {
                 tracing::warn!(
                     request_id,
-                    origin_id = %origin_did,
-                    "rejecting /notify request without a bearer credential bound to the origin DID"
+                    origin_id = %origin_id,
+                    "rejecting /notify request without a bearer credential bound to the origin id"
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
@@ -284,25 +293,26 @@ fn authenticate_bearer_request(
             BearerState::Invalid => {
                 tracing::warn!(
                     request_id,
-                    origin_id = %origin_did,
-                    "rejecting /notify request: bearer credential is not bound to the declared origin DID"
+                    origin_id = %origin_id,
+                    "rejecting /notify request: bearer credential is not bound to the declared origin id"
                 );
                 return Err(AuthFailure {
                     status: StatusCode::UNAUTHORIZED,
                     code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
-                    message: "bearer service token is not bound to the declared origin service DID"
+                    message: "bearer service token is not bound to the declared origin service id"
                         .to_owned(),
                 });
             }
         }
-        verify_destination_id(req, auth, origin_did, request_id)?;
+        let destination_id = verify_destination_id(req, auth, origin_id, request_id)?;
         let allow_plaintext_metadata = auth
             .plaintext_metadata_service_ids
             .iter()
-            .any(|candidate| candidate == origin_did)
+            .any(|candidate| candidate == origin_id.as_str())
             || (principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal));
         return Ok(AuthenticatedNotifyCaller {
-            origin_id: origin_did.to_owned(),
+            origin_id: Some(origin_id.clone()),
+            destination_id,
             allow_plaintext_metadata,
         });
     }
@@ -333,38 +343,39 @@ fn authenticate_bearer_request(
         }
     }
 
-    let origin_did = origin_did.ok_or_else(|| AuthFailure {
+    let origin_id = origin_id.ok_or_else(|| AuthFailure {
         status: StatusCode::FORBIDDEN,
         code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-        message: "origin service DID is required".to_owned(),
+        message: "origin service id is required".to_owned(),
     })?;
 
     if !auth.trusted_service_ids.is_empty()
         && !auth
             .trusted_service_ids
             .iter()
-            .any(|candidate| candidate == origin_did)
+            .any(|candidate| candidate == origin_id.as_str())
     {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
-            "rejecting /notify request from non-allowlisted service DID"
+            origin_id = %origin_id,
+            "rejecting /notify request from non-allowlisted service id"
         );
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-            message: "origin service DID is not allowlisted".to_owned(),
+            message: "origin service id is not allowlisted".to_owned(),
         });
     }
 
-    verify_destination_id(req, auth, origin_did, request_id)?;
+    let destination_id = verify_destination_id(req, auth, origin_id, request_id)?;
 
     let allow_plaintext_metadata = auth
         .plaintext_metadata_service_ids
         .iter()
-        .any(|candidate| candidate == origin_did);
+        .any(|candidate| candidate == origin_id.as_str());
     Ok(AuthenticatedNotifyCaller {
-        origin_id: origin_did.to_owned(),
+        origin_id: Some(origin_id.clone()),
+        destination_id,
         allow_plaintext_metadata,
     })
 }

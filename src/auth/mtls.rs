@@ -1,15 +1,16 @@
 use std::collections::HashSet;
 
+use arkret_wire::DidCoreId;
 use salvo::http::StatusCode;
 use salvo::prelude::Request;
 
 use super::AuthFailure;
-use super::helpers::{is_truthy, required_header};
+use super::helpers::{is_truthy, optional_header};
 use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
 
 pub(super) fn verify_principal_service_kind(
     principal: &NotifyServicePrincipalConfig,
-    origin_did: &str,
+    origin_id: &DidCoreId,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
     let Some(service_kind) = principal
@@ -30,7 +31,7 @@ pub(super) fn verify_principal_service_kind(
 
     tracing::warn!(
         request_id,
-        origin_id = %origin_did,
+        origin_id = %origin_id,
         service_kind,
         "rejecting /notify request from service type that is not delegated for push notify"
     );
@@ -44,9 +45,9 @@ pub(super) fn verify_principal_service_kind(
 pub(super) fn verify_destination_id(
     req: &Request,
     auth: &NotifyAuthConfig,
-    origin_did: &str,
+    origin_id: &DidCoreId,
     request_id: &str,
-) -> Result<(), AuthFailure> {
+) -> Result<Option<DidCoreId>, AuthFailure> {
     let expected = auth.gateway_service_core_id().map_err(|error| {
         tracing::error!(request_id, %error, "invalid configured gateway service identity");
         AuthFailure {
@@ -55,19 +56,27 @@ pub(super) fn verify_destination_id(
             message: "gateway service identity is invalid".to_owned(),
         }
     })?;
+    let destination_id = optional_header(req, super::DESTINATION_SERVICE_ID_HEADER)
+        .map(DidCoreId::new)
+        .transpose()
+        .map_err(|_| AuthFailure {
+            status: StatusCode::BAD_REQUEST,
+            code: arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+            message: "Destination-Service-ID must be a service core id".to_owned(),
+        })?;
     let Some(expected) = expected.as_ref() else {
-        return Ok(());
+        return Ok(destination_id);
     };
-    let destination_did = required_header(
-        req,
-        super::DESTINATION_SERVICE_ID_HEADER,
-        "destination service DID is required",
-    )?;
-    if destination_did != expected.as_str() {
+    let destination_id = destination_id.ok_or_else(|| AuthFailure {
+        status: StatusCode::FORBIDDEN,
+        code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
+        message: "destination service id is required".to_owned(),
+    })?;
+    if destination_id != *expected {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
-            destination_id = %destination_did,
+            origin_id = %origin_id,
+            destination_id = %destination_id,
             expected_destination_id = %expected,
             "rejecting /notify request for a different gateway service core id"
         );
@@ -77,14 +86,14 @@ pub(super) fn verify_destination_id(
             message: "destination service id does not match this gateway".to_owned(),
         });
     }
-    Ok(())
+    Ok(Some(destination_id))
 }
 
 pub(super) fn verify_mtls_profile(
     req: &Request,
     auth: &NotifyAuthConfig,
     principal: &NotifyServicePrincipalConfig,
-    origin_did: &str,
+    origin_id: &DidCoreId,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
     if !principal.require_mtls {
@@ -100,7 +109,7 @@ pub(super) fn verify_mtls_profile(
     if !verified {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
+            origin_id = %origin_id,
             "rejecting /notify request without verified mTLS client certificate"
         );
         return Err(AuthFailure {
@@ -112,7 +121,7 @@ pub(super) fn verify_mtls_profile(
     let Some(fingerprint) = fingerprint else {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
+            origin_id = %origin_id,
             "rejecting /notify request without mTLS certificate fingerprint"
         );
         return Err(AuthFailure {
@@ -129,7 +138,7 @@ pub(super) fn verify_mtls_profile(
     {
         tracing::warn!(
             request_id,
-            origin_id = %origin_did,
+            origin_id = %origin_id,
             certificate_fingerprint = %fingerprint,
             "rejecting /notify request with unexpected mTLS certificate fingerprint"
         );
@@ -147,7 +156,7 @@ pub(super) fn verify_mtls_profile(
         if observed_dn.as_deref() != Some(expected.as_str()) {
             tracing::warn!(
                 request_id,
-                origin_id = %origin_did,
+                origin_id = %origin_id,
                 observed_subject_dn = %observed_dn.as_deref().unwrap_or("<missing>"),
                 expected_subject_dn = %expected,
                 "rejecting /notify request with unexpected mTLS Subject DN"
@@ -179,7 +188,7 @@ pub(super) fn verify_mtls_profile(
             if !observed_sans.contains(&required) {
                 tracing::warn!(
                     request_id,
-                    origin_id = %origin_did,
+                    origin_id = %origin_id,
                     expected_san = %required,
                     "rejecting /notify request whose mTLS certificate is missing a required SAN"
                 );

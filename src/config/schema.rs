@@ -225,7 +225,7 @@ fn notify_auth_schema() -> Value {
                 "default": false,
                 "description": "When true, refuses to start in profiles that allow anonymous or bearer-only auth without HTTP Message Signature/mTLS."
             },
-            "bind_bearer_to_origin_did": {
+            "bind_bearer_to_origin_id": {
                 "type": "boolean",
                 "default": false,
                 "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_id."

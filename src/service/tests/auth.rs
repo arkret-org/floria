@@ -200,7 +200,7 @@ async fn notify_rejects_bearer_without_origin_id() {
     let body = assert_notify_error(&mut response, "capability_denied", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("origin service DID is required")
+        json!("origin service id is required")
     );
 }
 
@@ -239,7 +239,7 @@ async fn notify_rejects_non_allowlisted_origin_id() {
     let body = assert_notify_error(&mut response, "capability_denied", true).await;
     assert_eq!(
         body["error"]["message"],
-        json!("origin service DID is not allowlisted")
+        json!("origin service id is not allowlisted")
     );
 }
 
@@ -275,6 +275,45 @@ async fn notify_rejects_did_in_source_service_id_header() {
     assert_eq!(
         body["error"]["message"],
         json!("Source-Service-ID must be a service core id")
+    );
+}
+
+#[tokio::test]
+async fn notify_rejects_did_in_destination_service_id_header() {
+    let service = test_service_with_auth(
+        vec![(
+            "com.example.app",
+            Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
+        )],
+        notify_auth_config(),
+    );
+
+    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
+        .add_header("authorization", "Bearer secret-token", true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
+        .add_header(
+            DESTINATION_SERVICE_ID_HEADER,
+            "did:web:push.example.com",
+            true,
+        )
+        .json(&payload(vec![device("com.example.app", "accept")]))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+    let body = assert_notify_error(&mut response, "schema_violation", true).await;
+    assert_eq!(
+        body["error"]["message"],
+        json!("Destination-Service-ID must be a service core id")
     );
 }
 

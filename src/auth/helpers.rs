@@ -45,21 +45,6 @@ pub(super) fn optional_header(req: &Request, name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(super) fn required_header(
-    req: &Request,
-    name: &str,
-    missing_message: &str,
-) -> Result<String, AuthFailure> {
-    req.header::<String>(name)
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| AuthFailure {
-            status: StatusCode::FORBIDDEN,
-            code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
-            message: missing_message.to_owned(),
-        })
-}
-
 pub(super) fn authority(req: &Request) -> Result<String, AuthFailure> {
     req.header::<String>("host")
         .or_else(|| req.uri().authority().map(|value| value.to_string()))

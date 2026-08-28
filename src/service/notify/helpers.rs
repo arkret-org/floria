@@ -9,9 +9,7 @@ use serde_json::{Map, Value};
 
 use super::super::metrics::{finish_error, finish_json};
 use crate::audit::AuditEvent;
-use crate::auth::{
-    AuthenticatedNotifyCaller, DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER,
-};
+use crate::auth::AuthenticatedNotifyCaller;
 use crate::dedup::request_hash;
 use crate::models::{
     DeliveryReceipt, DeviceExt, NotificationExt, NotifyDispatchResult, RejectedDevice,
@@ -47,6 +45,7 @@ pub(super) fn notify_rate_limit_checks(
     req: &Request,
     state: &AppState,
     notification: &PushNotificationEnvelope,
+    origin_id: Option<&arkret_wire::DidCoreId>,
 ) -> Vec<NotifyRateLimitCheck> {
     let Some(rate_limiter) = state.notify_rate_limiter.as_ref() else {
         return vec![];
@@ -55,11 +54,10 @@ pub(super) fn notify_rate_limit_checks(
     let mut checks = Vec::new();
 
     if let Some(limit) = config.per_origin_service.filter(|limit| *limit > 0) {
-        let subject = req
-            .header::<String>(SOURCE_SERVICE_ID_HEADER)
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "<missing>".to_owned());
+        let subject = origin_id
+            .map(arkret_wire::DidCoreId::as_str)
+            .unwrap_or("anonymous")
+            .to_owned();
         checks.push(NotifyRateLimitCheck {
             scope: "origin_service",
             subject,
@@ -137,14 +135,6 @@ pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
-}
-
-pub(super) fn request_destination_id(req: &Request) -> Option<String> {
-    // `push-notifications.md` §5.1: destination service DID rides the
-    // `Destination-Service-ID` transport header only.
-    req.header::<String>(DESTINATION_SERVICE_ID_HEADER)
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
 
 fn audit_event_type(event: &AuditEvent) -> &'static str {
