@@ -584,7 +584,8 @@ struct OppoAuthData {
     #[serde(default)]
     auth_token: Option<String>,
     #[serde(default)]
-    create_time: Option<Value>,
+    #[serde(rename = "create_time")]
+    _create_time: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -625,6 +626,7 @@ mod tests {
     }
 
     fn pushkin(vendor: OppoVendor) -> OppoPushkin {
+        crate::ensure_rustls_crypto_provider();
         OppoPushkin {
             matcher: AppMatcher::new("com.example.oppo".to_owned()).unwrap(),
             vendor,
@@ -727,7 +729,7 @@ mod tests {
             response
                 .data
                 .as_ref()
-                .and_then(|data| data.create_time.as_ref()),
+                .and_then(|data| data._create_time.as_ref()),
             Some(&Value::String("1".to_owned()))
         );
 
