@@ -556,10 +556,6 @@ struct OppoAuthResponse {
     #[serde(default)]
     message: Option<String>,
     #[serde(default)]
-    msg: Option<String>,
-    #[serde(default, alias = "authToken")]
-    auth_token: Option<String>,
-    #[serde(default)]
     data: Option<OppoAuthData>,
 }
 
@@ -569,48 +565,24 @@ impl OppoAuthResponse {
     }
 
     fn message(self) -> Option<String> {
-        self.message.or(self.msg)
+        self.message
     }
 
     fn auth_token(&self) -> Option<String> {
-        self.auth_token
-            .clone()
-            .or_else(|| self.data.as_ref().and_then(|data| data.auth_token.clone()))
+        self.data
+            .as_ref()
+            .and_then(|data| data.auth_token.clone())
     }
 
     fn expires_in(&self) -> Duration {
-        self.data
-            .as_ref()
-            .and_then(OppoAuthData::expires_in)
-            .unwrap_or_else(|| Duration::from_secs(OPPO_TOKEN_CACHE_SECS))
+        Duration::from_secs(OPPO_TOKEN_CACHE_SECS)
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct OppoAuthData {
-    #[serde(default, alias = "authToken")]
+    #[serde(default)]
     auth_token: Option<String>,
-    #[serde(default, alias = "expiresIn")]
-    expires_in_secs: Option<u64>,
-    #[serde(default, alias = "expireTime", alias = "expiredTime")]
-    expire_time: Option<u64>,
-}
-
-impl OppoAuthData {
-    fn expires_in(&self) -> Option<Duration> {
-        if let Some(expires_in_secs) = self.expires_in_secs {
-            return Some(Duration::from_secs(expires_in_secs.max(60)));
-        }
-        let expire_time = self.expire_time?;
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()?
-            .as_millis() as u64;
-        if expire_time <= now {
-            return Some(Duration::from_secs(60));
-        }
-        Some(Duration::from_millis(expire_time - now))
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -619,8 +591,6 @@ struct OppoSendResponse {
     code: Option<i64>,
     #[serde(default)]
     message: Option<String>,
-    #[serde(default)]
-    msg: Option<String>,
 }
 
 impl OppoSendResponse {
@@ -634,7 +604,7 @@ impl OppoSendResponse {
     }
 
     fn message(&self) -> Option<String> {
-        self.message.clone().or_else(|| self.msg.clone())
+        self.message.clone()
     }
 }
 
@@ -736,5 +706,23 @@ mod tests {
     #[test]
     fn oneplus_vendor_name_is_distinct() {
         assert_eq!(pushkin(OppoVendor::Oneplus).vendor_name(), "OnePlus Push");
+    }
+
+    #[test]
+    fn auth_response_uses_canonical_oppo_shape() {
+        let response: OppoAuthResponse = serde_json::from_str(
+            r#"{"code":0,"message":"success","data":{"auth_token":"token-value","create_time":"1"}}"#,
+        )
+        .unwrap();
+
+        assert!(response.is_success());
+        assert_eq!(response.auth_token().as_deref(), Some("token-value"));
+        assert_eq!(response.expires_in(), Duration::from_secs(OPPO_TOKEN_CACHE_SECS));
+
+        let legacy: OppoAuthResponse = serde_json::from_str(
+            r#"{"code":0,"authToken":"legacy","data":{"authToken":"legacy"}}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.auth_token(), None);
     }
 }
