@@ -30,7 +30,7 @@ pub(super) fn verify_principal_service_kind(
 
     tracing::warn!(
         request_id,
-        origin_service_id = %origin_did,
+        origin_id = %origin_did,
         service_kind,
         "rejecting /notify request from service type that is not delegated for push notify"
     );
@@ -41,7 +41,7 @@ pub(super) fn verify_principal_service_kind(
     })
 }
 
-pub(super) fn verify_destination_service_id(
+pub(super) fn verify_destination_id(
     req: &Request,
     auth: &NotifyAuthConfig,
     origin_did: &str,
@@ -66,9 +66,9 @@ pub(super) fn verify_destination_service_id(
     if destination_did != expected.as_str() {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
-            destination_service_id = %destination_did,
-            expected_destination_service_id = %expected,
+            origin_id = %origin_did,
+            destination_id = %destination_did,
+            expected_destination_id = %expected,
             "rejecting /notify request for a different gateway service core id"
         );
         return Err(AuthFailure {
@@ -100,7 +100,7 @@ pub(super) fn verify_mtls_profile(
     if !verified {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             "rejecting /notify request without verified mTLS client certificate"
         );
         return Err(AuthFailure {
@@ -112,7 +112,7 @@ pub(super) fn verify_mtls_profile(
     let Some(fingerprint) = fingerprint else {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             "rejecting /notify request without mTLS certificate fingerprint"
         );
         return Err(AuthFailure {
@@ -129,7 +129,7 @@ pub(super) fn verify_mtls_profile(
     {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             certificate_fingerprint = %fingerprint,
             "rejecting /notify request with unexpected mTLS certificate fingerprint"
         );
@@ -147,7 +147,7 @@ pub(super) fn verify_mtls_profile(
         if observed_dn.as_deref() != Some(expected.as_str()) {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 observed_subject_dn = %observed_dn.as_deref().unwrap_or("<missing>"),
                 expected_subject_dn = %expected,
                 "rejecting /notify request with unexpected mTLS Subject DN"
@@ -179,7 +179,7 @@ pub(super) fn verify_mtls_profile(
             if !observed_sans.contains(&required) {
                 tracing::warn!(
                     request_id,
-                    origin_service_id = %origin_did,
+                    origin_id = %origin_did,
                     expected_san = %required,
                     "rejecting /notify request whose mTLS certificate is missing a required SAN"
                 );

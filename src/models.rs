@@ -360,8 +360,8 @@ mod tests {
         for field in [
             "operation_id",
             "idempotency_key",
-            "origin_service_id",
-            "destination_service_id",
+            "origin_id",
+            "destination_id",
         ] {
             let err =
                 serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({

@@ -139,7 +139,7 @@ pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub(super) fn request_destination_service_id(req: &Request) -> Option<String> {
+pub(super) fn request_destination_id(req: &Request) -> Option<String> {
     // `push-notifications.md` §5.1: destination service DID rides the
     // `Destination-Service-ID` transport header only.
     req.header::<String>(DESTINATION_SERVICE_ID_HEADER)
@@ -191,7 +191,7 @@ async fn record_rejected_devices_audit(
     };
     let event = AuditEvent::RejectedDevices {
         request_id: request_id.to_owned(),
-        origin_service_id: caller.origin_service_id.clone(),
+        origin_id: caller.origin_id.clone(),
         devices: rejected.iter().map(rejected_device_for_audit).collect(),
     };
     match sink.record(&event).await {

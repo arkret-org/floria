@@ -8,10 +8,10 @@ use crate::models::DeviceExt;
 
 /// `push-notifications.md` §5.1: the originating service core id rides the `Source-Service-ID`
 /// transport header (`SOURCE_SERVICE_ID_HEADER`), which the auth layer
-/// already resolved into `caller.origin_service_id`. We keep a
+/// already resolved into `caller.origin_id`. We keep a
 /// defense-in-depth check that the header is present and consistent with
 /// the authenticated caller rather than reading a (now removed) body field.
-pub(super) fn validate_origin_service_id(
+pub(super) fn validate_origin_id(
     req: &Request,
     caller: &AuthenticatedNotifyCaller,
     auth_enabled: bool,
@@ -19,7 +19,7 @@ pub(super) fn validate_origin_service_id(
     if !auth_enabled {
         return Ok(());
     }
-    let Some(origin_service_id) = req
+    let Some(origin_id) = req
         .header::<String>(crate::auth::SOURCE_SERVICE_ID_HEADER)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
@@ -30,7 +30,7 @@ pub(super) fn validate_origin_service_id(
             message: "Source-Service-ID header is required".to_owned(),
         });
     };
-    if origin_service_id != caller.origin_service_id {
+    if origin_id != caller.origin_id {
         return Err(AuthFailure {
             status: StatusCode::FORBIDDEN,
             code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
@@ -43,12 +43,12 @@ pub(super) fn validate_origin_service_id(
 /// `push-notifications.md` §5.1: the destination service core id rides the
 /// `Destination-Service-ID` transport header only (the body field is
 /// removed). The recipient-service-id scope binding reuses the same
-/// header value — `push_target_id` is a per-`(recipient_service_id, ...)`
+/// header value — `push_target_id` is a per-`(recipient_id, ...)`
 /// pairwise pseudonym, so the gateway MUST enforce that the declared
 /// destination equals the core projection of its own `gateway_service_did` (spec
 /// push-notifications.md §3.1, commit 0a5ab85) rather than treat it as
 /// decorative.
-pub(super) fn validate_destination_service_id(
+pub(super) fn validate_destination_id(
     req: &Request,
     auth: &NotifyAuthConfig,
     auth_enabled: bool,

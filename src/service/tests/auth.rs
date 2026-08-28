@@ -176,7 +176,7 @@ async fn notify_rejects_query_string_auth_material() {
 }
 
 #[tokio::test]
-async fn notify_rejects_bearer_without_origin_service_id() {
+async fn notify_rejects_bearer_without_origin_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -205,7 +205,7 @@ async fn notify_rejects_bearer_without_origin_service_id() {
 }
 
 #[tokio::test]
-async fn notify_rejects_non_allowlisted_origin_service_id() {
+async fn notify_rejects_non_allowlisted_origin_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",
@@ -501,7 +501,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
 }
 
 #[tokio::test]
-async fn notify_rejects_mismatched_destination_service_id() {
+async fn notify_rejects_mismatched_destination_id() {
     let service = test_service_with_auth(
         vec![(
             "com.example.app",

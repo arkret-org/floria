@@ -228,7 +228,7 @@ fn notify_auth_schema() -> Value {
             "bind_bearer_to_origin_did": {
                 "type": "boolean",
                 "default": false,
-                "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_id."
+                "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_id."
             },
             "service_principals": {
                 "type": "object",

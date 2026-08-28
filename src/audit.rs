@@ -20,9 +20,9 @@ pub enum AuditEvent {
     #[serde(rename = "org.arkret.floria.audit.policy_access")]
     PolicyAccess {
         request_id: String,
-        origin_service_id: String,
+        origin_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        destination_service_id: Option<String>,
+        destination_id: Option<String>,
         access_kind: String,
     },
     // Floria's audit-sink record is an implementation event, not an Arkret
@@ -31,7 +31,7 @@ pub enum AuditEvent {
     #[serde(rename = "org.arkret.floria.audit.push_rejected_devices")]
     RejectedDevices {
         request_id: String,
-        origin_service_id: String,
+        origin_id: String,
         devices: Vec<RejectedDevice>,
     },
 }
@@ -159,8 +159,8 @@ mod tests {
         let sink = JsonlAuditSink::new(&path);
         let event = AuditEvent::PolicyAccess {
             request_id: "req-1".to_owned(),
-            origin_service_id: "ak:did_core:web:sync.example.com".to_owned(),
-            destination_service_id: Some("ak:did_core:web:push.example.com".to_owned()),
+            origin_id: "ak:did_core:web:sync.example.com".to_owned(),
+            destination_id: Some("ak:did_core:web:push.example.com".to_owned()),
             access_kind: "e2ee_late_recovery".to_owned(),
         };
 

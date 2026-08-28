@@ -171,7 +171,7 @@
             },
             "bind_bearer_to_origin_did": {
               "default": false,
-              "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_service_id.",
+              "description": "When true, gateway-wide bearer tokens are rejected; the bearer must match a per-principal token for the declared origin_id.",
               "type": "boolean"
             },
             "gateway_service_did": {

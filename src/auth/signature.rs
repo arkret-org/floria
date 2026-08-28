@@ -36,7 +36,7 @@ pub(super) fn verify_message_signature(
     let key_id = principal.signature_verification_method.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             "rejecting /notify request because principal is missing signature_verification_method"
         );
         AuthFailure {
@@ -51,7 +51,7 @@ pub(super) fn verify_message_signature(
         .ok_or_else(|| {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request because principal is missing signature_public_key_hex"
             );
             AuthFailure {
@@ -373,7 +373,7 @@ pub(super) async fn verify_nonce_freshness(
     let Some(nonce_store) = nonce_store else {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             "rejecting /notify request: nonce store is required for signed requests"
         );
         return Err(AuthFailure {
@@ -408,7 +408,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::Replayed => {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request as a Signature replay within the expiry window"
             );
             Err(AuthFailure {
@@ -420,7 +420,7 @@ pub(super) async fn verify_nonce_freshness(
         NonceCheck::BackendUnavailable => {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request: nonce store backend unavailable (strict policy)"
             );
             Err(AuthFailure {

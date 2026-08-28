@@ -39,7 +39,7 @@ pub struct NotifyAuthConfig {
     /// fallback when no signature is present on a known principal).
     pub production_mode: bool,
     /// When true, a bearer-only request MUST present a recognised
-    /// origin_service_id and the gateway will only accept the request
+    /// origin_id and the gateway will only accept the request
     /// if that service core id has a configured `service_principal` entry whose
     /// `bearer_tokens` / `bearer_token_hashes` match. This blocks a
     /// stolen gateway-wide bearer token from being used to impersonate

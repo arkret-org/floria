@@ -137,7 +137,7 @@ fn sanitizer_rejects_did_literal() {
 #[test]
 fn build_blind_provider_data_emits_only_allowed_fields() {
     // Drive build_blind_provider_data with a fully-populated PushNotificationEnvelope
-    // (via serde_json::from_value to avoid the recipient_service_id /
+    // (via serde_json::from_value to avoid the recipient_id /
     // delivery_binding_frontier struct-literal hazard) and assert that
     // only the SDK-allowed blind fields make it out.
     let notification: PushNotificationEnvelope = serde_json::from_value(json!({
@@ -448,8 +448,8 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
     });
     let obj = notification.as_object_mut().unwrap();
     obj.extend(extra_notification_fields);
-    // The push notify endpoint schema keeps transport fields (operation_id / origin_service_id /
-    // destination_service_id) ride HTTP headers, not the body.
+    // The push notify endpoint schema keeps transport fields (operation_id / origin_id /
+    // destination_id) ride HTTP headers, not the body.
     json!({
         "notification": notification,
     })

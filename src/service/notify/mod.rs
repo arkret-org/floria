@@ -31,12 +31,11 @@ use helpers::{
     cache_success_response, delivery_receipt, enqueue_retry, finish_standard_notify_json,
     mark_delivered_devices, normalized_notify_dedup_key, notify_rate_limit_checks,
     optional_owned_string, record_rejected_devices_audit_or_finish, record_required_audit_event,
-    rejected_device, request_destination_service_id, resolve_idempotency_key,
+    rejected_device, request_destination_id, resolve_idempotency_key,
 };
 use validation::{
-    BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_service_id,
-    validate_notification_contract, validate_origin_service_id,
-    validate_plaintext_identity_metadata,
+    BLIND_PROFILE_PLAINTEXT_REASON, VISIBLE_DEVICE_OPT_IN_REASON, validate_destination_id,
+    validate_notification_contract, validate_origin_id, validate_plaintext_identity_metadata,
 };
 
 /// Round 4 — `reason_code=historical_only` short-circuits soland's
@@ -249,7 +248,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     .await
     {
         Ok(caller) => {
-            span.record("caller", tracing::field::display(&caller.origin_service_id));
+            span.record("caller", tracing::field::display(&caller.origin_id));
             caller
         }
         Err(error) => {
@@ -287,7 +286,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // `push-notifications.md` §5.1: `operation_id` is determined by the URL path
     // (operationId `ak.edge.push.command.notify.v1`) and is no longer a body
     // field, so there is nothing to validate here.
-    if let Err(error) = validate_origin_service_id(req, &caller, state.notify_auth.enabled()) {
+    if let Err(error) = validate_origin_id(req, &caller, state.notify_auth.enabled()) {
         finish_error(
             res,
             error.status,
@@ -300,7 +299,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
     if let Err(error) =
-        validate_destination_service_id(req, &state.notify_auth, state.notify_auth.enabled())
+        validate_destination_id(req, &state.notify_auth, state.notify_auth.enabled())
     {
         finish_error(
             res,
@@ -438,8 +437,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         }
         let audit_event = AuditEvent::PolicyAccess {
             request_id: request_id.clone(),
-            origin_service_id: caller.origin_service_id.clone(),
-            destination_service_id: request_destination_service_id(req),
+            origin_id: caller.origin_id.clone(),
+            destination_id: request_destination_id(req),
             access_kind: access_kind.to_owned(),
         };
         if let Err(message) = record_required_audit_event(&state, &audit_event).await {

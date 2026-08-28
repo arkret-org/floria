@@ -19,7 +19,7 @@ pub use bearer::bearer_token_sha256_hex;
 pub(crate) use bearer::{BearerState, bearer_state};
 use helpers::{optional_header, reject_query_string_auth};
 pub use helpers::{redact_url_credentials, signature_public_key_hex};
-use mtls::{verify_destination_service_id, verify_mtls_profile, verify_principal_service_kind};
+use mtls::{verify_destination_id, verify_mtls_profile, verify_principal_service_kind};
 use signature::{
     has_signature_headers, verified_content_digest, verify_message_signature,
     verify_nonce_freshness,
@@ -33,7 +33,7 @@ const SIGNATURE_HEADER: &str = "signature";
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedNotifyCaller {
-    pub origin_service_id: String,
+    pub origin_id: String,
     /// Whether this caller is gated for the visible-notification
     /// profile (`ak.profile.push_gateway.visible_notification.v1`).
     ///
@@ -76,14 +76,14 @@ pub async fn authenticate_notify_request(
             });
         }
         return Ok(AuthenticatedNotifyCaller {
-            origin_service_id: "<anonymous>".to_owned(),
+            origin_id: "<anonymous>".to_owned(),
             allow_plaintext_metadata: false,
         });
     }
 
     let origin_did = optional_header(req, SOURCE_SERVICE_ID_HEADER);
-    if let Some(origin_service_id) = origin_did.as_ref()
-        && arkret_wire::DidCoreId::new(origin_service_id.clone()).is_err()
+    if let Some(origin_id) = origin_did.as_ref()
+        && arkret_wire::DidCoreId::new(origin_id.clone()).is_err()
     {
         return Err(AuthFailure {
             status: StatusCode::BAD_REQUEST,
@@ -96,13 +96,13 @@ pub async fn authenticate_notify_request(
         && let Some(principal) = auth.service_principals.get(origin_did)
     {
         verify_principal_service_kind(principal, origin_did, request_id)?;
-        verify_destination_service_id(req, auth, origin_did, request_id)?;
+        verify_destination_id(req, auth, origin_did, request_id)?;
         if let Some(expected_endpoint) = principal.service_endpoint.as_deref() {
             let target_uri = helpers::target_uri(req)?;
             if !target_uri.starts_with(expected_endpoint) {
                 tracing::warn!(
                     request_id,
-                    origin_service_id = %origin_did,
+                    origin_id = %origin_did,
                     expected_service_endpoint = %expected_endpoint,
                     target_uri = %target_uri,
                     "rejecting /notify request that does not match configured service endpoint"
@@ -124,7 +124,7 @@ pub async fn authenticate_notify_request(
         } else if auth.require_message_signatures {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request without required HTTP Message Signature"
             );
             return Err(AuthFailure {
@@ -138,7 +138,7 @@ pub async fn authenticate_notify_request(
             if auth.production_mode {
                 tracing::warn!(
                     request_id,
-                    origin_service_id = %origin_did,
+                    origin_id = %origin_did,
                     "rejecting /notify request: production_mode requires HTTP Message Signature or mTLS, bearer fallback is disabled"
                 );
                 return Err(AuthFailure {
@@ -158,7 +158,7 @@ pub async fn authenticate_notify_request(
         if !authenticated {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request without a valid principal credential"
             );
             return Err(AuthFailure {
@@ -182,7 +182,7 @@ pub async fn authenticate_notify_request(
         let allow_plaintext =
             principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal);
         return Ok(AuthenticatedNotifyCaller {
-            origin_service_id: origin_did.to_owned(),
+            origin_id: origin_did.to_owned(),
             allow_plaintext_metadata: allow_plaintext,
         });
     }
@@ -190,7 +190,7 @@ pub async fn authenticate_notify_request(
     if auth.production_mode {
         tracing::warn!(
             request_id,
-            origin_service_id = origin_did.as_deref().unwrap_or("<missing>"),
+            origin_id = origin_did.as_deref().unwrap_or("<missing>"),
             "rejecting /notify request: production_mode rejects gateway-wide bearer fallback"
         );
         return Err(AuthFailure {
@@ -235,7 +235,7 @@ fn authenticate_bearer_request(
 
     // Multi-tenant isolation: when `bind_bearer_to_origin_did` is set,
     // a gateway-wide bearer token is NOT enough — the caller must
-    // declare an origin_service_id and present a bearer credential
+    // declare an origin_id and present a bearer credential
     // configured for THAT principal. This blocks a stolen gateway
     // bearer token from being used to impersonate an arbitrary tenant
     // by spoofing the X-Arkret-Origin-Service-ID header.
@@ -243,7 +243,7 @@ fn authenticate_bearer_request(
         let Some(origin_did) = origin_did else {
             tracing::warn!(
                 request_id,
-                "rejecting /notify request: bind_bearer_to_origin_did requires origin_service_id"
+                "rejecting /notify request: bind_bearer_to_origin_did requires origin_id"
             );
             return Err(AuthFailure {
                 status: StatusCode::UNAUTHORIZED,
@@ -254,7 +254,7 @@ fn authenticate_bearer_request(
         let Some(principal) = auth.service_principals.get(origin_did) else {
             tracing::warn!(
                 request_id,
-                origin_service_id = %origin_did,
+                origin_id = %origin_did,
                 "rejecting /notify request: bind_bearer_to_origin_did requires a configured service_principal for the origin DID"
             );
             return Err(AuthFailure {
@@ -272,7 +272,7 @@ fn authenticate_bearer_request(
             BearerState::Missing => {
                 tracing::warn!(
                     request_id,
-                    origin_service_id = %origin_did,
+                    origin_id = %origin_did,
                     "rejecting /notify request without a bearer credential bound to the origin DID"
                 );
                 return Err(AuthFailure {
@@ -284,7 +284,7 @@ fn authenticate_bearer_request(
             BearerState::Invalid => {
                 tracing::warn!(
                     request_id,
-                    origin_service_id = %origin_did,
+                    origin_id = %origin_did,
                     "rejecting /notify request: bearer credential is not bound to the declared origin DID"
                 );
                 return Err(AuthFailure {
@@ -295,14 +295,14 @@ fn authenticate_bearer_request(
                 });
             }
         }
-        verify_destination_service_id(req, auth, origin_did, request_id)?;
+        verify_destination_id(req, auth, origin_did, request_id)?;
         let allow_plaintext_metadata = auth
             .plaintext_metadata_service_ids
             .iter()
             .any(|candidate| candidate == origin_did)
             || (principal.allow_plaintext_metadata && principal_is_plaintext_eligible(principal));
         return Ok(AuthenticatedNotifyCaller {
-            origin_service_id: origin_did.to_owned(),
+            origin_id: origin_did.to_owned(),
             allow_plaintext_metadata,
         });
     }
@@ -347,7 +347,7 @@ fn authenticate_bearer_request(
     {
         tracing::warn!(
             request_id,
-            origin_service_id = %origin_did,
+            origin_id = %origin_did,
             "rejecting /notify request from non-allowlisted service DID"
         );
         return Err(AuthFailure {
@@ -357,14 +357,14 @@ fn authenticate_bearer_request(
         });
     }
 
-    verify_destination_service_id(req, auth, origin_did, request_id)?;
+    verify_destination_id(req, auth, origin_did, request_id)?;
 
     let allow_plaintext_metadata = auth
         .plaintext_metadata_service_ids
         .iter()
         .any(|candidate| candidate == origin_did);
     Ok(AuthenticatedNotifyCaller {
-        origin_service_id: origin_did.to_owned(),
+        origin_id: origin_did.to_owned(),
         allow_plaintext_metadata,
     })
 }
