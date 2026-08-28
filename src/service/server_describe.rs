@@ -212,7 +212,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
         ],
         transport_bindings: vec![arkret_models_discovery::TransportBinding::HttpJson {
-            base_url: state.public_base_url.clone(),
+            base_uri: state.public_base_url.clone(),
             extension_profile_required: (),
         }],
         supported_features: vec!["ak.feature.notifications.v1".to_owned()],
