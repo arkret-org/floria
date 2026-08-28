@@ -112,7 +112,7 @@ mod tests {
     fn broadcast_wire_shape_round_trips() {
         let wire = serde_json::json!({
             "fanout_id": "fanout-1",
-            "actor_id": "did:web:alice.example",
+            "actor_id": "ak:did_core:web:alice.example",
             "devices": [
                 {"device_id": "device-a", "push_key_hash": "pkh_0123456789ab"},
                 {"device_id": "device-b"}
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn broadcast_defaults_devices_and_reason() {
         let broadcast: AccountDeactivateFanoutBroadcast = serde_json::from_value(
-            serde_json::json!({"fanout_id": "fanout-1", "actor_id": "did:web:alice.example"}),
+            serde_json::json!({"fanout_id": "fanout-1", "actor_id": "ak:did_core:web:alice.example"}),
         )
         .expect("minimal broadcast parses");
         assert!(broadcast.devices.is_empty());
@@ -146,7 +146,7 @@ mod tests {
         let result =
             serde_json::from_value::<AccountDeactivateFanoutBroadcast>(serde_json::json!({
                 "fanout_id": "fanout-1",
-                "actor_id": "did:web:alice.example",
+                "actor_id": "ak:did_core:web:alice.example",
                 "surprise": true
             }));
         assert!(result.is_err(), "unknown request field must fail closed");

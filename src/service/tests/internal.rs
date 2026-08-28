@@ -104,7 +104,7 @@ async fn internal_routes_fail_closed_when_auth_unconfigured() {
         TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_id": "did:web:alice.example",
+                "actor_id": "ak:did_core:web:alice.example",
                 "devices": []
             }))
             .send(&service)
@@ -115,9 +115,12 @@ async fn internal_routes_fail_closed_when_auth_unconfigured() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("service_unavailable"));
     assert_eq!(
-        body["error"]["message"],
+        body["type"],
+        json!("https://arkret.org/problems/service_unavailable")
+    );
+    assert_eq!(
+        body["detail"],
         json!("internal endpoint authentication is not configured")
     );
 }
@@ -130,16 +133,19 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
         TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_id": "did:web:alice.example",
+                "actor_id": "ak:did_core:web:alice.example",
                 "devices": []
             }))
             .send(&service)
             .await;
     assert_eq!(missing.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let missing_body: Value = missing.take_json().await.unwrap();
-    assert_eq!(missing_body["error"]["code"], json!("unauthenticated"));
     assert_eq!(
-        missing_body["error"]["message"],
+        missing_body["type"],
+        json!("https://arkret.org/problems/unauthenticated")
+    );
+    assert_eq!(
+        missing_body["detail"],
         json!("missing internal bearer token")
     );
 
@@ -148,16 +154,19 @@ async fn internal_routes_reject_missing_and_invalid_bearer() {
             .bearer_auth("wrong-token")
             .json(&json!({
                 "fanout_id": "fanout-1",
-                "actor_id": "did:web:alice.example",
+                "actor_id": "ak:did_core:web:alice.example",
                 "devices": []
             }))
             .send(&service)
             .await;
     assert_eq!(invalid.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let invalid_body: Value = invalid.take_json().await.unwrap();
-    assert_eq!(invalid_body["error"]["code"], json!("unauthenticated"));
     assert_eq!(
-        invalid_body["error"]["message"],
+        invalid_body["type"],
+        json!("https://arkret.org/problems/unauthenticated")
+    );
+    assert_eq!(
+        invalid_body["detail"],
         json!("invalid internal bearer token")
     );
 }
@@ -173,7 +182,7 @@ async fn internal_routes_accept_hashed_bearer_token() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "devices": []
     }))
     .send(&service)
@@ -184,9 +193,12 @@ async fn internal_routes_accept_hashed_bearer_token() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("service_unavailable"));
     assert_eq!(
-        body["error"]["message"],
+        body["type"],
+        json!("https://arkret.org/problems/service_unavailable")
+    );
+    assert_eq!(
+        body["detail"],
         json!("in-process broadcast bus is not configured on this push gateway")
     );
 }
@@ -200,7 +212,10 @@ async fn status_requires_internal_bearer() {
         .await;
     assert_eq!(status.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let status_body: Value = status.take_json().await.unwrap();
-    assert_eq!(status_body["error"]["code"], json!("unauthenticated"));
+    assert_eq!(
+        status_body["type"],
+        json!("https://arkret.org/problems/unauthenticated")
+    );
 }
 
 #[tokio::test]
@@ -213,7 +228,10 @@ async fn dead_letters_requires_internal_bearer() {
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("unauthenticated"));
+    assert_eq!(
+        body["type"],
+        json!("https://arkret.org/problems/unauthenticated")
+    );
 }
 
 #[tokio::test]
@@ -232,9 +250,12 @@ async fn dead_letters_returns_503_when_retry_queue_disabled() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("service_unavailable"));
     assert_eq!(
-        body["error"]["message"],
+        body["type"],
+        json!("https://arkret.org/problems/service_unavailable")
+    );
+    assert_eq!(
+        body["detail"],
         json!("notify retry queue is disabled; dead-letter snapshot unavailable")
     );
 }
@@ -330,7 +351,10 @@ async fn dead_letters_rejects_invalid_limit() {
             "limit={bad} must be rejected"
         );
         let body: Value = response.take_json().await.unwrap();
-        assert_eq!(body["error"]["code"], json!("schema_violation"));
+        assert_eq!(
+            body["type"],
+            json!("https://arkret.org/problems/schema_violation")
+        );
     }
 }
 
@@ -344,7 +368,7 @@ async fn account_deactivate_fanout_completes_for_drained_devices() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "devices": [
             {"device_id": "device-a"},
             {"device_id": "device-b"}
@@ -368,7 +392,7 @@ async fn account_deactivate_fanout_is_idempotent_across_retries() {
 
     let payload = json!({
         "fanout_id": "fanout-1",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "devices": [{"device_id": "device-a"}]
     });
 
@@ -406,7 +430,7 @@ async fn account_deactivate_fanout_reports_drained_queue_count() {
 
     let payload = json!({
         "fanout_id": "fanout-drain-1",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "devices": [
             {"device_id": "device-a", "push_key_hash": "hash-a"},
             {"device_id": "device-b"}
@@ -458,7 +482,10 @@ async fn account_deactivate_fanout_rejects_missing_actor_id() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("schema_violation"));
+    assert_eq!(
+        body["type"],
+        json!("https://arkret.org/problems/schema_violation")
+    );
 }
 
 #[tokio::test]
@@ -470,7 +497,7 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
     ))
     .json(&json!({
         "fanout_id": "fanout-1",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "devices": []
     }))
     .send(&service)
@@ -481,5 +508,8 @@ async fn account_deactivate_fanout_returns_503_when_ledger_unwired() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("service_unavailable"));
+    assert_eq!(
+        body["type"],
+        json!("https://arkret.org/problems/service_unavailable")
+    );
 }

@@ -74,7 +74,7 @@ mod tests {
         let ack = bus
             .account_deactivate_fanout(&AccountDeactivateFanoutBroadcast {
                 fanout_id: "fanout-1".to_owned(),
-                actor_id: "did:web:alice.example".to_owned(),
+                actor_id: "ak:did_core:web:alice.example".to_owned(),
                 devices: vec![DeactivateFanoutDevice {
                     device_id: "device-a".to_owned(),
                     push_key_hash: None,

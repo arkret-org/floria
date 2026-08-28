@@ -35,7 +35,10 @@ async fn sanitizer_rejects_binding_proof_signature() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
     let body = response.take_json::<Value>().await.unwrap();
-    assert_eq!(body["error"]["code"], json!("schema_violation"));
+    assert_eq!(
+        body["type"],
+        json!("https://arkret.org/problems/schema_violation")
+    );
 }
 
 #[tokio::test]

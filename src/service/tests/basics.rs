@@ -53,7 +53,7 @@ async fn notify_endpoint_accepts_active_payload_shape() {
 
 #[tokio::test]
 async fn describe_endpoint_advertises_gateway_profile() {
-    let service = test_service(vec![(
+    let service = describe_test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
@@ -95,7 +95,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
         body["limits"]["x_floria_plaintext_visibility_class"],
         json!("blind-wakeup-only")
     );
-    assert_eq!(body["limits"]["x_floria_auth_modes"], json!(["anonymous"]));
+    assert_eq!(body["limits"]["x_floria_auth_modes"], json!(["service-id"]));
     assert_eq!(
         body["limits"]["max_request_size_bytes"],
         json!(MAX_REQUEST_SIZE)
@@ -119,8 +119,70 @@ async fn describe_endpoint_advertises_gateway_profile() {
 }
 
 #[tokio::test]
+async fn describe_fails_closed_when_gateway_service_did_is_missing() {
+    let service = test_service(vec![]);
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code,
+        Some(StatusCode::INTERNAL_SERVER_ERROR)
+    );
+    let body = response.take_json::<Value>().await.unwrap();
+    assert_eq!(
+        body["type"],
+        json!(format!(
+            "https://arkret.org/problems/{}",
+            arkret_wire::ErrorCode::INTERNAL_ERROR
+        ))
+    );
+    assert_eq!(
+        body["detail"],
+        json!("gateway service resolution is not configured")
+    );
+}
+
+#[tokio::test]
+async fn describe_fails_closed_when_gateway_service_did_is_invalid() {
+    let mut auth = NotifyAuthConfig::default();
+    auth.gateway_service_did = Some("not-a-did".to_owned());
+    let service = test_service_with_auth(vec![], auth);
+    let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+            true,
+        )
+        .send(&service)
+        .await;
+
+    assert_eq!(
+        response.status_code,
+        Some(StatusCode::INTERNAL_SERVER_ERROR)
+    );
+    let body = response.take_json::<Value>().await.unwrap();
+    assert_eq!(
+        body["type"],
+        json!(format!(
+            "https://arkret.org/problems/{}",
+            arkret_wire::ErrorCode::INTERNAL_ERROR
+        ))
+    );
+    assert_eq!(
+        body["detail"],
+        json!("gateway service resolution is not configured")
+    );
+}
+
+#[tokio::test]
 async fn operation_selector_is_required_and_route_bound_before_handlers() {
-    let service = test_service(vec![(
+    let service = describe_test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
@@ -131,8 +193,11 @@ async fn operation_selector_is_required_and_route_bound_before_handlers() {
     assert_eq!(missing.status_code, Some(StatusCode::BAD_REQUEST));
     let missing_body = missing.take_json::<Value>().await.unwrap();
     assert_eq!(
-        missing_body["error"]["code"],
-        arkret_wire::ErrorCode::OPERATION_SELECTOR_REQUIRED
+        missing_body["type"],
+        json!(format!(
+            "https://arkret.org/problems/{}",
+            arkret_wire::ErrorCode::OPERATION_SELECTOR_REQUIRED
+        ))
     );
 
     let mut mismatch = TestClient::get("http://127.0.0.1/_arkret/describe")
@@ -146,8 +211,11 @@ async fn operation_selector_is_required_and_route_bound_before_handlers() {
     assert_eq!(mismatch.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
     let mismatch_body = mismatch.take_json::<Value>().await.unwrap();
     assert_eq!(
-        mismatch_body["error"]["code"],
-        arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION
+        mismatch_body["type"],
+        json!(format!(
+            "https://arkret.org/problems/{}",
+            arkret_wire::ErrorCode::UNSUPPORTED_OPERATION_VERSION
+        ))
     );
 }
 
@@ -159,7 +227,7 @@ async fn describe_separates_claim_levels() {
     // development-mode; the invariant (development_mode=true =>
     // verified_profiles=[]) is exercised directly — an empty list means no
     // cotest_verified entry can leak into a dev posture.
-    let service = test_service(vec![(
+    let service = describe_test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
@@ -213,7 +281,7 @@ async fn describe_separates_claim_levels() {
 
 #[tokio::test]
 async fn describe_does_not_advertise_media_token_self_issue() {
-    let service = test_service(vec![(
+    let service = describe_test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
@@ -284,7 +352,7 @@ async fn gateway_describe_lives_at_root_meta_position() {
     // position GET /_arkret/describe (openapi: "advertisement lives at
     // the root meta position /_arkret/describe"). There is no
     // protocol-surface push-specific describe operation.
-    let service = test_service(vec![(
+    let service = describe_test_service(vec![(
         "com.example.app",
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);

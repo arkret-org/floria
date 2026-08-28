@@ -25,26 +25,20 @@ use crate::config::NotifyAuthConfig;
 /// fabricated here. The non-authoritative derivation profile hint remains
 /// mirrored under `limits.x_floria_privacy_derivation` until those inputs
 /// are available.
-fn floria_service_did(auth: &NotifyAuthConfig) -> Did {
-    // production_mode enforces a configured gateway_service_did; in dev
-    // postures it may be absent, so fall back to a stable, clearly
-    // non-routable placeholder DID rather than failing the describe.
-    let raw = auth
-        .gateway_service_did
-        .clone()
-        .unwrap_or_else(|| "did:web:floria.invalid".to_owned());
-    Did::new(raw).unwrap_or_else(|_| {
-        Did::new("did:web:floria.invalid".to_owned())
-            .expect("static placeholder DID is well-formed")
-    })
+fn floria_service_did(auth: &NotifyAuthConfig) -> arkret_wire::Result<Did> {
+    let raw = auth.gateway_service_did.clone().ok_or_else(|| {
+        arkret_wire::WireError::Protocol(
+            "http.notify_auth.gateway_service_did is required for ServiceDescribe".to_owned(),
+        )
+    })?;
+    Ok(Did::new(raw)?)
 }
 
 fn floria_service_identity(
     auth: &NotifyAuthConfig,
-) -> (DidCoreId, arkret_models_identity::ResolutionCommitment) {
-    let did = floria_service_did(auth);
-    let service_id =
-        arkret_wire::project_did_to_core_id(&did).expect("configured DID was validated at startup");
+) -> arkret_wire::Result<(DidCoreId, arkret_models_identity::ResolutionCommitment)> {
+    let did = floria_service_did(auth)?;
+    let service_id = arkret_wire::project_did_to_core_id(&did)?;
     let method_history_head = auth
         .gateway_service_method_history_head
         .clone()
@@ -53,14 +47,14 @@ fn floria_service_identity(
         .gateway_service_version_id
         .clone()
         .unwrap_or_else(|| "development-unverified".to_owned());
-    (
+    Ok((
         service_id,
         arkret_models_identity::ResolutionCommitment {
             did,
             method_history_head,
             version_id,
         },
-    )
+    ))
 }
 
 #[handler]
@@ -171,14 +165,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         }),
     );
 
-    // Auth metadata: canonical `mode` summarises the gateway posture; the
-    // floria-specific mode list rides in the `x_*`-only `extra` map.
-    let mode = if auth.enabled() {
-        "service"
-    } else {
-        "anonymous"
-    };
-    let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal(mode);
+    // The floria-specific mode list rides in the `x_*`-only `extra` map.
+    let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal();
     auth_metadata
         .extra
         .insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
@@ -195,7 +183,18 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         arkret_models_discovery::PlaintextVisibility::none()
     };
 
-    let (service_id, service_resolution) = floria_service_identity(auth);
+    let Ok((service_id, service_resolution)) = floria_service_identity(auth) else {
+        render_problem(
+            res,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            arkret_wire::ErrorEnvelope::new(
+                arkret_wire::ErrorCode::INTERNAL_ERROR,
+                "gateway service resolution is not configured",
+            )
+            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
+        );
+        return;
+    };
     let body = arkret_models_discovery::ServiceDescribe {
         service_id,
         service_resolution,

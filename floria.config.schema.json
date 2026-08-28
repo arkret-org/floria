@@ -355,14 +355,14 @@
                       "null"
                     ]
                   },
-                  "signature_verification_method": {
+                  "signature_public_key_hex": {
+                    "pattern": "^[0-9a-fA-F]{64}$",
                     "type": [
                       "string",
                       "null"
                     ]
                   },
-                  "signature_public_key_hex": {
-                    "pattern": "^[0-9a-fA-F]{64}$",
+                  "signature_verification_method": {
                     "type": [
                       "string",
                       "null"

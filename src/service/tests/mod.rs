@@ -182,6 +182,12 @@ pub(super) fn test_service_with_auth(
     Service::new(build_router(Arc::new(state)))
 }
 
+pub(super) fn describe_test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {
+    let mut notify_auth = NotifyAuthConfig::default();
+    notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    test_service_with_auth(pushkins, notify_auth)
+}
+
 pub(super) fn notify_auth_config() -> NotifyAuthConfig {
     let mut config = NotifyAuthConfig::default();
     config.bearer_tokens = vec!["secret-token".to_owned()];

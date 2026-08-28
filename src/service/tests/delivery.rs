@@ -24,7 +24,11 @@ async fn rejected_devices_are_reported() {
         .await;
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(&mut response, vec![]).await;
+    assert_notify_ok(
+        &mut response,
+        vec![rejected(Some("com.example.app"), "reject")],
+    )
+    .await;
 }
 
 #[tokio::test]
