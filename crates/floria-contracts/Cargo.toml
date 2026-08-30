@@ -6,11 +6,11 @@ rust-version = "1.98"
 license = "Apache-2.0"
 description = "Audited wire contract for floria's private internal endpoints (`/_floria/internal/*`). Producer: soland; consumer: floria."
 
-[lints]
-workspace = true
-
 [dependencies]
-serde = {workspace = true,features = ["derive"]}
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-serde_json = {workspace = true}
+serde_json.workspace = true
+
+[lints]
+workspace = true
