@@ -137,8 +137,7 @@ fn sanitizer_rejects_did_literal() {
 #[test]
 fn build_blind_provider_data_emits_only_allowed_fields() {
     // Drive build_blind_provider_data with a fully-populated PushNotificationEnvelope
-    // (via serde_json::from_value to avoid the recipient_id /
-    // delivery_binding_frontier struct-literal hazard) and assert that
+    // (via serde_json::from_value to use the public wire shape) and assert that
     // only the SDK-allowed blind fields make it out.
     let notification: PushNotificationEnvelope = serde_json::from_value(json!({
         "strand_title": "Mission Control",
@@ -334,7 +333,6 @@ fn build_blind_provider_data_never_emits_route_tokens() {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
             "mention_redirect_target_route_tokens": ["alice_route_token_000000001"],
-            "delivery_binding_frontier_token": "frontier_route_token_000000001",
         },
         "counts": { "unread_increment": 3 },
     }))
@@ -355,7 +353,27 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     }
     // The allow-listed blind fields still survive.
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
+    // The privacy profile coarsens counts 2..=5 into the representative 5.
     assert_eq!(data.get("unread_count"), Some(&json!(5)));
+}
+
+#[test]
+fn notification_rejects_retired_delivery_binding_frontier_token() {
+    let error = serde_json::from_value::<PushNotificationEnvelope>(json!({
+        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+        "wakeup_kind": "message",
+        "timing_profile_hint": "default",
+        "route_tokens": {
+            "realm_route_token": "realm_route_token_000000001",
+            "delivery_binding_frontier_token": "frontier_route_token_000000001"
+        }
+    }))
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unknown field `delivery_binding_frontier_token`")
+    );
 }
 
 // ---------------------------------------------------------------------------
