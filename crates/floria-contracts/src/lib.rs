@@ -1,8 +1,8 @@
 //! Wire contract for floria's private internal account-lifecycle endpoints.
 //!
 //! `/_floria/internal/*` is an implementation-private (non-`ak.`) rail between
-//! a Principal Server (soland) and the floria push gateway. Per the
-//! account-lifecycle spec §7.1 "Push route 行的完成判据", the Principal Server
+//! a Station (soland) and the floria push gateway. Per the
+//! account-lifecycle spec §7.1 "Push route 行的完成判据", the Station
 //! MUST notify the gateway over a registered internal channel and obtain a
 //! processing result before the Push-route fanout row counts as complete.
 //! This crate is that channel's audited contract: both sides depend on these
@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// Route of the internal deactivation fanout endpoint on the push gateway.
 pub const ACCOUNT_DEACTIVATE_FANOUT_PATH: &str = "/_floria/internal/account_deactivate_fanout";
 
-/// Broadcast envelope the Principal Server sends to every push gateway when a
+/// Broadcast envelope the Station sends to every push gateway when a
 /// deactivation fanout starts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,7 +59,7 @@ pub struct DeactivateFanoutDevice {
     pub push_key_hash: Option<String>,
 }
 
-/// Outcome a push gateway reports back to the Principal Server for a fanout.
+/// Outcome a push gateway reports back to the Station for a fanout.
 ///
 /// `partially_completed` is reserved for the case where floria observed at
 /// least one cell it could not drain (e.g. queue subsystem momentarily
@@ -84,7 +84,7 @@ impl DeactivateFanoutOutcome {
     }
 }
 
-/// Ack response floria emits back to the Principal Server after processing a
+/// Ack response floria emits back to the Station after processing a
 /// deactivation fanout. Carries an honest accounting of what was touched so
 /// the producer's fanout-state machine can step forward.
 ///

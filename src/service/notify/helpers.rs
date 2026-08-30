@@ -376,12 +376,6 @@ pub(super) fn normalized_notify_dedup_key(
             Value::String(value.to_owned()),
         );
     }
-    if let Some(value) = notification.delivery_binding_frontier_token() {
-        normalized.insert(
-            "delivery_binding_frontier_token".to_owned(),
-            Value::String(value.to_owned()),
-        );
-    }
     if let Some(value) = notification.user_is_target {
         normalized.insert("user_is_target".to_owned(), Value::Bool(value));
     }

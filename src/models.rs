@@ -100,7 +100,6 @@ pub trait NotificationExt {
     fn scope_title(&self) -> Option<&str>;
     fn realm_route_token(&self) -> Option<&str>;
     fn scope_route_token(&self) -> Option<&str>;
-    fn delivery_binding_frontier_token(&self) -> Option<&str>;
     fn mention_redirect_target_route_tokens(&self) -> &[PushRouteToken];
     fn strand_id(&self) -> Option<&str>;
     fn message_id(&self) -> Option<&str>;
@@ -129,13 +128,6 @@ impl NotificationExt for PushNotificationEnvelope {
         self.route_tokens
             .as_ref()
             .and_then(|routing| routing.scope_route_token.as_deref())
-            .and_then(non_empty)
-    }
-
-    fn delivery_binding_frontier_token(&self) -> Option<&str> {
-        self.route_tokens
-            .as_ref()
-            .and_then(|routing| routing.delivery_binding_frontier_token.as_deref())
             .and_then(non_empty)
     }
 

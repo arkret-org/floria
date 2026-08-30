@@ -1,6 +1,6 @@
 # Mobile Integration Guide
 
-Mobile apps integrate through chime and the principal server. floria is a
+Mobile apps integrate through chime and the Station. floria is a
 server-side push gateway; mobile clients should not call floria directly.
 
 ## Ownership Split
@@ -9,18 +9,18 @@ server-side push gateway; mobile clients should not call floria directly.
 |-----------|----------------|
 | Mobile app | Obtains and refreshes APNs, FCM, WebPush, or OEM provider tokens |
 | chime | Owns client registration UX, platform permission prompts, and local token state |
-| soland / principal server | Stores device routes, maps account state to `ak.edge.push.command.notify.v1`, and calls floria |
+| soland / Station | Stores device routes, maps account state to `ak.edge.push.command.notify.v1`, and calls floria |
 | floria | Delivers minimized wakeups to configured provider adapters |
 
 ## Registration Strand
 
 1. The app asks the platform for notification permission.
 2. The app obtains the provider token or WebPush endpoint.
-3. chime sends the token to the principal server over the authenticated app
+3. chime sends the token to the Station over the authenticated app
    channel.
-4. The principal server stores a push route containing app id, provider token,
+4. The Station stores a push route containing app id, provider token,
    and opaque push target id.
-5. The principal server calls floria only when it needs a wakeup.
+5. The Station calls floria only when it needs a wakeup.
 
 Do not send provider tokens through floria discovery endpoints. Tokens appear
 only inside authenticated `/_arkret/edge/push/notify` calls from the trusted server.

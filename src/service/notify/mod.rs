@@ -710,7 +710,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 );
                 outcomes.push(PushNotifyDeviceOutcome::rejected(
                     device.device_id.clone(),
-                    PushNotifyReasonCode::DeliveryBindingStale,
+                    PushNotifyReasonCode::PushTargetUnknown,
                     None,
                 ));
                 delivery_receipts.push(delivery_receipt(

@@ -58,7 +58,7 @@ forbidden-field list (`appeal_id`, `attestation_evidence`,
 endpoint. That endpoint implements the push-gateway half of the
 deactivation fanout required by
 [`account-lifecycle.md` §7.1](../arkret-spec/spec/v1/zh/identity/account-lifecycle.md);
-no Principal Server currently drives it. Contact/DM, Agent participation,
+no Station currently drives it. Contact/DM, Agent participation,
 Sidecar, and operation-control admission stay upstream of the push gateway. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`push-notifications.md`](../arkret-spec/spec/v1/zh/discovery/push-notifications.md)
@@ -213,7 +213,7 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 - [ ] `http.notify_auth.production_mode true` (surfaced as `hardening.admin_auth_mode`)
 - [ ] TLS terminated at the reverse proxy — floria has no in-process TLS listener
 - [ ] CSP header configured at the reverse proxy
-- [ ] CORS limited to the allowed origins for principal-server callers
+- [ ] CORS limited to the allowed origins for station callers
 - [ ] Secrets sourced from an external secret manager and mounted/rendered before startup (APNs auth key/cert, FCM service account, VAPID keys, custom push secrets, service-auth keys)
 - [ ] Log redaction enabled (default outside dev mode)
 - [ ] Admin auth in production mode (no dev bypass)

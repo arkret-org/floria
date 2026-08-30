@@ -1,7 +1,7 @@
 //! Account-deactivation fanout integration for the deactivation protocol.
 //!
 //! soland broadcasts an `account_deactivate_fanout` event to every
-//! downstream service-bound subscriber when a Principal Server starts
+//! downstream service-bound subscriber when a Station starts
 //! tearing down a principal's footprint. floria receives the broadcast,
 //! drains every queued to-device push for the affected
 //! `(actor, device)` cells, then reports the fanout outcome back to

@@ -121,7 +121,7 @@ Push-gateway alignment with the round-4 protocol-review commits. See
 This release closes 17 P0/P1 tasks from spec rounds 2+3. Several of the changes
 are intentionally **wire-breaking**: aggressive mode is on, there is no
 backward-compatibility shim. Operators upgrading from a pre-round-2 floria
-MUST upgrade soland and the principal-server fanout to a matching version.
+MUST upgrade soland and the station fanout to a matching version.
 
 #### Added
 
