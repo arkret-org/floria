@@ -12,11 +12,13 @@ use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
 use super::android::{AndroidNotificationPayload, build_android_notification_payload};
-use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_after};
+use super::reqwest_support::{
+    ExpiringTokenCache, build_reqwest_client, header_value, parse_retry_after,
+};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
@@ -78,7 +80,7 @@ pub struct OppoPushkin {
     auth: OppoAuth,
     auth_endpoint: String,
     send_endpoint: String,
-    token_cache: Mutex<Option<CachedOppoToken>>,
+    token_cache: ExpiringTokenCache,
     config: OppoConfig,
 }
 
@@ -102,11 +104,6 @@ struct OppoConfig {
     action_parameters: Option<Map<String, Value>>,
     channel_id: Option<String>,
     send_badge_counts: bool,
-}
-
-struct CachedOppoToken {
-    token: String,
-    expires_at: Instant,
 }
 
 impl OppoPushkin {
@@ -177,7 +174,7 @@ impl OppoPushkin {
             },
             auth_endpoint: auth_url,
             send_endpoint,
-            token_cache: Mutex::new(None),
+            token_cache: ExpiringTokenCache::default(),
             config: OppoConfig {
                 request: app.get_object("request")?.unwrap_or_default(),
                 notification: app.get_object("notification")?.unwrap_or_default(),
@@ -197,21 +194,15 @@ impl OppoPushkin {
     }
 
     async fn access_token(&self) -> Result<String, DispatchError> {
-        {
-            let cache = self.token_cache.lock().await;
-            if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + super::reqwest_support::TOKEN_REFRESH_SKEW
-            {
-                return Ok(token.token.clone());
-            }
+        if let Some(token) = self.token_cache.valid_token().await {
+            return Ok(token);
         }
 
         self.fetch_access_token().await
     }
 
     async fn invalidate_token(&self) {
-        let mut cache = self.token_cache.lock().await;
-        *cache = None;
+        self.token_cache.invalidate().await;
     }
 
     async fn fetch_access_token(&self) -> Result<String, DispatchError> {
@@ -274,11 +265,7 @@ impl OppoPushkin {
                     ))
                 })?;
                 let expires_at = Instant::now() + response.expires_in();
-                let mut cache = self.token_cache.lock().await;
-                *cache = Some(CachedOppoToken {
-                    token: token.clone(),
-                    expires_at,
-                });
+                self.token_cache.store(token.clone(), expires_at).await;
                 Ok(token)
             }
             _ => Err(DispatchError::remote(oppo_error_message(
@@ -639,7 +626,7 @@ mod tests {
             },
             auth_endpoint: OPPO_AUTH_URL.to_owned(),
             send_endpoint: format!("{OPPO_API_BASE_URL}/server/v1/message/notification/unicast"),
-            token_cache: Mutex::new(None),
+            token_cache: ExpiringTokenCache::default(),
             config: OppoConfig {
                 request: Map::new(),
                 notification: json!({

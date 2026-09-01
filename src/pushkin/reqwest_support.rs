@@ -16,6 +16,35 @@ use crate::error::DispatchError;
 /// drift apart.
 pub(super) const TOKEN_REFRESH_SKEW: Duration = Duration::from_secs(30);
 
+#[derive(Default)]
+pub(super) struct ExpiringTokenCache {
+    cache: Mutex<Option<CachedAccessToken>>,
+}
+
+struct CachedAccessToken {
+    token: String,
+    expires_at: Instant,
+}
+
+impl ExpiringTokenCache {
+    pub async fn valid_token(&self) -> Option<String> {
+        self.cache
+            .lock()
+            .await
+            .as_ref()
+            .filter(|token| token.expires_at > Instant::now() + TOKEN_REFRESH_SKEW)
+            .map(|token| token.token.clone())
+    }
+
+    pub async fn store(&self, token: String, expires_at: Instant) {
+        *self.cache.lock().await = Some(CachedAccessToken { token, expires_at });
+    }
+
+    pub async fn invalidate(&self) {
+        *self.cache.lock().await = None;
+    }
+}
+
 /// TCP connect timeout for every outbound provider / token / OEM HTTP
 /// client. Single-sourced here so no provider can ship a client that
 /// blocks forever on a half-open or unresponsive upstream and pins an
@@ -59,12 +88,7 @@ pub(super) struct ClientCredentialsGrant {
     client_id: String,
     client_secret: String,
     token_url: String,
-    cache: Mutex<Option<CachedAccessToken>>,
-}
-
-struct CachedAccessToken {
-    token: String,
-    expires_at: Instant,
+    cache: ExpiringTokenCache,
 }
 
 impl ClientCredentialsGrant {
@@ -73,18 +97,13 @@ impl ClientCredentialsGrant {
             client_id,
             client_secret,
             token_url,
-            cache: Mutex::new(None),
+            cache: ExpiringTokenCache::default(),
         }
     }
 
     pub async fn access_token(&self, client: &Client) -> Result<String, DispatchError> {
-        {
-            let cache = self.cache.lock().await;
-            if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + TOKEN_REFRESH_SKEW
-            {
-                return Ok(token.token.clone());
-            }
+        if let Some(token) = self.cache.valid_token().await {
+            return Ok(token);
         }
 
         let token_url =
@@ -122,11 +141,12 @@ impl ClientCredentialsGrant {
                 DispatchError::remote(format!("failed to parse access token response: {error}"))
             })?;
 
-        let mut cache = self.cache.lock().await;
-        *cache = Some(CachedAccessToken {
-            token: token.access_token.clone(),
-            expires_at: Instant::now() + Duration::from_secs(token.expires_in.max(60)),
-        });
+        self.cache
+            .store(
+                token.access_token.clone(),
+                Instant::now() + Duration::from_secs(token.expires_in.max(60)),
+            )
+            .await;
         Ok(token.access_token)
     }
 }
@@ -165,4 +185,34 @@ pub(super) fn looks_like_invalid_token(body: &str) -> bool {
 struct AccessTokenResponse {
     access_token: String,
     expires_in: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn expiring_token_cache_applies_shared_skew_and_invalidation() {
+        let cache = ExpiringTokenCache::default();
+        assert_eq!(cache.valid_token().await, None);
+
+        cache
+            .store(
+                "fresh".to_owned(),
+                Instant::now() + TOKEN_REFRESH_SKEW + Duration::from_secs(10),
+            )
+            .await;
+        assert_eq!(cache.valid_token().await.as_deref(), Some("fresh"));
+
+        cache.invalidate().await;
+        assert_eq!(cache.valid_token().await, None);
+
+        cache
+            .store(
+                "near-expiry".to_owned(),
+                Instant::now() + Duration::from_secs(5),
+            )
+            .await;
+        assert_eq!(cache.valid_token().await, None);
+    }
 }

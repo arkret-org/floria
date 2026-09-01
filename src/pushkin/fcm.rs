@@ -13,10 +13,10 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, Proxy};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use super::reqwest_support::{header_value, parse_retry_after};
+use super::reqwest_support::{ExpiringTokenCache, header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
     max_connections, notification_badge_count, notification_unread_increment,
@@ -93,12 +93,7 @@ struct ServiceAccountSigner {
     client_email: String,
     private_key: EncodingKey,
     token_uri: String,
-    cache: Mutex<Option<CachedAccessToken>>,
-}
-
-struct CachedAccessToken {
-    token: String,
-    expires_at: Instant,
+    cache: ExpiringTokenCache,
 }
 
 impl FcmPushkin {
@@ -166,7 +161,7 @@ impl FcmPushkin {
                     client_email: key.client_email,
                     private_key,
                     token_uri: key.token_uri,
-                    cache: Mutex::new(None),
+                    cache: ExpiringTokenCache::default(),
                 }),
             },
             base_request_body,
@@ -404,13 +399,8 @@ impl Pushkin for FcmPushkin {
 
 impl ServiceAccountSigner {
     async fn access_token(&self, client: &Client) -> Result<String, DispatchError> {
-        {
-            let cache = self.cache.lock().await;
-            if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + super::reqwest_support::TOKEN_REFRESH_SKEW
-            {
-                return Ok(token.token.clone());
-            }
+        if let Some(token) = self.cache.valid_token().await {
+            return Ok(token);
         }
 
         #[derive(Serialize)]
@@ -463,11 +453,12 @@ impl ServiceAccountSigner {
                 DispatchError::remote(format!("failed to parse Google access token: {error}"))
             })?;
 
-        let mut cache = self.cache.lock().await;
-        *cache = Some(CachedAccessToken {
-            token: token.access_token.clone(),
-            expires_at: Instant::now() + Duration::from_secs(token.expires_in.max(60)),
-        });
+        self.cache
+            .store(
+                token.access_token.clone(),
+                Instant::now() + Duration::from_secs(token.expires_in.max(60)),
+            )
+            .await;
         Ok(token.access_token)
     }
 }

@@ -12,12 +12,14 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use super::android::build_android_notification_payload;
-use super::reqwest_support::{build_reqwest_client, header_value, parse_retry_after};
+use super::reqwest_support::{
+    ExpiringTokenCache, build_reqwest_client, header_value, parse_retry_after,
+};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
@@ -78,7 +80,7 @@ pub struct VivoPushkin {
     auth: VivoAuth,
     auth_endpoint: String,
     send_endpoint: String,
-    token_cache: Mutex<Option<CachedVivoToken>>,
+    token_cache: ExpiringTokenCache,
     config: VivoConfig,
 }
 
@@ -109,11 +111,6 @@ struct VivoConfig {
     extra: Map<String, Value>,
     client_custom_map: Map<String, Value>,
     send_badge_counts: bool,
-}
-
-struct CachedVivoToken {
-    token: String,
-    expires_at: Instant,
 }
 
 impl VivoPushkin {
@@ -184,7 +181,7 @@ impl VivoPushkin {
             },
             auth_endpoint: auth_url,
             send_endpoint,
-            token_cache: Mutex::new(None),
+            token_cache: ExpiringTokenCache::default(),
             config: VivoConfig {
                 notify_type: app.get_u64("notify_type")?.unwrap_or(4),
                 time_to_live: app.get_u64("time_to_live")?,
@@ -212,21 +209,15 @@ impl VivoPushkin {
     }
 
     async fn access_token(&self) -> Result<String, DispatchError> {
-        {
-            let cache = self.token_cache.lock().await;
-            if let Some(token) = cache.as_ref()
-                && token.expires_at > Instant::now() + super::reqwest_support::TOKEN_REFRESH_SKEW
-            {
-                return Ok(token.token.clone());
-            }
+        if let Some(token) = self.token_cache.valid_token().await {
+            return Ok(token);
         }
 
         self.fetch_access_token().await
     }
 
     async fn invalidate_token(&self) {
-        let mut cache = self.token_cache.lock().await;
-        *cache = None;
+        self.token_cache.invalidate().await;
     }
 
     async fn fetch_access_token(&self) -> Result<String, DispatchError> {
@@ -272,11 +263,12 @@ impl VivoPushkin {
                 let token = response.auth_token.ok_or_else(|| {
                     DispatchError::remote("vivo Push auth response did not include authToken")
                 })?;
-                let mut cache = self.token_cache.lock().await;
-                *cache = Some(CachedVivoToken {
-                    token: token.clone(),
-                    expires_at: Instant::now() + Duration::from_secs(VIVO_TOKEN_CACHE_SECS),
-                });
+                self.token_cache
+                    .store(
+                        token.clone(),
+                        Instant::now() + Duration::from_secs(VIVO_TOKEN_CACHE_SECS),
+                    )
+                    .await;
                 Ok(token)
             }
             _ => Err(DispatchError::remote(vivo_error_message(&body, status))),
@@ -722,7 +714,7 @@ mod tests {
             },
             auth_endpoint: VIVO_AUTH_URL.to_owned(),
             send_endpoint: format!("{VIVO_API_BASE_URL}/message/send"),
-            token_cache: Mutex::new(None),
+            token_cache: ExpiringTokenCache::default(),
             config: VivoConfig {
                 notify_type: 4,
                 time_to_live: Some(3600),
