@@ -20,7 +20,7 @@ http:
     backend: memory
     key_prefix: floria
     # redis_url: redis://127.0.0.1:6379/0
-  notify_auth:
+  notify_auth: {}
     # Basic bearer profile:
     # bearer_tokens:
     #   - replace-me
@@ -33,7 +33,7 @@ http:
     # gateway_service_did: did:webvh:zQ3shGatewayScid:push.example.com
     # gateway_service_method_history_head: sha256:<verified-log-head-digest>
     # gateway_service_version_id: 1-<verified-version-id>
-    #
+
     # Stronger production profile:
     # production_mode: true
     # require_message_signatures: true
@@ -55,7 +55,7 @@ http:
     #     # mtls_subject_dn: "CN=sync.example.com,O=Arkret,C=US"
     #     # mtls_subject_alt_names:
     #     #   - "uri:did:web:sync.example.com"
-    #
+
     # Replay protection — fingerprint of every signed request is
     # remembered for `replay_window_seconds`.
     # replay_window_seconds: 600
@@ -136,7 +136,7 @@ metrics:
 # If omitted, HTTPS_PROXY will be used when present.
 # proxy: http://user:pass@proxy.example.com:8080
 
-apps:
+apps: {}
   # Example APNS token auth
   # com.example.ios:
   #   type: apns

@@ -169,7 +169,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal();
     auth_metadata
         .extra
-        .insert("x_floria_auth_modes".to_owned(), json!(auth_modes));
+        .insert("x_floria_auth_modes".to_owned(), json!(auth_modes))
+        .expect("x_floria_auth_modes is a valid extension key");
 
     let plaintext_visibility = if plaintext_class == "service-gated" {
         arkret_models_discovery::PlaintextVisibility {
@@ -249,9 +250,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         takedown_contact: None,
         rate_limits: None,
         supported_reducer_profiles: vec![],
-        frontier: Vec::new(),
-        snapshot_frontier: Vec::new(),
-        last_materialized_at: None,
         invite_addressing: None,
         private_contact_discovery: None,
         extensions: Default::default(),

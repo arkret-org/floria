@@ -2,7 +2,7 @@
 //!
 //! `/_floria/internal/*` is an implementation-private (non-`ak.`) rail between
 //! a Station (soland) and the floria push gateway. Per the
-//! account-lifecycle spec §7.1 "Push route 行的完成判据", the Station
+//! account-lifecycle spec §7.1 Push-route completion criterion, the Station
 //! MUST notify the gateway over a registered internal channel and obtain a
 //! processing result before the Push-route fanout row counts as complete.
 //! This crate is that channel's audited contract: both sides depend on these
