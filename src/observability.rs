@@ -206,13 +206,11 @@ fn init_sentry(config: &SentryConfig) -> Result<Option<ClientInitGuard>> {
             config.sample_rate
         );
     }
-    let mut options = ClientOptions {
-        dsn: Some(dsn.parse().context("parse Sentry DSN")?),
-        sample_rate: config.sample_rate as f32,
-        traces_sample_rate: config.traces_sample_rate as f32,
-        attach_stacktrace: true,
-        ..Default::default()
-    };
+    let mut options = ClientOptions::new()
+        .sample_rate(config.sample_rate as f32)
+        .traces_sample_rate(config.traces_sample_rate as f32)
+        .attach_stacktrace(true);
+    options.dsn = Some(dsn.parse().context("parse Sentry DSN")?);
     if let Some(env) = config
         .environment
         .as_deref()

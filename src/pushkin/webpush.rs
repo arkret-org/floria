@@ -16,15 +16,14 @@ use hkdf::Hkdf;
 use p256::ecdh::EphemeralSecret;
 use p256::ecdsa::signature::Signer;
 use p256::ecdsa::{Signature, SigningKey};
-use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::elliptic_curve::{Generate, sec1::ToSec1Point};
 use p256::pkcs8::DecodePrivateKey;
 use p256::{PublicKey, SecretKey};
 use prometheus::{Histogram, IntGauge, register_histogram, register_int_gauge};
-use rand_core_06::{OsRng, RngCore};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use sha2_010::Sha256;
+use sha2::Sha256;
 use tokio::sync::Semaphore;
 
 use super::{
@@ -119,7 +118,7 @@ impl VapidKeyMaterial {
     fn from_signing_key(signing_key: SigningKey) -> Self {
         let public_key = signing_key
             .verifying_key()
-            .to_encoded_point(false)
+            .to_sec1_point(false)
             .as_bytes()
             .to_vec();
         Self {
@@ -661,13 +660,12 @@ fn encrypt_webpush_payload(
 
     let receiver_public = PublicKey::from_sec1_bytes(&receiver_public)
         .map_err(|_| WebpushError::InvalidCryptoKeys)?;
-    let mut rng = OsRng;
     let mut salt = [0u8; ECE_SALT_LENGTH];
-    rng.fill_bytes(&mut salt);
-    let sender_secret = EphemeralSecret::random(&mut rng);
+    getrandom::fill(&mut salt).map_err(|_| WebpushError::Unspecified)?;
+    let sender_secret = EphemeralSecret::generate();
     let sender_public = sender_secret
         .public_key()
-        .to_encoded_point(false)
+        .to_sec1_point(false)
         .as_bytes()
         .to_vec();
     if sender_public.len() != ECE_PUBLIC_KEY_LENGTH {
@@ -676,7 +674,7 @@ fn encrypt_webpush_payload(
 
     let shared_secret = sender_secret.diffie_hellman(&receiver_public);
     let ikm_info = webpush_ikm_info(
-        receiver_public.to_encoded_point(false).as_bytes(),
+        receiver_public.to_sec1_point(false).as_bytes(),
         &sender_public,
     )?;
     let auth_hkdf = Hkdf::<Sha256>::new(Some(&auth_secret), shared_secret.raw_secret_bytes());
@@ -707,8 +705,9 @@ fn encrypt_webpush_payload(
     padded.resize(record_len, 0);
 
     let cipher = Aes128Gcm::new_from_slice(&key).map_err(|_| WebpushError::InvalidCryptoKeys)?;
+    let nonce = Nonce::from(nonce);
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), padded.as_slice())
+        .encrypt(&nonce, padded.as_slice())
         .map_err(|_| WebpushError::InvalidCryptoKeys)?;
 
     let mut body =
@@ -856,7 +855,7 @@ mod tests {
                 "floria",
             )
             .unwrap(),
-            vapid_key: VapidKeyMaterial::from_signing_key(SigningKey::random(&mut OsRng)),
+            vapid_key: VapidKeyMaterial::from_signing_key(SigningKey::generate()),
             vapid_contact_email: "push@example.com".to_owned(),
             allowed_endpoints,
             ttl: DEFAULT_WEBPUSH_TTL_SECS,
