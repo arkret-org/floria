@@ -18,7 +18,7 @@ use tokio::time::sleep;
 
 use super::reqwest_support::{header_value, parse_retry_after};
 use super::{
-    AppMatcher, ConcurrencyGate, DispatchTarget, Pushkin, build_blind_routing_data, inflight_limit,
+    AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
     max_connections, notification_badge_count, notification_unread_increment,
     sanitized_provider_payload,
 };
@@ -387,20 +387,6 @@ impl Pushkin for FcmPushkin {
         self.matcher.handles_app_id(app_id)
     }
 
-    fn dispatch_targets(
-        &self,
-        _notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
-    ) -> Vec<DispatchTarget> {
-        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key.as_ref()) else {
-            return Vec::new();
-        };
-        vec![DispatchTarget {
-            app_id: app_id.to_owned(),
-            push_key: push_key.clone(),
-        }]
-    }
-
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
@@ -544,8 +530,10 @@ mod tests {
     use arkret_models_integration::{PushCounts, PushDeviceRoute, PushNotificationEnvelope};
 
     use super::*;
+    use crate::pushkin::DispatchTarget;
 
     fn pushkin() -> FcmPushkin {
+        crate::ensure_rustls_crypto_provider();
         FcmPushkin {
             matcher: AppMatcher::new("com.example.fcm".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
