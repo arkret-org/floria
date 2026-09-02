@@ -21,7 +21,6 @@ rationale for governance and correlation names in the shared strip set.
 
 | Field | Rationale |
 |-------|-----------|
-| `appeal_id` | Links a push to a moderation appeal thread; visible in provider logs would expose that the user is under review |
 | `attestation_evidence` | Reveals audit-agent or device posture (TPM PCR digests, key attestation chain) |
 | `audit_purpose` | Reveals audit routing intent (which downstream audit channel the push will divert to) |
 | `attestation_chain` | Reveals attestation chain material; same leak class as `attestation_evidence` |

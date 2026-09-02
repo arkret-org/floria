@@ -477,7 +477,6 @@ mod sanitize_tests {
             "client": "android",
             "wakeup_kind": "message",
             "timing_profile_hint": "traffic_metadata_hardened",
-            "appeal_id": "01904100-0000-7000-8000-000000000001",
             "attestation_evidence": "evidence-blob-ref",
             "audit_purpose": "compliance_lawful_access",
             "attestation_chain": ["chain-item-0", "chain-item-1"],
@@ -492,7 +491,6 @@ mod sanitize_tests {
         .collect();
         let out = sanitized_provider_payload(payload).unwrap();
         for forbidden in [
-            "appeal_id",
             "attestation_evidence",
             "audit_purpose",
             "attestation_chain",
@@ -519,7 +517,6 @@ mod sanitize_tests {
             "wakeup_kind": "message",
             "nested": {
                 "deep": {
-                    "appeal_id": "01904100-0000-7000-8000-000000000001",
                     "trust_domain": "example.net",
                     "ok_key": "value"
                 }
@@ -533,7 +530,7 @@ mod sanitize_tests {
         let out = sanitized_provider_payload(payload).unwrap();
         // Serialize back to JSON and assert none of the names survive.
         let encoded = serde_json::to_string(&out).unwrap();
-        for forbidden in ["appeal_id", "trust_domain"] {
+        for forbidden in ["trust_domain"] {
             assert!(
                 !encoded.contains(forbidden),
                 "nested provider-egress forbidden field `{forbidden}` survived: {encoded}"

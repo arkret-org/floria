@@ -51,7 +51,7 @@ three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 ## Round R2/R3 notes
 
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
-forbidden-field list (`appeal_id`, `attestation_evidence`,
+forbidden-field list (`attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
 `policy_frontier_digest`, `trust_domain`) and added the internal
 `POST /_floria/internal/account_deactivate_fanout` (T07) broadcast

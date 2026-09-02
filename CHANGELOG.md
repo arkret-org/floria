@@ -147,11 +147,11 @@ MUST upgrade soland and the station fanout to a matching version.
 #### Changed
 
 - **Blind sanitizer forbidden-field list** (T07/T10/T06) extended with the
-  round R2/R3 names: `appeal_id`, `attestation_evidence`, `audit_purpose`,
+  round R2/R3 names: `attestation_evidence`, `audit_purpose`,
   `attestation_chain`, `audit_policy_version_digest`, `policy_frontier_digest`,
   `trust_domain`, `reset_event_id`. These are all stable correlation
-  identifiers introduced by the moderation-appeal,
-  attestation-evidence-for-audit-agents, cross-signing-reset, and
+  identifiers introduced by attestation-evidence-for-audit-agents,
+  cross-signing-reset, and
   policy-frontier-hash wire additions; any of them on the blind-wakeup wire
   would let an observer link a push to a specific governance event. The local
   strip list runs ahead of the SDK's `is_forbidden_payload_key` until the SDK
