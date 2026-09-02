@@ -7,13 +7,19 @@ use super::Config;
 /// Returns the JSON schema for `floria.{kdl,yaml}` configuration.
 ///
 /// Both YAML and KDL deserialize through the same `Config` struct, so a
-/// single schema document covers both formats. Consumers (ops tooling,
-/// editor tooling, soland config drift detection) should refresh when
-/// `Config::SCHEMA_VERSION` changes.
+/// single schema document covers both formats.
+///
+/// This function is the single source of truth: the committed
+/// `floria.config.schema.json` at the repository root is a generated
+/// artifact (`cargo run --example emit_schema > floria.config.schema.json`)
+/// and `tests/config_schema.rs` fails the build when the two diverge.
+/// `Config::SCHEMA_VERSION` is the only place the version is written; the
+/// `$id` derives from it so a bump cannot leave the two out of step.
 pub fn config_json_schema() -> Value {
+    let schema_version = Config::SCHEMA_VERSION;
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://arkret.dev/schema/floria/2026-08-27.1/floria.config.schema.json",
+        "$id": format!("https://arkret.dev/schema/floria/{schema_version}/floria.config.schema.json"),
         "title": "floria gateway configuration",
         "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
         "type": "object",

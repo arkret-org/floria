@@ -1,71 +1,28 @@
-use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
 use md5::{Digest, Md5};
-use prometheus::{
-    Histogram, IntGauge, register_histogram, register_int_counter_vec, register_int_gauge,
-};
+use reqwest::StatusCode;
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use tokio::sync::Semaphore;
-use tokio::time::sleep;
 use uuid::Uuid;
 
 use super::android::build_android_notification_payload;
-use super::reqwest_support::{
-    ExpiringTokenCache, build_reqwest_client, header_value, parse_retry_after,
-};
+use super::oem_family::{self, OemMetrics, OemTransport};
+use super::reqwest_support::{ExpiringTokenCache, build_reqwest_client, header_value};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{DeviceExt, NotificationContext};
 
-static VIVO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_vivo_queue_time",
-        "Time taken waiting for a vivo Push request slot"
-    )
-    .expect("register floria_vivo_queue_time")
-});
+static VIVO_METRICS: LazyLock<OemMetrics> =
+    LazyLock::new(|| OemMetrics::new("vivo", "vivo Push", "a"));
 
-static VIVO_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_vivo_request_time",
-        "Time taken to send HTTP request to vivo Push"
-    )
-    .expect("register floria_vivo_request_time")
-});
-
-static VIVO_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_pending_vivo_requests",
-        "Number of vivo Push requests waiting for a connection"
-    )
-    .expect("register floria_pending_vivo_requests")
-});
-
-static VIVO_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_active_vivo_requests",
-        "Number of vivo Push requests in flight"
-    )
-    .expect("register floria_active_vivo_requests")
-});
-
-static VIVO_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_vivo_status_codes",
-        "Number of HTTP response status codes received from vivo Push",
-        &["pushkin", "code"]
-    )
-    .expect("register floria_vivo_status_codes")
-});
-
+const VIVO_DISPLAY: &str = "vivo Push";
 const VIVO_MAX_TRIES: usize = 3;
 const VIVO_RETRY_DELAY_BASE_SECS: u64 = 10;
 const VIVO_TOKEN_CACHE_SECS: u64 = 2 * 60 * 60;
@@ -75,8 +32,7 @@ const VIVO_API_BASE_URL: &str = "https://api-push.vivo.com.cn";
 pub struct VivoPushkin {
     matcher: AppMatcher,
     gate: ConcurrencyGate,
-    connection_semaphore: Arc<Semaphore>,
-    client: Client,
+    transport: OemTransport,
     auth: VivoAuth,
     auth_endpoint: String,
     send_endpoint: String,
@@ -171,8 +127,11 @@ impl VivoPushkin {
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
-            connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "floria")?,
+            transport: OemTransport::new(
+                &VIVO_METRICS,
+                build_reqwest_client(config, "floria")?,
+                max_connections(app)?,
+            ),
             auth: VivoAuth {
                 app_id,
                 app_id_string,
@@ -221,11 +180,12 @@ impl VivoPushkin {
     }
 
     async fn fetch_access_token(&self) -> Result<String, DispatchError> {
-        let timestamp = current_timestamp_millis()?;
+        let timestamp = oem_family::current_timestamp_millis()?;
         let body = self.build_auth_request(&timestamp);
 
         let response = self
-            .client
+            .transport
+            .client()
             .post(&self.auth_endpoint)
             .json(&body)
             .send()
@@ -400,62 +360,45 @@ impl VivoPushkin {
             return Ok(vec![]);
         }
 
-        VIVO_PENDING_REQUESTS.inc();
-        let queue_started = Instant::now();
-        let _connection_permit = self
-            .connection_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| {
-                VIVO_PENDING_REQUESTS.dec();
-                DispatchError::internal("vivo Push connection semaphore closed")
-            })?;
-        VIVO_PENDING_REQUESTS.dec();
-        VIVO_QUEUE_TIME.observe(queue_started.elapsed().as_secs_f64());
-
         let mut headers = HeaderMap::new();
         headers.insert("authToken", header_value(&token)?);
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        VIVO_ACTIVE_REQUESTS.inc();
-        let request_started = Instant::now();
         let response = self
-            .client
-            .post(&self.send_endpoint)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| {
-                VIVO_ACTIVE_REQUESTS.dec();
-                VIVO_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
-                DispatchError::temporary(format!("vivo Push request failed: {error}"), None)
-            })?;
-        VIVO_ACTIVE_REQUESTS.dec();
-        VIVO_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
+            .transport
+            .send(
+                self.name(),
+                VIVO_DISPLAY,
+                self.transport
+                    .client()
+                    .post(&self.send_endpoint)
+                    .headers(headers)
+                    .json(&body),
+            )
+            .await?;
 
-        let status = response.status();
-        VIVO_STATUS_CODES
-            .with_label_values(&[self.name(), &status.as_u16().to_string()])
-            .inc();
-        let retry_after = parse_retry_after(response.headers());
-        let body = response.text().await.map_err(|error| {
-            DispatchError::remote(format!("failed to read vivo Push response: {error}"))
-        })?;
-
-        if status == StatusCode::UNAUTHORIZED
-            || status == StatusCode::FORBIDDEN
-            || looks_like_vivo_auth_issue(&body)
+        // vivo's authToken has a much shorter life than OPPO's and the
+        // gateway may still hold a cached one when it expires; drop it
+        // on any auth-shaped rejection so the retry re-authenticates.
+        if response.status == StatusCode::UNAUTHORIZED
+            || response.status == StatusCode::FORBIDDEN
+            || looks_like_vivo_auth_issue(&response.body)
         {
             self.invalidate_token().await;
             return Err(DispatchError::temporary(
-                vivo_error_message(&body, status),
-                retry_after.or(Some(Duration::from_secs(VIVO_RETRY_DELAY_BASE_SECS))),
+                vivo_error_message(&response.body, response.status),
+                response
+                    .retry_after
+                    .or(Some(Duration::from_secs(VIVO_RETRY_DELAY_BASE_SECS))),
             ));
         }
 
-        self.handle_response(status, retry_after, &body, device)
+        self.handle_response(
+            response.status,
+            response.retry_after,
+            &response.body,
+            device,
+        )
     }
 
     fn handle_response(
@@ -514,41 +457,26 @@ impl Pushkin for VivoPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key().is_none() {
-            tracing::warn!("rejecting vivo Push device due to empty regId");
-            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
+        if let Some(rejected) = oem_family::empty_push_key_rejection(VIVO_DISPLAY, "regId", device)
+        {
+            return Ok(rejected);
         }
 
-        for attempt in 0..VIVO_MAX_TRIES {
-            match self
-                .send_once(
-                    notification,
-                    device,
-                    context.allow_plaintext_metadata && device.visible_notification_opt_in(),
-                )
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < VIVO_MAX_TRIES => {
-                    let retry_after = error.retry_after().unwrap_or_else(|| {
-                        Duration::from_secs(VIVO_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
-                    });
-                    sleep(retry_after).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
+        let allow_visible_notification =
+            context.allow_plaintext_metadata && device.visible_notification_opt_in();
 
-        Err(DispatchError::remote("vivo Push retried too many times"))
+        oem_family::dispatch_with_retries(
+            VIVO_DISPLAY,
+            VIVO_MAX_TRIES,
+            VIVO_RETRY_DELAY_BASE_SECS,
+            || async move {
+                self.send_once(notification, device, allow_visible_notification)
+                    .await
+            },
+            oem_family::no_retry_hook,
+        )
+        .await
     }
-}
-
-fn current_timestamp_millis() -> Result<String, DispatchError> {
-    Ok(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| DispatchError::internal(format!("system clock error: {error}")))?
-        .as_millis()
-        .to_string())
 }
 
 fn app_id_value(app: &AppConfig, key: &str) -> Result<Option<Value>> {
@@ -617,19 +545,18 @@ fn vivo_json_scalar(value: &Value) -> Value {
     }
 }
 
+/// vivo names the recipient `regId`/`alias`; the keyword set differs
+/// from OPPO's and Xiaomi's and must stay separate.
 fn looks_like_invalid_registration(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    (lower.contains("regid") || lower.contains("userid") || lower.contains("alias"))
-        && (lower.contains("invalid")
-            || lower.contains("not exist")
-            || lower.contains("unregister")
-            || lower.contains("expired"))
+    oem_family::body_mentions(
+        body,
+        &["regid", "userid", "alias"],
+        &["invalid", "not exist", "unregister", "expired"],
+    )
 }
 
 fn looks_like_vivo_auth_issue(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    lower.contains("authtoken")
-        && (lower.contains("invalid") || lower.contains("expired") || lower.contains("not exist"))
+    oem_family::body_mentions(body, &["authtoken"], &["invalid", "expired", "not exist"])
 }
 
 fn vivo_error_message(body: &str, status: StatusCode) -> String {
@@ -704,8 +631,11 @@ mod tests {
         VivoPushkin {
             matcher: AppMatcher::new("com.example.vivo".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
-            connection_semaphore: Arc::new(Semaphore::new(1)),
-            client: Client::builder().build().unwrap(),
+            transport: OemTransport::new(
+                &VIVO_METRICS,
+                reqwest::Client::builder().build().unwrap(),
+                1,
+            ),
             auth: VivoAuth {
                 app_id: Value::Number(10004.into()),
                 app_id_string: "10004".to_owned(),

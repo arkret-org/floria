@@ -1,69 +1,25 @@
-use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
-use prometheus::{
-    Histogram, IntGauge, register_histogram, register_int_counter_vec, register_int_gauge,
-};
+use reqwest::StatusCode;
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::Semaphore;
-use tokio::time::sleep;
 
 use super::android::{AndroidNotificationPayload, build_android_notification_payload};
-use super::reqwest_support::{
-    ExpiringTokenCache, build_reqwest_client, header_value, parse_retry_after,
-};
+use super::oem_family::{self, OemMetrics, OemTransport};
+use super::reqwest_support::{ExpiringTokenCache, build_reqwest_client, header_value};
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{DeviceExt, NotificationContext};
 
-static OPPO_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_oppo_queue_time",
-        "Time taken waiting for an OPPO Push request slot"
-    )
-    .expect("register floria_oppo_queue_time")
-});
-
-static OPPO_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_oppo_request_time",
-        "Time taken to send HTTP request to OPPO Push"
-    )
-    .expect("register floria_oppo_request_time")
-});
-
-static OPPO_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_pending_oppo_requests",
-        "Number of OPPO Push requests waiting for a connection"
-    )
-    .expect("register floria_pending_oppo_requests")
-});
-
-static OPPO_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_active_oppo_requests",
-        "Number of OPPO Push requests in flight"
-    )
-    .expect("register floria_active_oppo_requests")
-});
-
-static OPPO_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_oppo_status_codes",
-        "Number of HTTP response status codes received from OPPO Push",
-        &["pushkin", "code"]
-    )
-    .expect("register floria_oppo_status_codes")
-});
+static OPPO_METRICS: LazyLock<OemMetrics> =
+    LazyLock::new(|| OemMetrics::new("oppo", "OPPO Push", "an"));
 
 const OPPO_MAX_TRIES: usize = 3;
 const OPPO_RETRY_DELAY_BASE_SECS: u64 = 10;
@@ -75,8 +31,7 @@ pub struct OppoPushkin {
     matcher: AppMatcher,
     vendor: OppoVendor,
     gate: ConcurrencyGate,
-    connection_semaphore: Arc<Semaphore>,
-    client: Client,
+    transport: OemTransport,
     auth: OppoAuth,
     auth_endpoint: String,
     send_endpoint: String,
@@ -166,8 +121,11 @@ impl OppoPushkin {
             matcher: AppMatcher::new(name)?,
             vendor,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
-            connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "floria")?,
+            transport: OemTransport::new(
+                &OPPO_METRICS,
+                build_reqwest_client(config, "floria")?,
+                max_connections(app)?,
+            ),
             auth: OppoAuth {
                 app_key,
                 master_secret,
@@ -206,7 +164,7 @@ impl OppoPushkin {
     }
 
     async fn fetch_access_token(&self) -> Result<String, DispatchError> {
-        let timestamp = current_timestamp_millis()?;
+        let timestamp = oem_family::current_timestamp_millis()?;
         let sign = oppo_sign(&self.auth.app_key, &timestamp, &self.auth.master_secret);
         let body = json!({
             "app_key": self.auth.app_key,
@@ -215,7 +173,8 @@ impl OppoPushkin {
         });
 
         let response = self
-            .client
+            .transport
+            .client()
             .post(&self.auth_endpoint)
             .json(&body)
             .send()
@@ -332,68 +291,45 @@ impl OppoPushkin {
         let token = self.access_token().await?;
         let body = self.build_request_body(device, payload);
 
-        OPPO_PENDING_REQUESTS.inc();
-        let queue_started = Instant::now();
-        let _connection_permit = self
-            .connection_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| {
-                OPPO_PENDING_REQUESTS.dec();
-                DispatchError::internal("OPPO Push connection semaphore closed")
-            })?;
-        OPPO_PENDING_REQUESTS.dec();
-        OPPO_QUEUE_TIME.observe(queue_started.elapsed().as_secs_f64());
-
         let mut headers = HeaderMap::new();
         headers.insert("auth_token", header_value(&token)?);
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        OPPO_ACTIVE_REQUESTS.inc();
-        let request_started = Instant::now();
         let response = self
-            .client
-            .post(&self.send_endpoint)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| {
-                OPPO_ACTIVE_REQUESTS.dec();
-                OPPO_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
-                DispatchError::temporary(
-                    format!("{} request failed: {error}", self.vendor_name()),
-                    None,
-                )
-            })?;
-        OPPO_ACTIVE_REQUESTS.dec();
-        OPPO_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
+            .transport
+            .send(
+                self.name(),
+                self.vendor_name(),
+                self.transport
+                    .client()
+                    .post(&self.send_endpoint)
+                    .headers(headers)
+                    .json(&body),
+            )
+            .await?;
 
-        let status = response.status();
-        OPPO_STATUS_CODES
-            .with_label_values(&[self.name(), &status.as_u16().to_string()])
-            .inc();
-        let retry_after = parse_retry_after(response.headers());
-        let body = response.text().await.map_err(|error| {
-            DispatchError::remote(format!(
-                "failed to read {} response: {error}",
-                self.vendor_name()
-            ))
-        })?;
-
-        if status == StatusCode::UNAUTHORIZED
-            || status == StatusCode::FORBIDDEN
-            || looks_like_oppo_auth_issue(&body)
+        // OPPO answers a stale auth_token with 401/403 or a free-text
+        // auth complaint on 200; either way the cached token must be
+        // dropped so the next attempt re-authenticates.
+        if response.status == StatusCode::UNAUTHORIZED
+            || response.status == StatusCode::FORBIDDEN
+            || looks_like_oppo_auth_issue(&response.body)
         {
             self.invalidate_token().await;
             return Err(DispatchError::temporary(
-                oppo_error_message(self.vendor_name(), &body, status),
-                retry_after.or(Some(Duration::from_secs(OPPO_RETRY_DELAY_BASE_SECS))),
+                oppo_error_message(self.vendor_name(), &response.body, response.status),
+                response
+                    .retry_after
+                    .or(Some(Duration::from_secs(OPPO_RETRY_DELAY_BASE_SECS))),
             ));
         }
 
-        self.handle_response(status, retry_after, &body, device)
+        self.handle_response(
+            response.status,
+            response.retry_after,
+            &response.body,
+            device,
+        )
     }
 
     fn handle_response(
@@ -457,12 +393,10 @@ impl Pushkin for OppoPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key().is_none() {
-            tracing::warn!(
-                "rejecting {} device due to empty target_value",
-                self.vendor_name()
-            );
-            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
+        if let Some(rejected) =
+            oem_family::empty_push_key_rejection(self.vendor_name(), "target_value", device)
+        {
+            return Ok(rejected);
         }
 
         let Some(payload) = build_android_notification_payload(
@@ -474,32 +408,18 @@ impl Pushkin for OppoPushkin {
             return Ok(vec![]);
         };
 
-        for attempt in 0..OPPO_MAX_TRIES {
-            match self.send_once(device, payload.clone()).await {
-                Ok(result) => return Ok(result),
-                Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < OPPO_MAX_TRIES => {
-                    let retry_after = error.retry_after().unwrap_or_else(|| {
-                        Duration::from_secs(OPPO_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
-                    });
-                    sleep(retry_after).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-
-        Err(DispatchError::remote(format!(
-            "{} retried too many times",
-            self.vendor_name()
-        )))
+        oem_family::dispatch_with_retries(
+            self.vendor_name(),
+            OPPO_MAX_TRIES,
+            OPPO_RETRY_DELAY_BASE_SECS,
+            || {
+                let payload = payload.clone();
+                async move { self.send_once(device, payload).await }
+            },
+            oem_family::no_retry_hook,
+        )
+        .await
     }
-}
-
-fn current_timestamp_millis() -> Result<String, DispatchError> {
-    Ok(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| DispatchError::internal(format!("system clock error: {error}")))?
-        .as_millis()
-        .to_string())
 }
 
 fn oppo_sign(app_key: &str, timestamp: &str, master_secret: &str) -> String {
@@ -510,22 +430,18 @@ fn oppo_sign(app_key: &str, timestamp: &str, master_secret: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// OPPO reports a dead `target_value` as free text; the vocabulary is
+/// vendor-specific and deliberately not shared with vivo/Xiaomi.
 fn looks_like_invalid_target(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    (lower.contains("target")
-        || lower.contains("registration")
-        || lower.contains("token")
-        || lower.contains("userid"))
-        && (lower.contains("invalid")
-            || lower.contains("not exist")
-            || lower.contains("unregister")
-            || lower.contains("expired"))
+    oem_family::body_mentions(
+        body,
+        &["target", "registration", "token", "userid"],
+        &["invalid", "not exist", "unregister", "expired"],
+    )
 }
 
 fn looks_like_oppo_auth_issue(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    lower.contains("auth")
-        && (lower.contains("invalid") || lower.contains("expired") || lower.contains("token"))
+    oem_family::body_mentions(body, &["auth"], &["invalid", "expired", "token"])
 }
 
 fn oppo_error_message(vendor_name: &str, body: &str, status: StatusCode) -> String {
@@ -618,8 +534,11 @@ mod tests {
             matcher: AppMatcher::new("com.example.oppo".to_owned()).unwrap(),
             vendor,
             gate: ConcurrencyGate::new(1),
-            connection_semaphore: Arc::new(Semaphore::new(1)),
-            client: Client::builder().build().unwrap(),
+            transport: OemTransport::new(
+                &OPPO_METRICS,
+                reqwest::Client::builder().build().unwrap(),
+                1,
+            ),
             auth: OppoAuth {
                 app_key: "app-key".to_owned(),
                 master_secret: "master-secret".to_owned(),

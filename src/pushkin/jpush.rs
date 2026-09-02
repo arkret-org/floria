@@ -1,66 +1,25 @@
-use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant};
+use std::sync::LazyLock;
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
-use prometheus::{
-    Histogram, IntGauge, register_histogram, register_int_counter_vec, register_int_gauge,
-};
+use prometheus::register_int_counter_vec;
+use reqwest::StatusCode;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use tokio::sync::Semaphore;
-use tokio::time::sleep;
 
 use super::android::{AndroidNotificationPayload, build_android_notification_payload};
-use super::reqwest_support::{build_reqwest_client, parse_retry_after};
+use super::oem_family::{self, OemMetrics, OemTransport};
+use super::reqwest_support::build_reqwest_client;
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{DeviceExt, NotificationContext};
 
-static JPUSH_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_jpush_queue_time",
-        "Time taken waiting for a JPush request slot"
-    )
-    .expect("register floria_jpush_queue_time")
-});
-
-static JPUSH_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_jpush_request_time",
-        "Time taken to send HTTP request to JPush"
-    )
-    .expect("register floria_jpush_request_time")
-});
-
-static JPUSH_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_pending_jpush_requests",
-        "Number of JPush requests waiting for a connection"
-    )
-    .expect("register floria_pending_jpush_requests")
-});
-
-static JPUSH_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_active_jpush_requests",
-        "Number of JPush requests in flight"
-    )
-    .expect("register floria_active_jpush_requests")
-});
-
-static JPUSH_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_jpush_status_codes",
-        "Number of HTTP response status codes received from JPush",
-        &["pushkin", "code"]
-    )
-    .expect("register floria_jpush_status_codes")
-});
+static JPUSH_METRICS: LazyLock<OemMetrics> =
+    LazyLock::new(|| OemMetrics::new("jpush", "JPush", "a"));
 
 static JPUSH_DISPATCH_BY_CHANNEL: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
@@ -72,14 +31,14 @@ static JPUSH_DISPATCH_BY_CHANNEL: LazyLock<prometheus::IntCounterVec> = LazyLock
 });
 
 const JPUSH_URL: &str = "https://api.jpush.cn/v3/push";
+const JPUSH_DISPLAY: &str = "JPush";
 const JPUSH_MAX_TRIES: usize = 3;
 const JPUSH_RETRY_DELAY_BASE_SECS: u64 = 10;
 
 pub struct JpushPushkin {
     matcher: AppMatcher,
     gate: ConcurrencyGate,
-    connection_semaphore: Arc<Semaphore>,
-    client: Client,
+    transport: OemTransport,
     authorization: HeaderValue,
     config: JpushConfig,
     /// Stable label that tracks the configured third_party_channel
@@ -140,8 +99,11 @@ impl JpushPushkin {
         let authorization = basic_authorization(&app_key, &master_secret)?;
         let matcher = AppMatcher::new(name)?;
         let gate = ConcurrencyGate::new(inflight_limit(app)?);
-        let connection_semaphore = Arc::new(Semaphore::new(max_connections(app)?.max(1)));
-        let client = build_reqwest_client(config, "floria")?;
+        let transport = OemTransport::new(
+            &JPUSH_METRICS,
+            build_reqwest_client(config, "floria")?,
+            max_connections(app)?,
+        );
         let third_party_channel = app
             .get_object("third_party_channel")?
             .map(validate_third_party_channel)
@@ -163,8 +125,7 @@ impl JpushPushkin {
         Ok(Self {
             matcher,
             gate,
-            connection_semaphore,
-            client,
+            transport,
             authorization,
             config: JpushConfig {
                 platforms,
@@ -340,50 +301,31 @@ impl JpushPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let body = self.build_request_body(notification, device, payload);
 
-        JPUSH_PENDING_REQUESTS.inc();
-        let queue_started = Instant::now();
-        let _connection_permit = self
-            .connection_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| {
-                JPUSH_PENDING_REQUESTS.dec();
-                DispatchError::internal("JPush connection semaphore closed")
-            })?;
-        JPUSH_PENDING_REQUESTS.dec();
-        JPUSH_QUEUE_TIME.observe(queue_started.elapsed().as_secs_f64());
-
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, self.authorization.clone());
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        JPUSH_ACTIVE_REQUESTS.inc();
-        let request_started = Instant::now();
+        // JPush authenticates with static HTTP Basic credentials, so
+        // there is no token to invalidate on a 401 the way OPPO/vivo do.
         let response = self
-            .client
-            .post(JPUSH_URL)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| {
-                JPUSH_ACTIVE_REQUESTS.dec();
-                JPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
-                DispatchError::temporary(format!("JPush request failed: {error}"), None)
-            })?;
-        JPUSH_ACTIVE_REQUESTS.dec();
-        JPUSH_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
+            .transport
+            .send(
+                self.name(),
+                JPUSH_DISPLAY,
+                self.transport
+                    .client()
+                    .post(JPUSH_URL)
+                    .headers(headers)
+                    .json(&body),
+            )
+            .await?;
 
-        let status = response.status();
-        JPUSH_STATUS_CODES
-            .with_label_values(&[self.name(), &status.as_u16().to_string()])
-            .inc();
-        let retry_after = parse_retry_after(response.headers());
-        let body = response.text().await.map_err(|error| {
-            DispatchError::remote(format!("failed to read JPush response: {error}"))
-        })?;
-        self.handle_response(status, retry_after, &body, device)
+        self.handle_response(
+            response.status,
+            response.retry_after,
+            &response.body,
+            device,
+        )
     }
 
     fn handle_response(
@@ -429,9 +371,10 @@ impl Pushkin for JpushPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key().is_none() {
-            tracing::warn!("rejecting JPush device due to empty registration_id");
-            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
+        if let Some(rejected) =
+            oem_family::empty_push_key_rejection(JPUSH_DISPLAY, "registration_id", device)
+        {
+            return Ok(rejected);
         }
 
         let Some(payload) = build_android_notification_payload(
@@ -443,53 +386,51 @@ impl Pushkin for JpushPushkin {
             return Ok(vec![]);
         };
 
-        for attempt in 0..JPUSH_MAX_TRIES {
-            let result = self.send_once(notification, device, payload.clone()).await;
-            let outcome = match &result {
-                Ok(rejected) if rejected.is_empty() => "accepted",
-                Ok(_) => "partial",
-                Err(error) if error.is_temporary() => "retryable",
-                Err(error) if error.is_remote() => "remote_error",
-                Err(_) => "internal_error",
-            };
-            JPUSH_DISPATCH_BY_CHANNEL
-                .with_label_values(&[self.name(), self.channel_label(), outcome])
-                .inc();
-            match result {
-                Ok(result) => return Ok(result),
-                Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < JPUSH_MAX_TRIES => {
-                    // Channels with stricter rate limits (huawei,
-                    // xiaomi) historically need longer waits; bump
-                    // the base when they are configured. operators
-                    // can disable this by setting third_party_channel
-                    // to the looser vendors only.
-                    let stricter =
-                        self.config
-                            .third_party_channel
-                            .as_ref()
-                            .is_some_and(|channel| {
-                                channel.contains_key("huawei") || channel.contains_key("xiaomi")
-                            });
-                    let multiplier = if stricter { 2 } else { 1 };
-                    let retry_after = error.retry_after().unwrap_or_else(|| {
-                        Duration::from_secs(
-                            JPUSH_RETRY_DELAY_BASE_SECS * multiplier * (1_u64 << attempt),
-                        )
-                    });
-                    tracing::warn!(
-                        pushkin = %self.name(),
-                        channel = %self.channel_label(),
-                        attempt = attempt + 1,
-                        retry_after_secs = retry_after.as_secs(),
-                        "JPush temporary failure; backing off before retry"
-                    );
-                    sleep(retry_after).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
+        // Channels with stricter rate limits (huawei, xiaomi)
+        // historically need longer waits; bump the base when they are
+        // configured. Operators can disable this by setting
+        // third_party_channel to the looser vendors only.
+        let stricter = self
+            .config
+            .third_party_channel
+            .as_ref()
+            .is_some_and(|channel| {
+                channel.contains_key("huawei") || channel.contains_key("xiaomi")
+            });
+        let retry_delay_base_secs = JPUSH_RETRY_DELAY_BASE_SECS * if stricter { 2 } else { 1 };
 
-        Err(DispatchError::remote("JPush retried too many times"))
+        oem_family::dispatch_with_retries(
+            JPUSH_DISPLAY,
+            JPUSH_MAX_TRIES,
+            retry_delay_base_secs,
+            || {
+                let payload = payload.clone();
+                async move {
+                    let result = self.send_once(notification, device, payload).await;
+                    let outcome = match &result {
+                        Ok(rejected) if rejected.is_empty() => "accepted",
+                        Ok(_) => "partial",
+                        Err(error) if error.is_temporary() => "retryable",
+                        Err(error) if error.is_remote() => "remote_error",
+                        Err(_) => "internal_error",
+                    };
+                    JPUSH_DISPATCH_BY_CHANNEL
+                        .with_label_values(&[self.name(), self.channel_label(), outcome])
+                        .inc();
+                    result
+                }
+            },
+            |attempt, retry_after| {
+                tracing::warn!(
+                    pushkin = %self.name(),
+                    channel = %self.channel_label(),
+                    attempt = attempt + 1,
+                    retry_after_secs = retry_after.as_secs(),
+                    "JPush temporary failure; backing off before retry"
+                );
+            },
+        )
+        .await
     }
 }
 
@@ -607,8 +548,11 @@ mod tests {
         JpushPushkin {
             matcher: AppMatcher::new("com.example.jpush".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
-            connection_semaphore: Arc::new(Semaphore::new(1)),
-            client: Client::builder().build().unwrap(),
+            transport: OemTransport::new(
+                &JPUSH_METRICS,
+                reqwest::Client::builder().build().unwrap(),
+                1,
+            ),
             authorization: HeaderValue::from_static("Basic abc"),
             config: JpushConfig {
                 platforms: vec!["android".to_owned()],

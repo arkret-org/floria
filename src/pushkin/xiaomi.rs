@@ -1,67 +1,26 @@
-use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant};
+use std::sync::LazyLock;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 use async_trait::async_trait;
-use prometheus::{
-    Histogram, IntGauge, register_histogram, register_int_counter_vec, register_int_gauge,
-};
+use reqwest::StatusCode;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use tokio::sync::Semaphore;
-use tokio::time::sleep;
 
 use super::android::build_android_notification_payload;
-use super::reqwest_support::{build_reqwest_client, parse_retry_after};
+use super::oem_family::{self, OemMetrics, OemTransport};
+use super::reqwest_support::build_reqwest_client;
 use super::{AppMatcher, ConcurrencyGate, Pushkin, inflight_limit, max_connections};
 use crate::config::{AppConfig, Config};
 use crate::error::DispatchError;
 use crate::models::{DeviceExt, NotificationContext};
 
-static XIAOMI_QUEUE_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_xiaomi_queue_time",
-        "Time taken waiting for a Xiaomi Push request slot"
-    )
-    .expect("register floria_xiaomi_queue_time")
-});
+static XIAOMI_METRICS: LazyLock<OemMetrics> =
+    LazyLock::new(|| OemMetrics::new("xiaomi", "Xiaomi Push", "a"));
 
-static XIAOMI_REQUEST_TIME: LazyLock<Histogram> = LazyLock::new(|| {
-    register_histogram!(
-        "floria_xiaomi_request_time",
-        "Time taken to send HTTP request to Xiaomi Push"
-    )
-    .expect("register floria_xiaomi_request_time")
-});
-
-static XIAOMI_PENDING_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_pending_xiaomi_requests",
-        "Number of Xiaomi Push requests waiting for a connection"
-    )
-    .expect("register floria_pending_xiaomi_requests")
-});
-
-static XIAOMI_ACTIVE_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
-    register_int_gauge!(
-        "floria_active_xiaomi_requests",
-        "Number of Xiaomi Push requests in flight"
-    )
-    .expect("register floria_active_xiaomi_requests")
-});
-
-static XIAOMI_STATUS_CODES: LazyLock<prometheus::IntCounterVec> = LazyLock::new(|| {
-    register_int_counter_vec!(
-        "floria_xiaomi_status_codes",
-        "Number of HTTP response status codes received from Xiaomi Push",
-        &["pushkin", "code"]
-    )
-    .expect("register floria_xiaomi_status_codes")
-});
-
+const XIAOMI_DISPLAY: &str = "Xiaomi Push";
 const XIAOMI_MAX_TRIES: usize = 3;
 const XIAOMI_RETRY_DELAY_BASE_SECS: u64 = 10;
 const XIAOMI_API_BASE_URL: &str = "https://api.xmpush.xiaomi.com";
@@ -69,8 +28,7 @@ const XIAOMI_API_BASE_URL: &str = "https://api.xmpush.xiaomi.com";
 pub struct XiaomiPushkin {
     matcher: AppMatcher,
     gate: ConcurrencyGate,
-    connection_semaphore: Arc<Semaphore>,
-    client: Client,
+    transport: OemTransport,
     authorization: HeaderValue,
     endpoint: String,
     config: XiaomiConfig,
@@ -130,8 +88,11 @@ impl XiaomiPushkin {
         Ok(Self {
             matcher: AppMatcher::new(name)?,
             gate: ConcurrencyGate::new(inflight_limit(app)?),
-            connection_semaphore: Arc::new(Semaphore::new(max_connections(app)?.max(1))),
-            client: build_reqwest_client(config, "floria")?,
+            transport: OemTransport::new(
+                &XIAOMI_METRICS,
+                build_reqwest_client(config, "floria")?,
+                max_connections(app)?,
+            ),
             authorization: xiaomi_authorization(&app_secret)?,
             endpoint,
             config: XiaomiConfig {
@@ -245,49 +206,31 @@ impl XiaomiPushkin {
             return Ok(vec![]);
         }
 
-        XIAOMI_PENDING_REQUESTS.inc();
-        let queue_started = Instant::now();
-        let _connection_permit = self
-            .connection_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| {
-                XIAOMI_PENDING_REQUESTS.dec();
-                DispatchError::internal("Xiaomi Push connection semaphore closed")
-            })?;
-        XIAOMI_PENDING_REQUESTS.dec();
-        XIAOMI_QUEUE_TIME.observe(queue_started.elapsed().as_secs_f64());
-
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, self.authorization.clone());
 
-        XIAOMI_ACTIVE_REQUESTS.inc();
-        let request_started = Instant::now();
+        // Xiaomi is the only OEM here that takes a form body rather
+        // than JSON, and it authenticates with a static `key=` header
+        // instead of a refreshable access token.
         let response = self
-            .client
-            .post(&self.endpoint)
-            .headers(headers)
-            .form(&form)
-            .send()
-            .await
-            .map_err(|error| {
-                XIAOMI_ACTIVE_REQUESTS.dec();
-                XIAOMI_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
-                DispatchError::temporary(format!("Xiaomi Push request failed: {error}"), None)
-            })?;
-        XIAOMI_ACTIVE_REQUESTS.dec();
-        XIAOMI_REQUEST_TIME.observe(request_started.elapsed().as_secs_f64());
+            .transport
+            .send(
+                self.name(),
+                XIAOMI_DISPLAY,
+                self.transport
+                    .client()
+                    .post(&self.endpoint)
+                    .headers(headers)
+                    .form(&form),
+            )
+            .await?;
 
-        let status = response.status();
-        XIAOMI_STATUS_CODES
-            .with_label_values(&[self.name(), &status.as_u16().to_string()])
-            .inc();
-        let retry_after = parse_retry_after(response.headers());
-        let body = response.text().await.map_err(|error| {
-            DispatchError::remote(format!("failed to read Xiaomi Push response: {error}"))
-        })?;
-        self.handle_response(status, retry_after, &body, device)
+        self.handle_response(
+            response.status,
+            response.retry_after,
+            &response.body,
+            device,
+        )
     }
 
     fn handle_response(
@@ -346,32 +289,26 @@ impl Pushkin for XiaomiPushkin {
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
 
-        if device.push_key().is_none() {
-            tracing::warn!("rejecting Xiaomi Push device due to empty registration_id");
-            return Ok(vec![device.push_key().unwrap_or_default().to_owned()]);
+        if let Some(rejected) =
+            oem_family::empty_push_key_rejection(XIAOMI_DISPLAY, "registration_id", device)
+        {
+            return Ok(rejected);
         }
 
-        for attempt in 0..XIAOMI_MAX_TRIES {
-            match self
-                .send_once(
-                    notification,
-                    device,
-                    context.allow_plaintext_metadata && device.visible_notification_opt_in(),
-                )
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(error @ DispatchError::Temporary { .. }) if attempt + 1 < XIAOMI_MAX_TRIES => {
-                    let retry_after = error.retry_after().unwrap_or_else(|| {
-                        Duration::from_secs(XIAOMI_RETRY_DELAY_BASE_SECS * (1_u64 << attempt))
-                    });
-                    sleep(retry_after).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
+        let allow_visible_notification =
+            context.allow_plaintext_metadata && device.visible_notification_opt_in();
 
-        Err(DispatchError::remote("Xiaomi Push retried too many times"))
+        oem_family::dispatch_with_retries(
+            XIAOMI_DISPLAY,
+            XIAOMI_MAX_TRIES,
+            XIAOMI_RETRY_DELAY_BASE_SECS,
+            || async move {
+                self.send_once(notification, device, allow_visible_notification)
+                    .await
+            },
+            oem_family::no_retry_hook,
+        )
+        .await
     }
 }
 
@@ -396,13 +333,14 @@ fn xiaomi_string(value: &Value) -> String {
     }
 }
 
+/// Xiaomi only ever says `registration`, and says `unregistered` where
+/// OPPO/vivo say `unregister`; the narrower list is intentional.
 fn looks_like_invalid_registration(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    lower.contains("registration")
-        && (lower.contains("invalid")
-            || lower.contains("expired")
-            || lower.contains("unregistered")
-            || lower.contains("not exist"))
+    oem_family::body_mentions(
+        body,
+        &["registration"],
+        &["invalid", "expired", "unregistered", "not exist"],
+    )
 }
 
 fn xiaomi_error_message(body: &str, status: StatusCode) -> String {
@@ -448,8 +386,11 @@ mod tests {
         XiaomiPushkin {
             matcher: AppMatcher::new("com.example.xiaomi".to_owned()).unwrap(),
             gate: ConcurrencyGate::new(1),
-            connection_semaphore: Arc::new(Semaphore::new(1)),
-            client: Client::builder().build().unwrap(),
+            transport: OemTransport::new(
+                &XIAOMI_METRICS,
+                reqwest::Client::builder().build().unwrap(),
+                1,
+            ),
             authorization: HeaderValue::from_static("key=secret"),
             endpoint: format!("{XIAOMI_API_BASE_URL}/v3/message/regid"),
             config: XiaomiConfig {

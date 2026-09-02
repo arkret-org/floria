@@ -3,9 +3,8 @@ mod apns;
 mod custom;
 mod fcm;
 mod hms_family;
-mod honor;
-mod huawei;
 mod jpush;
+mod oem_family;
 mod oppo;
 mod reqwest_support;
 #[cfg(test)]
@@ -41,8 +40,7 @@ static INFLIGHT_LIMIT_DROP: LazyLock<prometheus::IntCounterVec> = LazyLock::new(
 pub use apns::ApnsPushkin;
 pub use custom::CustomPushkin;
 pub use fcm::FcmPushkin;
-pub use honor::HonorPushkin;
-pub use huawei::HuaweiPushkin;
+pub use hms_family::HmsPushkin;
 pub use jpush::JpushPushkin;
 pub use oppo::OppoPushkin;
 pub use vivo::VivoPushkin;
@@ -145,8 +143,8 @@ fn create_pushkin(
         "apns" => Ok(Arc::new(ApnsPushkin::new(name, app, config, base_dir)?)),
         "custom" => Ok(Arc::new(CustomPushkin::new(name, app, config, base_dir)?)),
         "fcm" => Ok(Arc::new(FcmPushkin::new(name, app, config, base_dir)?)),
-        "honor" => Ok(Arc::new(HonorPushkin::new(name, app, config)?)),
-        "huawei" => Ok(Arc::new(HuaweiPushkin::new(name, app, config)?)),
+        "honor" => Ok(Arc::new(HmsPushkin::new_honor(name, app, config)?)),
+        "huawei" => Ok(Arc::new(HmsPushkin::new_huawei(name, app, config)?)),
         "jpush" => Ok(Arc::new(JpushPushkin::new(name, app, config)?)),
         "oppo" => Ok(Arc::new(OppoPushkin::new(name, app, config)?)),
         "oneplus" => Ok(Arc::new(OppoPushkin::new_oneplus(name, app, config)?)),
