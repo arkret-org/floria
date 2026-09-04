@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use arkret_signatures::http_signature::{
-    self as sdk_sig, Component, ContentDigest, SignatureError, SignedRequestParts,
+    self as sdk_sig, Component, ContentDigest, HttpMessageVerificationError, SignatureError,
+    SignaturePolicyError, SignatureVerificationPolicy,
 };
 use arkret_wire::DidCoreId;
 use salvo::http::StatusCode;
@@ -27,13 +28,6 @@ pub(super) fn verify_message_signature(
     origin_id: &DidCoreId,
     request_id: &str,
 ) -> Result<(), AuthFailure> {
-    if req.header::<String>("content-encoding").is_some() {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "signed JSON requests must not use Content-Encoding".to_owned(),
-        });
-    }
     let key_id = principal.signature_verification_method.as_deref().ok_or_else(|| {
         tracing::warn!(
             request_id,
@@ -73,30 +67,13 @@ pub(super) fn verify_message_signature(
     let signature_input =
         sdk_sig::parse_signature_input(&raw_signature_input).map_err(map_signature_input_error)?;
 
-    let raw_signature_header =
-        req.header::<String>(SIGNATURE_HEADER)
-            .ok_or_else(|| AuthFailure {
-                status: StatusCode::UNAUTHORIZED,
-                code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
-                message: "missing Signature header".to_owned(),
-            })?;
-    // We parse the raw signature header solely to fail fast on a missing
-    // label / malformed base64 — verify_signature will redo the decoding,
-    // but this lets us produce a precise AuthFailure before building the
-    // canonical message.
-    let signature_bytes =
-        sdk_sig::parse_signature_header(&raw_signature_header, &signature_input.label)
-            .map_err(map_signature_header_error)?;
-    if signature_bytes.len() != 64 {
+    if req.header::<String>(SIGNATURE_HEADER).is_none() {
         return Err(AuthFailure {
             status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "Signature header is not a valid Ed25519 signature".to_owned(),
+            code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
+            message: "missing Signature header".to_owned(),
         });
     }
-    // The base64 form of the signature value, with the `label=:` wrap
-    // stripped, is what verify_signature expects.
-    let signature_b64 = sdk_sig::encode_signature_b64(&signature_bytes);
 
     // ----- policy checks (key_id, alg, required components, skew) ------
     if signature_input.key_id != key_id {
@@ -106,14 +83,6 @@ pub(super) fn verify_message_signature(
             message: "Signature key_id does not match configured service principal".to_owned(),
         });
     }
-    if signature_input.algorithm != "ed25519" {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "unsupported HTTP Message Signature algorithm".to_owned(),
-        });
-    }
-
     let required_components = [
         Component::Method,
         Component::TargetUri,
@@ -122,58 +91,9 @@ pub(super) fn verify_message_signature(
         Component::Header(SOURCE_SERVICE_ID_HEADER.to_owned()),
         Component::Header(DESTINATION_SERVICE_ID_HEADER.to_owned()),
     ];
-    if !signature_input.covers_all(&required_components) {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "HTTP Message Signature is missing required covered components".to_owned(),
-        });
-    }
-
     let now = unix_now_secs();
     let created_skew =
         (auth.signature_max_skew_seconds() as i64).min(SIGNATURE_CREATED_MAX_SKEW_SECONDS);
-    if signature_input.created > now + created_skew {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "auth_expired",
-            message: "HTTP Message Signature created timestamp is in the future".to_owned(),
-        });
-    }
-    if signature_input.created < now - created_skew {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "auth_expired",
-            message: "HTTP Message Signature created timestamp is too old".to_owned(),
-        });
-    }
-    if signature_input.expires - signature_input.created > SIGNATURE_MAX_LIFETIME_SECONDS {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "auth_expired",
-            message: "HTTP Message Signature lifetime exceeds 300 seconds".to_owned(),
-        });
-    }
-    if signature_input.expires < now {
-        return Err(AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: "auth_expired",
-            message: "HTTP Message Signature has expired".to_owned(),
-        });
-    }
-
-    // ----- content-digest enforcement (covered → must verify) ----------
-    // floria has always insisted that `content-digest` is a covered
-    // component (the required_components check above guarantees it), and
-    // that the body matches. We re-verify here against the raw body so
-    // tampering is caught before the canonical message is even built.
-    let verified_digest = verified_content_digest(req, body)?;
-
-    // ----- canonical message + ed25519 verify --------------------------
-    let parts = signed_request_parts(req, &verified_digest)?;
-    let message =
-        sdk_sig::canonical_message(&parts, &signature_input).map_err(map_canonical_error)?;
-
     let public_key_bytes = hex::decode(public_key_hex).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
@@ -185,33 +105,6 @@ pub(super) fn verify_message_signature(
             code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
             message: "configured signature public key is invalid".to_owned(),
         })?;
-    sdk_sig::verify_signature(&message, &signature_b64, &public_key).map_err(|err| match err {
-        SignatureError::InvalidSignatureBase64 => AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "Signature header is not valid base64".to_owned(),
-        },
-        SignatureError::InvalidSignatureLength => AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "Signature header is not a valid Ed25519 signature".to_owned(),
-        },
-        _ => AuthFailure {
-            status: StatusCode::UNAUTHORIZED,
-            code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-            message: "HTTP Message Signature verification failed".to_owned(),
-        },
-    })
-}
-
-/// Project a salvo `Request` into the SDK's framework-agnostic
-/// [`SignedRequestParts`]. The pre-verified `content-digest` wire value
-/// is threaded in so `canonical_message` can emit it without re-parsing
-/// the header.
-fn signed_request_parts(
-    req: &Request,
-    verified_content_digest: &str,
-) -> Result<SignedRequestParts, AuthFailure> {
     let target_uri = target_uri(req)?;
     let authority = authority(req)?.to_owned();
     let path = req
@@ -219,11 +112,7 @@ fn signed_request_parts(
         .path_and_query()
         .map(|value| value.as_str().to_owned())
         .unwrap_or_else(|| req.uri().path().to_owned());
-    let method = req.method().as_str().to_owned();
-
-    // Forward every request header so any non-required covered
-    // component the signer chose to include is still resolvable.
-    let mut headers: Vec<(String, String)> = req
+    let headers: Vec<(String, String)> = req
         .headers()
         .iter()
         .map(|(name, value)| {
@@ -233,26 +122,26 @@ fn signed_request_parts(
             )
         })
         .collect();
-    // floria derives `@authority` from the Host header / URI fallback,
-    // and SDK canonicalization reads it from `parts.authority` directly
-    // (not from a `host` entry in `headers`), so no extra wiring needed.
-    // Make sure the content-digest emitted in the canonical message is
-    // the body-verified one, not whatever the request header happens to
-    // contain (they should match by definition, but we belt-and-brace).
-    headers.retain(|(name, _)| name != "content-digest");
-    headers.push((
-        "content-digest".to_owned(),
-        verified_content_digest.to_owned(),
-    ));
-
-    Ok(SignedRequestParts {
-        method,
-        target_uri,
-        authority,
-        path,
-        headers,
-        body_digest: Some(verified_content_digest.to_owned()),
-    })
+    let policy = SignatureVerificationPolicy::new(required_components)
+        .require_content_digest(true)
+        .max_clock_skew_seconds(created_skew)
+        .max_validity_window_seconds(SIGNATURE_MAX_LIFETIME_SECONDS);
+    sdk_sig::verify_signed_canonical_json_message(
+        req.method().as_str(),
+        &target_uri,
+        &authority,
+        &path,
+        headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+        req.header::<String>("content-encoding").is_some(),
+        body,
+        &public_key,
+        &policy,
+        now,
+    )
+    .map(|_| ())
+    .map_err(map_http_message_error)
 }
 
 /// Re-verify the RFC 9530 `Content-Digest` against the raw body and
@@ -326,31 +215,48 @@ fn map_signature_input_error(err: SignatureError) -> AuthFailure {
     }
 }
 
-fn map_signature_header_error(err: SignatureError) -> AuthFailure {
-    let message = match err {
-        SignatureError::MalformedSignatureHeader(_) => {
-            "Signature header does not contain the declared signature label".to_owned()
-        }
-        SignatureError::InvalidSignatureBase64 => "Signature header is not valid base64".to_owned(),
-        _ => "Signature header is malformed".to_owned(),
+fn map_http_message_error(err: HttpMessageVerificationError) -> AuthFailure {
+    let code = match &err {
+        HttpMessageVerificationError::Policy(
+            SignaturePolicyError::CreatedInFuture
+            | SignaturePolicyError::CreatedTooOld
+            | SignaturePolicyError::Expired,
+        ) => "auth_expired",
+        _ => arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
     };
-    AuthFailure {
-        status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
-        message,
-    }
-}
-
-fn map_canonical_error(err: SignatureError) -> AuthFailure {
     let message = match err {
-        SignatureError::MissingCoveredComponent(name) => {
+        HttpMessageVerificationError::ContentEncodingNotAllowed => {
+            "signed JSON requests must not use Content-Encoding".to_owned()
+        }
+        HttpMessageVerificationError::NonCanonicalJson(error) => {
+            format!("signed request body is not canonical JSON: {error}")
+        }
+        HttpMessageVerificationError::Signature(SignatureError::ContentDigestMismatch) => {
+            "Content-Digest does not match request body".to_owned()
+        }
+        HttpMessageVerificationError::Signature(SignatureError::MissingCoveredComponent(name)) => {
             format!("required signed header `{name}` is missing")
         }
-        _ => "HTTP Message Signature canonicalization failed".to_owned(),
+        HttpMessageVerificationError::Policy(
+            SignaturePolicyError::MissingRequiredCoveredComponent,
+        ) => "HTTP Message Signature is missing required covered components".to_owned(),
+        HttpMessageVerificationError::Policy(SignaturePolicyError::CreatedInFuture) => {
+            "HTTP Message Signature created timestamp is in the future".to_owned()
+        }
+        HttpMessageVerificationError::Policy(SignaturePolicyError::CreatedTooOld) => {
+            "HTTP Message Signature created timestamp is too old".to_owned()
+        }
+        HttpMessageVerificationError::Policy(SignaturePolicyError::Expired) => {
+            "HTTP Message Signature has expired".to_owned()
+        }
+        HttpMessageVerificationError::Policy(SignaturePolicyError::InvalidValidityWindow) => {
+            "HTTP Message Signature lifetime exceeds 300 seconds".to_owned()
+        }
+        _ => "HTTP Message Signature verification failed".to_owned(),
     };
     AuthFailure {
         status: StatusCode::UNAUTHORIZED,
-        code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
+        code,
         message,
     }
 }

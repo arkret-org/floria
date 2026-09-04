@@ -46,12 +46,10 @@ pub(crate) fn bearer_state(
 }
 
 fn parse_bearer_token(value: &str) -> Option<&str> {
-    let value = value.trim();
-    let token = value
-        .strip_prefix("Bearer ")
-        .or_else(|| value.strip_prefix("bearer "))?;
-    let token = token.trim();
-    (!token.is_empty()).then_some(token)
+    arkret_server::authorization_credential(
+        value.trim(),
+        arkret_server::AuthorizationScheme::Bearer,
+    )
 }
 
 /// Compares a pre-computed SHA-256 of the presented bearer token against

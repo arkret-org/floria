@@ -321,6 +321,22 @@ name = "arkret-retry"
 version = "0.3.0"
 
 [[package]]
+name = "arkret-server"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-models-collaboration",
+ "arkret-models-discovery",
+ "arkret-models-integration",
+ "arkret-rate-limit",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arkret-signatures"
 version = "0.3.0"
 dependencies = [
@@ -1365,6 +1381,7 @@ dependencies = [
  "arkret-push-policy",
  "arkret-rate-limit",
  "arkret-retry",
+ "arkret-server",
  "arkret-signatures",
  "arkret-wire",
  "async-trait",

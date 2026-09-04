@@ -31,6 +31,7 @@ arkret-models-integration = { path = "../arkret-rust-sdk/crates/models-integrati
 arkret-push-policy = { path = "../arkret-rust-sdk/crates/push-policy", default-features = false }
 arkret-rate-limit = { path = "../arkret-rust-sdk/crates/rate-limit", default-features = false }
 arkret-retry = { path = "../arkret-rust-sdk/crates/retry", default-features = false }
+arkret-server = { path = "../arkret-rust-sdk/crates/server", default-features = false }
 arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire", default-features = false }
 floria-contracts = { version = "0.3.0", path = "crates/floria-contracts" }
@@ -90,6 +91,7 @@ arkret-models-integration = { workspace = true, default-features = false }
 arkret-push-policy = { workspace = true, default-features = false }
 arkret-rate-limit.workspace = true
 arkret-retry.workspace = true
+arkret-server.workspace = true
 arkret-signatures = { workspace = true, default-features = false }
 arkret-wire = { workspace = true, default-features = false }
 floria-contracts.workspace = true

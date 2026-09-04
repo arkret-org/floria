@@ -205,7 +205,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:floria")
             .expect("static placeholder trust domain is well-formed"),
         service_kind: arkret_wire::ServiceKind::PushGateway,
-        protocol_version: arkret_wire::PROTOCOL_VERSION.to_owned(),
+        protocol_version: arkret_models_discovery::ServiceProtocolVersion::V1,
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
         supported_operation_bundles: vec![
