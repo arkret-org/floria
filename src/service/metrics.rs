@@ -208,9 +208,9 @@ fn canonical_outcome(status: &str) -> &'static str {
 pub(super) fn render_problem(
     res: &mut Response,
     status: StatusCode,
-    envelope: arkret_wire::ErrorEnvelope,
+    envelope: arkret_wire::Problem,
 ) {
-    let problem = arkret_wire::Problem::from_error_envelope(&envelope, status.as_u16());
+    let problem = envelope.with_status(status.as_u16());
     let mut output = salvo::http::Problem::new(status)
         .kind(problem.problem_type)
         .title(problem.title)
@@ -247,8 +247,8 @@ pub(super) fn finish_error(
     let request_id = request_id
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| arkret_wire::new_prefixed_uuid7("ak:request:"));
-    let body = arkret_wire::ErrorEnvelope::new(code, body)
-        .with_request_id(request_id)
+    let body = arkret_wire::Problem::from_code(code, body)
+        .with_instance(request_id)
         .with_retry_after_ms(
             retry_after.map(|value| value.as_millis().min(u64::MAX as u128) as u64),
         );

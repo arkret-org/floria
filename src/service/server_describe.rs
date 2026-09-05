@@ -63,11 +63,11 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         render_problem(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            arkret_wire::ErrorEnvelope::new(
+            arkret_wire::Problem::from_code(
                 arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
                 "application state missing",
             )
-            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
+            .with_instance(arkret_wire::new_prefixed_uuid7("ak:request:")),
         );
         return;
     };
@@ -188,11 +188,11 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         render_problem(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            arkret_wire::ErrorEnvelope::new(
+            arkret_wire::Problem::from_code(
                 arkret_wire::ErrorCode::INTERNAL_ERROR,
                 "gateway service resolution is not configured",
             )
-            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
+            .with_instance(arkret_wire::new_prefixed_uuid7("ak:request:")),
         );
         return;
     };

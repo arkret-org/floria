@@ -530,12 +530,11 @@ mod sanitize_tests {
         let out = sanitized_provider_payload(payload).unwrap();
         // Serialize back to JSON and assert none of the names survive.
         let encoded = serde_json::to_string(&out).unwrap();
-        for forbidden in ["trust_domain"] {
-            assert!(
-                !encoded.contains(forbidden),
-                "nested provider-egress forbidden field `{forbidden}` survived: {encoded}"
-            );
-        }
+        let forbidden = "trust_domain";
+        assert!(
+            !encoded.contains(forbidden),
+            "nested provider-egress forbidden field `{forbidden}` survived: {encoded}"
+        );
         assert!(encoded.contains("ok_key"));
     }
 

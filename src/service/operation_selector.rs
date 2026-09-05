@@ -1,5 +1,5 @@
 use arkret_wire::error_codes::ErrorCode;
-use arkret_wire::{ErrorEnvelope, ServiceOperationId};
+use arkret_wire::{Problem, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
@@ -72,7 +72,7 @@ fn reject(res: &mut Response, status: StatusCode, code: &str, message: &str) {
     render_problem(
         res,
         status,
-        ErrorEnvelope::new(code, message)
-            .with_request_id(arkret_wire::new_prefixed_uuid7("ak:request:")),
+        Problem::from_code(code, message)
+            .with_instance(arkret_wire::new_prefixed_uuid7("ak:request:")),
     );
 }
