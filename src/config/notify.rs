@@ -30,12 +30,7 @@ impl Default for NotifyDedupConfig {
 
 impl NotifyDedupConfig {
     pub fn backend_kind(&self) -> &str {
-        let backend = self.backend.trim();
-        if backend.is_empty() {
-            "memory"
-        } else {
-            backend
-        }
+        super::trimmed_or(&self.backend, "memory")
     }
 
     pub fn emit_startup_warnings(&self) {
@@ -46,8 +41,7 @@ impl NotifyDedupConfig {
     }
 
     pub fn key_prefix(&self) -> &str {
-        let value = self.key_prefix.trim();
-        if value.is_empty() { "floria" } else { value }
+        super::trimmed_or(&self.key_prefix, "floria")
     }
 
     pub fn validate(&self, ttl_seconds: u64) -> Result<()> {
@@ -132,22 +126,15 @@ impl NotifyRateLimitConfig {
     }
 
     pub fn backend_kind(&self) -> &str {
-        let backend = self.backend.trim();
-        if backend.is_empty() {
-            "memory"
-        } else {
-            backend
-        }
+        super::trimmed_or(&self.backend, "memory")
     }
 
     pub fn key_prefix(&self) -> &str {
-        let value = self.key_prefix.trim();
-        if value.is_empty() { "floria" } else { value }
+        super::trimmed_or(&self.key_prefix, "floria")
     }
 
     pub fn failure_policy(&self) -> &str {
-        let value = self.redis_failure_policy.trim();
-        if value.is_empty() { "strict" } else { value }
+        super::trimmed_or(&self.redis_failure_policy, "strict")
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -293,17 +280,11 @@ impl NotifyRetryQueueConfig {
     }
 
     pub fn backend_kind(&self) -> &str {
-        let backend = self.backend.trim();
-        if backend.is_empty() {
-            "memory"
-        } else {
-            backend
-        }
+        super::trimmed_or(&self.backend, "memory")
     }
 
     pub fn key_prefix(&self) -> &str {
-        let value = self.key_prefix.trim();
-        if value.is_empty() { "floria" } else { value }
+        super::trimmed_or(&self.key_prefix, "floria")
     }
 
     /// Returns the trimmed deadletter PG URL when set and non-blank.

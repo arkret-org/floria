@@ -8,6 +8,21 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use tracing::warn;
 
+/// A trimmed configuration string, or `fallback` when it is blank.
+///
+/// Every optional backend selector and key namespace in this file family
+/// resolves the same way: trim the configured value, and treat an empty
+/// result as "not configured" so an accidental whitespace-only entry cannot
+/// silently become a distinct backend or key prefix.
+pub(crate) fn trimmed_or<'a>(value: &'a str, fallback: &'a str) -> &'a str {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed
+    }
+}
+
 mod audit_storage;
 mod http;
 mod kdl;

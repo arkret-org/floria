@@ -374,22 +374,15 @@ impl Default for NotifyNonceStoreConfig {
 
 impl NotifyNonceStoreConfig {
     pub fn backend_kind(&self) -> &str {
-        let backend = self.backend.trim();
-        if backend.is_empty() {
-            "memory"
-        } else {
-            backend
-        }
+        super::trimmed_or(&self.backend, "memory")
     }
 
     pub fn key_prefix(&self) -> &str {
-        let value = self.key_prefix.trim();
-        if value.is_empty() { "floria" } else { value }
+        super::trimmed_or(&self.key_prefix, "floria")
     }
 
     pub fn failure_policy(&self) -> &str {
-        let value = self.redis_failure_policy.trim();
-        if value.is_empty() { "strict" } else { value }
+        super::trimmed_or(&self.redis_failure_policy, "strict")
     }
 
     pub(super) fn emit_startup_warnings(&self) {

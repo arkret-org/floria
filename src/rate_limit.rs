@@ -97,7 +97,7 @@ impl NotifyRateLimiter {
             backend: RateLimiterBackend::Redis(RedisRateLimiter {
                 pool: RedisPool::from_client(client, target_label.clone())?,
                 target_label,
-                key_prefix: normalize_key_prefix(&key_prefix.into()),
+                key_prefix: crate::config::trimmed_or(&key_prefix.into(), "floria").to_owned(),
                 failure_policy,
             }),
         })
@@ -338,15 +338,6 @@ impl RedisRateLimiter {
 
 fn counter_key(scope: &str, subject: &str) -> String {
     format!("{scope}\0{subject}")
-}
-
-fn normalize_key_prefix(key_prefix: &str) -> String {
-    let trimmed = key_prefix.trim();
-    if trimmed.is_empty() {
-        "floria".to_owned()
-    } else {
-        trimmed.to_owned()
-    }
 }
 
 #[cfg(test)]

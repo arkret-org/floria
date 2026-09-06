@@ -355,7 +355,7 @@ impl RetryQueue {
             backend: Backend::Redis(RedisQueue {
                 pool: RedisPool::from_client(client, target_label.clone())?,
                 target_label,
-                key_prefix: normalize_key_prefix(&key_prefix.into()),
+                key_prefix: crate::config::trimmed_or(&key_prefix.into(), "floria").to_owned(),
                 dead_letter_capacity,
                 cipher,
             }),
@@ -704,15 +704,6 @@ impl RedisQueue {
 
     fn dead_letter_key(&self) -> String {
         format!("{}:retry:dead_letter", self.key_prefix)
-    }
-}
-
-fn normalize_key_prefix(key_prefix: &str) -> String {
-    let trimmed = key_prefix.trim();
-    if trimmed.is_empty() {
-        "floria".to_owned()
-    } else {
-        trimmed.to_owned()
     }
 }
 

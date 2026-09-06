@@ -48,12 +48,7 @@ impl Default for AuditConfig {
 
 impl AuditConfig {
     pub fn backend_kind(&self) -> &str {
-        let backend = self.backend.trim();
-        if backend.is_empty() {
-            "disabled"
-        } else {
-            backend
-        }
+        super::trimmed_or(&self.backend, "disabled")
     }
 
     pub fn file_path(&self) -> Option<&str> {

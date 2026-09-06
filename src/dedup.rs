@@ -129,7 +129,7 @@ impl NotifyDeduplicator {
             backend: NotifyDedupBackend::Redis(RedisNotifyDeduplicator {
                 pool: RedisPool::from_client(client, target_label.clone())?,
                 target_label,
-                key_prefix: normalize_key_prefix(&key_prefix.into()),
+                key_prefix: crate::config::trimmed_or(&key_prefix.into(), "floria").to_owned(),
             }),
         })
     }
@@ -732,15 +732,6 @@ fn delivered_device_key(notification_key: &str, app_id: &str, push_key: &str) ->
 
 fn ttl_seconds(ttl: Duration) -> i64 {
     ttl.as_secs().max(1).min(i64::MAX as u64) as i64
-}
-
-fn normalize_key_prefix(key_prefix: &str) -> String {
-    let trimmed = key_prefix.trim();
-    if trimmed.is_empty() {
-        "floria".to_owned()
-    } else {
-        trimmed.to_owned()
-    }
 }
 
 #[cfg(test)]
