@@ -641,7 +641,7 @@ mod tests {
 
         assert!(
             serde_json::from_str::<OppoAuthResponse>(
-                r#"{"code":0,"authToken":"legacy","data":{"authToken":"legacy"}}"#,
+                r#"{"code":0,"authToken":"t","data":{"authToken":"t"}}"#,
             )
             .is_err()
         );
