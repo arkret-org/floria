@@ -223,6 +223,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         calendar_tzdb_versions: Vec::new(),
         auth_metadata,
         limits: arkret_models_discovery::ServerLimits {
+            mls_governance_proof: None,
             extensions: limits.into_iter().collect(),
         },
         plaintext_visibility,
