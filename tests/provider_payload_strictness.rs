@@ -753,10 +753,29 @@ fn test_registration_directory_for_device(
         "salt_epoch_id":"fixture", "expires_at":null, "retained_push_targets":[]
     })).unwrap();
     let payload = serde_json::to_string(&record).unwrap();
-    floria::postgres_support::PostgresPool::new(&database_url, "provider test registration").unwrap().with_client(|client| {
-        client.execute("INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload", &[&record.registration_id.as_str(), &record.account_id.principal_id.as_str(), &record.device_id.as_str(), &record.push_gateway, &record.push_key.as_str(), &record.app_id, &payload])?;
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+    floria::postgres_support::PostgresPool::new(&database_url, "provider test registration").unwrap()
+.with_client(|client| {
+        client.execute(
+"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload",
+&[
+&record.registration_id.as_str(),
+&record.account_id.principal_id.as_str(),
+&record.device_id.as_str(),
+&record.push_gateway,
+&record.push_key.as_str(),
+&record.app_id,
+&payload
+],
+)?;
         Ok(())
-    }).unwrap();
+    })
+.unwrap();
+    })
+.join()
+.expect("provider registration fixture panicked")
+    });
     floria::registrations::RegistrationDirectory::new(&std::collections::BTreeMap::from([(
         source,
         floria::registrations::RegistrationSourceConfig {

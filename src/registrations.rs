@@ -123,10 +123,24 @@ mod tests {
         .unwrap();
         let save = |record: &PushRegistrationRecord| {
             let payload = serde_json::to_string(record).unwrap();
-            pool.with_client(|client| {
-                client.execute("INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET push_key=EXCLUDED.push_key,payload=EXCLUDED.payload", &[&record.registration_id.as_str(), &record.account_id.principal_id.as_str(), &record.device_id.as_str(), &record.push_gateway, &record.push_key.as_str(), &record.app_id, &payload])?;
+            test_support::database(|| {
+                pool.with_client(|client| {
+                client.execute(
+"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET push_key=EXCLUDED.push_key,payload=EXCLUDED.payload",
+&[
+&record.registration_id.as_str(),
+&record.account_id.principal_id.as_str(),
+&record.device_id.as_str(),
+&record.push_gateway,
+&record.push_key.as_str(),
+&record.app_id,
+&payload
+],
+)?;
                 Ok(())
-            }).unwrap();
+            })
+.unwrap()
+            });
         };
         save(&record);
         let resolved = directory
@@ -207,14 +221,16 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        pool.with_client(|client| {
-            client.execute(
-                "DELETE FROM public.push_devices WHERE id=$1",
-                &[&record.registration_id.as_str()],
-            )?;
-            Ok(())
-        })
-        .unwrap();
+        test_support::database(|| {
+            pool.with_client(|client| {
+                client.execute(
+                    "DELETE FROM public.push_devices WHERE id=$1",
+                    &[&record.registration_id.as_str()],
+                )?;
+                Ok(())
+            })
+            .unwrap()
+        });
         assert!(
             directory
                 .resolve(
@@ -233,6 +249,11 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
+    /// Synchronous postgres owns a runtime; fixtures must execute outside Tokio.
+    pub(crate) fn database<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+        std::thread::scope(|scope| scope.spawn(work).join().expect("database fixture panicked"))
+    }
+
     pub(crate) const SOURCE: &str = "ak:did_core:web:sync.example.com";
     pub(crate) const GATEWAY: &str = "http://127.0.0.1:5000/";
     fn database_url() -> String {
@@ -257,10 +278,25 @@ pub(crate) mod test_support {
             "salt_epoch_id":"epoch", "expires_at":null, "retained_push_targets":[]
         })).unwrap();
         let payload = serde_json::to_string(&record).unwrap();
-        PostgresPool::new(&database_url(), "push fixture registration").unwrap().with_client(|client| {
-            client.execute("INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET actor_id=EXCLUDED.actor_id,device_id=EXCLUDED.device_id,push_gateway=EXCLUDED.push_gateway,push_key=EXCLUDED.push_key,app_id=EXCLUDED.app_id,payload=EXCLUDED.payload", &[&record.registration_id.as_str(), &record.account_id.principal_id.as_str(), &record.device_id.as_str(), &record.push_gateway, &record.push_key.as_str(), &record.app_id, &payload])?;
+        database(|| {
+            PostgresPool::new(&database_url(), "push fixture registration").unwrap()
+.with_client(|client| {
+            client.execute(
+"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET actor_id=EXCLUDED.actor_id,device_id=EXCLUDED.device_id,push_gateway=EXCLUDED.push_gateway,push_key=EXCLUDED.push_key,app_id=EXCLUDED.app_id,payload=EXCLUDED.payload",
+&[
+&record.registration_id.as_str(),
+&record.account_id.principal_id.as_str(),
+&record.device_id.as_str(),
+&record.push_gateway,
+&record.push_key.as_str(),
+&record.app_id,
+&payload
+],
+)?;
             Ok(())
-        }).unwrap();
+        })
+.unwrap()
+        });
         serde_json::json!({"device_id":device_id})
     }
 }
