@@ -1,15 +1,5 @@
-//! Phase P2 (spec 37ce729, SDK 4d5a1af) — Personal Agent + Sidecar
-//! push-routing closures.
-//!
-//! Covers the three wire-affecting changes carried by phase P2 / B-A
-//! and B-B:
-//!
-//! 1. Durable agent lifecycle events (`ak.agent.{pause,resume,deactivate}`) MUST be silently
-//!    consumed on the `/push/notify` endpoint — 200 OK + zero provider fanout. Current lifecycle
-//!    and participation admission remain the upstream Sync / notification service's responsibility.
-//! 2. Actor-private agent events (`ak.agent.{draft.propose,action_request,action_approve,
-//!    action_reject}`) MUST be dropped by default — same 200 OK + zero-fanout shape, but logged
-//!    separately so an operator can later opt a subscription gate in.
+//! Agent lifecycle and private-event no-fanout acknowledgements.
+//! Every input device is acknowledged without new provider delivery.
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -45,7 +35,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
         .unwrap();
     assert_eq!(
         resp.outcomes[0].gateway_status,
-        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+        arkret_models_integration::PushNotifyGatewayStatus::Duplicate
     );
     // Critical: durable agent lifecycle event MUST NOT trigger a
     // user-device push fanout. Upstream current admission already gates
@@ -79,7 +69,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
         .unwrap();
     assert_eq!(
         resp.outcomes[0].gateway_status,
-        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+        arkret_models_integration::PushNotifyGatewayStatus::Duplicate
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
@@ -110,7 +100,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
         .unwrap();
     assert_eq!(
         resp.outcomes[0].gateway_status,
-        arkret_models_integration::PushNotifyGatewayStatus::Accepted
+        arkret_models_integration::PushNotifyGatewayStatus::Duplicate
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
@@ -152,8 +142,8 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
             .unwrap();
         assert_eq!(
             resp.outcomes[0].gateway_status,
-            arkret_models_integration::PushNotifyGatewayStatus::Accepted,
-            "kind {kind} did not return a conserved accepted outcome"
+            arkret_models_integration::PushNotifyGatewayStatus::Duplicate,
+            "kind {kind} did not return a conserved no-fanout outcome"
         );
         assert_eq!(
             calls.load(Ordering::SeqCst),
@@ -166,14 +156,14 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
 #[tokio::test]
 async fn non_agent_event_kind_falls_through_to_push_fanout() {
     // Any other `event_kind` string (or non-agent durable kind) must
-    // continue down the historical push pipeline. We use `ak.message`
-    // here as a placeholder for the normal-fanout kind.
+    // continue down the historical push pipeline. The registered `ak.message.create` kind exercises
+    // normal fanout.
     let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
     let calls = pushkin.calls.clone();
     let service = test_service(vec![("com.example.app", pushkin)]);
 
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
-    body["event_kind"] = json!("ak.message");
+    body["event_kind"] = json!("ak.message.create");
 
     let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(

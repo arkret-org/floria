@@ -17,12 +17,12 @@ use crate::models::{DeviceExt, NotificationContext, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
 
+mod agent_routing;
 mod auth;
 mod basics;
 mod dedup;
 mod delivery;
 mod internal;
-mod phase_p2;
 mod rate_limit;
 mod sanitizer;
 

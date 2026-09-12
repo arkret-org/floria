@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -65,8 +66,28 @@ pub fn validate_postgres_url(raw: &str, field: &str) -> Result<()> {
 
 #[derive(Clone)]
 pub struct PostgresPool {
-    inner: r2d2::Pool<PostgresConnectionManager>,
+    inner: Arc<SharedPostgresPool>,
     target_label: String,
+}
+
+struct SharedPostgresPool {
+    pool: Option<r2d2::Pool<PostgresConnectionManager>>,
+}
+
+impl Drop for SharedPostgresPool {
+    fn drop(&mut self) {
+        let Some(pool) = self.pool.take() else {
+            return;
+        };
+        // postgres::Client closes through its own runtime, including on Drop.
+        // The last application-state owner can disappear on an async worker.
+        // Only the final shared owner transfers cleanup to a runtime-free thread.
+        if tokio::runtime::Handle::try_current().is_ok() {
+            std::thread::spawn(move || drop(pool));
+        } else {
+            drop(pool);
+        }
+    }
 }
 
 impl std::fmt::Debug for PostgresPool {
@@ -83,18 +104,27 @@ impl PostgresPool {
         let manager = PostgresConnectionManager::new(url, &target_label)?;
         let pool = r2d2::Pool::builder()
             .max_size(DEFAULT_POSTGRES_POOL_SIZE)
+            // Each configured source owns a pool. Open connections on demand
+            // instead of reserving the full capacity for every idle source.
+            .min_idle(Some(0))
             .connection_timeout(POSTGRES_CONNECTION_TIMEOUT)
             .build_unchecked(manager);
         Ok(Self {
-            inner: pool,
+            inner: Arc::new(SharedPostgresPool { pool: Some(pool) }),
             target_label,
         })
     }
 
     pub fn with_client<T>(&self, op: impl FnOnce(&mut postgres::Client) -> Result<T>) -> Result<T> {
-        let mut client = self.inner.get().with_context(|| {
-            format!("failed to get PostgreSQL connection {}", self.target_label)
-        })?;
+        let mut client = self
+            .inner
+            .pool
+            .as_ref()
+            .expect("pool exists until final drop")
+            .get()
+            .with_context(|| {
+                format!("failed to get PostgreSQL connection {}", self.target_label)
+            })?;
         op(&mut client)
     }
 }

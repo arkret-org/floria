@@ -85,7 +85,7 @@ fn push_target_id(notification: &PushNotificationEnvelope) -> arkret_wire::PushT
         .expect("validated notify request has a push_target_id")
 }
 
-fn accepted_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyDeviceOutcome> {
+fn no_fanout_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyDeviceOutcome> {
     notification
         .devices
         .iter()
@@ -101,7 +101,7 @@ fn no_fanout_response(
     request_id: &str,
     notification: &PushNotificationEnvelope,
 ) -> NotifyDispatchResult {
-    let outcomes = accepted_outcomes(notification);
+    let outcomes = no_fanout_outcomes(notification);
     NotifyDispatchResult::new(request_id, push_target_id(notification), outcomes)
 }
 
@@ -332,21 +332,21 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
             return;
         }
     }
-    // Phase P2 (AKP-0008 / AKP-0009) — route Personal Agent event kinds.
+    // Route registered Personal Agent event kinds without provider fanout.
     //
-    // The SDK exposes seven new `ak.agent.*` kinds. Floria does not
+    // The SDK classifies Agent event kinds. Floria does not
     // surface any of them onto user-device push by default:
     //
-    //   * `ak.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200 OK +
-    //     zero fanout. Current lifecycle and participation admission are evaluated by the upstream
-    //     Sync / notification service before it constructs this closed push envelope.
+    //   * `ak.self.agent.{pause, resume, deactivate}` — durable lifecycle. Silently consumed: 200
+    //     OK + zero fanout. Current lifecycle and participation admission are evaluated by the
+    //     upstream Sync / notification service before it constructs this closed push envelope.
     //   * `ak.agent.{draft.propose, action_request, action_approve, action_reject}` —
     //     actor-private. Dropped: 200 OK + zero fanout. A future opt-in subscription gate may
     //     upgrade specific kinds onto a dedicated agent-runtime endpoint, but until that mechanism
     //     exists the default is drop.
     //
     // Either case answers 200 so the caller's pipeline advances, with
-    // one accepted gateway outcome per input device and no provider fanout.
+    // one duplicate gateway outcome per input device and no new route takeover.
     if let Some(kind) = request.event_kind.as_deref()
         && let Some(routing) = classify_agent_event_kind(kind.trim())
     {
