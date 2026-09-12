@@ -313,9 +313,7 @@ mod tests {
                         "realm_route_token": "realm_route_token_000000001"
                     },
                     "devices": [{
-                        "device_id": "ak:device:0196419b-0000-7000-8000-000000000004",
-                        "app_id": "app.example.android",
-                        "push_key": "token-123"
+                        "device_id": "ak:device:0196419b-0000-7000-8000-000000000004"
                     }]
                 }
             }))

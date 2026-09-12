@@ -377,12 +377,15 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
 }
 
 #[tokio::test]
-async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
+async fn anonymous_notify_cannot_reach_registration_or_metadata_policy() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service_with_auth(
+        vec![("com.example.app", pushkin)],
+        NotifyAuthConfig::default(),
+    );
+    // Even a deployment without bearer policy cannot resolve registrations
+    // for an anonymous caller. No provider token or fixture row is supplied.
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("Idempotency-Key", "fixture", true)
         .add_header(
@@ -390,20 +393,18 @@ async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
             true,
         )
-        .json(&visible_payload(vec![device("com.example.app", "accept")]))
+        .json(&visible_payload(vec![json!({
+            "device_id": "ak:device:0196419b-0000-7000-8000-fffffffffffd"
+        })]))
         .send(&service)
         .await;
-
+    assert_eq!(response.status_code.unwrap(), StatusCode::UNAUTHORIZED);
+    let body = assert_notify_error(&mut response, "unauthenticated", true).await;
     assert_eq!(
-        response.status_code.unwrap(),
-        StatusCode::PRECONDITION_FAILED
+        body["error"]["message"],
+        json!("push registration lookup requires an authenticated source service")
     );
-    let body = assert_notify_error(&mut response, "failed_precondition", true).await;
-    let msg = body["error"]["message"].as_str().unwrap_or_default();
-    assert!(
-        msg.starts_with("plaintext_in_blind_profile"),
-        "expected plaintext_in_blind_profile reason code, got: {msg}"
-    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

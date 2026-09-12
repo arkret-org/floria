@@ -120,7 +120,7 @@ async fn describe_endpoint_advertises_gateway_profile() {
 
 #[tokio::test]
 async fn describe_fails_closed_when_gateway_service_did_is_missing() {
-    let service = test_service(vec![]);
+    let service = test_service_with_auth(vec![], NotifyAuthConfig::default());
     let mut response = TestClient::get("http://127.0.0.1/_arkret/describe")
         .add_header(
             "Arkret-Operation",
