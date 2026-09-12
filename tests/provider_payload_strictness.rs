@@ -559,7 +559,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
 #[tokio::test]
 async fn notify_visible_profile_accepts_plaintext_metadata() {
     let service = visible_profile_service();
-    let mut body = blind_payload(
+    let body = blind_payload(
         json!({
             "strand_title": "Mission Control",
             "sender_actor_display_name": "Major Tom",
@@ -568,7 +568,6 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
         .unwrap()
         .clone(),
     );
-    body["notification"]["devices"][0]["visible_notification_opt_in"] = json!(true);
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("Idempotency-Key", "fixture", true)
