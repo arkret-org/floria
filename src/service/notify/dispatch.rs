@@ -7,6 +7,8 @@ use super::*;
 pub(super) async fn dispatch_notification_devices(
     state: &Arc<AppState>,
     notification: &PushNotificationEnvelope,
+    registrations: &[Option<arkret_models_integration::PushRegistrationRecord>],
+    source: &arkret_wire::DidCoreId,
     context: &NotificationContext,
     dedup_key: &str,
 ) -> DispatchSummary {
@@ -20,9 +22,17 @@ pub(super) async fn dispatch_notification_devices(
     let mut first_temporary_error: Option<(String, Option<Duration>)> = None;
     let mut first_internal_error: Option<String> = None;
     let mut provider_timing_bucket_applied = false;
-    let provider_timing_bucket = provider_timing_bucket_for_notification(notification);
+    let provider_timing_bucket = state.provider_timing_bucket;
 
-    for device in &notification.devices {
+    for (requested, registration) in notification.devices.iter().zip(registrations) {
+        let Some(device) = registration.as_ref() else {
+            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                requested.device_id.clone(),
+                PushNotifyReasonCode::PushTargetUnknown,
+                None,
+            ));
+            continue;
+        };
         let app_id = device.app_id().unwrap_or_default();
         let push_key = device.push_key().unwrap_or_default();
         if app_id.is_empty() || push_key.is_empty() {
@@ -46,43 +56,6 @@ pub(super) async fn dispatch_notification_devices(
                 &context.request_id,
             ));
             continue;
-        }
-
-        if !notification
-            .mention_redirect_target_route_tokens()
-            .is_empty()
-        {
-            let allowed = device.target_route_token().is_some_and(|route_token| {
-                notification
-                    .mention_redirect_target_route_tokens()
-                    .iter()
-                    .any(|allowed| allowed.as_str() == route_token)
-            });
-            if !allowed {
-                tracing::info!(
-                    request_id = %context.request_id,
-                    app_id,
-                    push_key_hash = %device.redacted_push_key(),
-                    "fail-closed: device.target_route_token not in mention_redirect_target_route_tokens"
-                );
-                rejected.push(
-                    rejected_device(device, device.push_key())
-                        .with_reason_code(Some(MENTION_REDIRECT_NOT_TARGETED_REASON)),
-                );
-                outcomes.push(PushNotifyDeviceOutcome::rejected(
-                    device.device_id.clone(),
-                    PushNotifyReasonCode::PushTargetUnknown,
-                    None,
-                ));
-                delivery_receipts.push(delivery_receipt(
-                    None,
-                    push_key,
-                    "rejected",
-                    None,
-                    &context.request_id,
-                ));
-                continue;
-            }
         }
 
         app_metrics::device_push_received();
@@ -189,6 +162,43 @@ pub(super) async fn dispatch_notification_devices(
                     provider_timing_bucket_applied = true;
                 }
                 let dispatch_started = Instant::now();
+                // Timing buckets may outlive a token rotation or user opt-out.
+                // Recheck the durable registration immediately before provider I/O.
+                let current = state
+                    .registrations
+                    .resolve(
+                        source,
+                        &push_target_id(notification),
+                        &device.device_id,
+                        &state.public_base_url,
+                    )
+                    .await;
+                match current {
+                    Ok(Some(current))
+                        if current.account_id == device.account_id
+                            && current.push_key == device.push_key
+                            && current.app_id == device.app_id
+                            && current.platform == device.platform
+                            && current.visible_notification_opt_in
+                                == device.visible_notification_opt_in => {}
+                    Ok(_) => {
+                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            device.device_id.clone(),
+                            PushNotifyReasonCode::PushTargetUnknown,
+                            None,
+                        ));
+                        continue;
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "registration recheck failed before dispatch");
+                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            device.device_id.clone(),
+                            PushNotifyReasonCode::PushGatewayUnreachable,
+                            Some(1000),
+                        ));
+                        continue;
+                    }
+                }
                 let dispatch_result = pushkin
                     .dispatch_notification(notification, device, context)
                     .await;
@@ -306,8 +316,9 @@ pub(super) async fn dispatch_notification_devices(
                                 state,
                                 &context.request_id,
                                 pushkin.name(),
-                                &target.app_id,
-                                &target.push_key,
+                                source,
+                                notification,
+                                device,
                                 retry_after,
                                 &error,
                             )

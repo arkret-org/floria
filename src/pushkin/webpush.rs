@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes128Gcm, KeyInit, Nonce};
 use anyhow::{Context, Result, anyhow};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
@@ -321,7 +321,7 @@ impl WebpushPushkin {
     /// on the provider wire.
     fn build_payload(
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Map<String, Value> {
         let _ = device;
         let mut payload = Map::new();
@@ -381,7 +381,7 @@ impl WebpushPushkin {
 
     fn subscription_from_device(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<SubscriptionInfo, DispatchError> {
         let push_key = device
             .push_key()
@@ -464,7 +464,7 @@ impl WebpushPushkin {
         &self,
         subscription: &SubscriptionInfo,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         let payload =
             serde_json::to_vec(&Self::build_payload(notification, device)).map_err(|error| {
@@ -567,7 +567,7 @@ impl Pushkin for WebpushPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -815,7 +815,7 @@ mod tests {
     use super::*;
     use crate::config::{AppConfig, Config};
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.web", "p256dh-key")
     }
 
@@ -830,18 +830,8 @@ mod tests {
         .to_string()
     }
 
-    fn network_device(endpoint: &str) -> PushDeviceRoute {
-        PushDeviceRoute {
-            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                .unwrap(),
-            app_id: Some("com.example.web".to_owned()),
-            push_key: Some(
-                arkret_models_integration::PushKey::new(subscription_push_key(endpoint)).unwrap(),
-            ),
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        }
+    fn network_device(endpoint: &str) -> PushRegistrationRecord {
+        crate::pushkin::test_fixtures::device("com.example.web", &subscription_push_key(endpoint))
     }
 
     fn pushkin_with_allowed_endpoints(
@@ -902,7 +892,9 @@ mod tests {
             ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
-            devices: vec![device()],
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device().device_id,
+            }],
             counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),

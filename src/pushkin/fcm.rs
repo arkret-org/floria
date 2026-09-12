@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use prometheus::{
@@ -172,7 +172,7 @@ impl FcmPushkin {
     async fn dispatch_v1(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         data: Map<String, Value>,
     ) -> Result<Vec<String>, DispatchError> {
         let service_account = self
@@ -385,7 +385,7 @@ impl Pushkin for FcmPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -518,7 +518,7 @@ fn classify_fcm_v1_response(
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushCounts, PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushCounts, PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
     use crate::pushkin::DispatchTarget;
@@ -539,7 +539,7 @@ mod tests {
         }
     }
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.fcm", "spqr")
     }
 
@@ -610,17 +610,14 @@ mod tests {
     fn dispatch_targets_include_only_the_current_device() {
         let pushkin = pushkin();
         let primary = device();
-        let secondary = PushDeviceRoute {
-            device_id: arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                .unwrap(),
-            app_id: Some("com.example.fcm".to_owned()),
-            push_key: Some(arkret_models_integration::PushKey::new("spqr2").unwrap()),
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        };
+        let secondary = crate::pushkin::test_fixtures::device("com.example.fcm", "spqr2");
         let mut notification = notification();
-        notification.devices = vec![primary.clone(), secondary];
+        notification.devices = vec![primary.clone(), secondary]
+            .into_iter()
+            .map(|record| arkret_models_integration::PushDeviceRoute {
+                device_id: record.device_id,
+            })
+            .collect();
 
         assert_eq!(
             pushkin.dispatch_targets(&notification, &primary),
@@ -650,7 +647,9 @@ mod tests {
             push_target_id: None,
             wakeup_kind: None,
             push_hint: None,
-            devices: vec![device()],
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device().device_id,
+            }],
             counts: Some(PushCounts {
                 badge: None,
                 unread_increment: None,

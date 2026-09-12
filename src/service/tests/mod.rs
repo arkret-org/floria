@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use salvo::test::ResponseExt;
 use serde_json::{Value, json};
@@ -76,7 +76,7 @@ impl Pushkin for TestPushkin {
     async fn dispatch_notification(
         &self,
         _notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
@@ -112,8 +112,10 @@ pub(super) fn test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {
             .map(|(name, pushkin)| (name.to_owned(), pushkin))
             .collect::<HashMap<_, _>>(),
     );
-    let state = Arc::new(AppState::new(Arc::new(registry)));
-    Service::new(build_router(state))
+    let mut state = AppState::new(Arc::new(registry));
+    state.notify_auth = notify_auth_config();
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
+    Service::new(build_router(Arc::new(state)))
 }
 
 pub(super) fn test_service_with_dedup(
@@ -126,11 +128,13 @@ pub(super) fn test_service_with_dedup(
             .map(|(name, pushkin)| (name.to_owned(), pushkin))
             .collect::<HashMap<_, _>>(),
     );
-    let state = Arc::new(AppState::with_notify_deduplicator(
+    let mut state = AppState::with_notify_deduplicator(
         Arc::new(registry),
         Arc::new(NotifyDeduplicator::new(dedup_ttl)),
-    ));
-    Service::new(build_router(state))
+    );
+    state.notify_auth = notify_auth_config();
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
+    Service::new(build_router(Arc::new(state)))
 }
 
 pub(super) fn test_service_with_rate_limits(
@@ -145,6 +149,8 @@ pub(super) fn test_service_with_rate_limits(
     );
     let mut state = AppState::new(Arc::new(registry));
     state.notify_rate_limiter = Some(Arc::new(NotifyRateLimiter::new(notify_rate_limits)));
+    state.notify_auth = notify_auth_config();
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
     Service::new(build_router(Arc::new(state)))
 }
 
@@ -164,6 +170,8 @@ pub(super) fn test_service_with_dedup_and_rate_limits(
         Arc::new(NotifyDeduplicator::new(dedup_ttl)),
     );
     state.notify_rate_limiter = Some(Arc::new(NotifyRateLimiter::new(notify_rate_limits)));
+    state.notify_auth = notify_auth_config();
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
     Service::new(build_router(Arc::new(state)))
 }
 
@@ -179,6 +187,7 @@ pub(super) fn test_service_with_auth(
     );
     let mut state = AppState::new(Arc::new(registry));
     state.notify_auth = notify_auth;
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
     Service::new(build_router(Arc::new(state)))
 }
 
@@ -235,7 +244,7 @@ pub(super) fn payload(devices: Vec<Value>) -> Value {
             },
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
             "push_hint": "new_message",
             "devices": devices
         }
@@ -265,12 +274,11 @@ pub(super) fn device(app_id: &str, push_key: &str) -> Value {
     let mut hasher = DefaultHasher::new();
     (app_id, push_key).hash(&mut hasher);
     let suffix = hasher.finish() & 0x0000_ffff_ffff_ffff;
-    json!({
-        "device_id": format!("ak:device:0196419b-0000-7000-8000-{suffix:012x}"),
-        "app_id": app_id,
-        "push_key": push_key,
-        "visible_notification_opt_in": true
-    })
+    crate::registrations::test_support::device(
+        app_id,
+        push_key,
+        &format!("ak:device:0196419b-0000-7000-8000-{suffix:012x}"),
+    )
 }
 
 pub(super) fn rejected(app_id: Option<&str>, push_key: &str) -> RejectedDevice {
@@ -356,4 +364,20 @@ pub(super) async fn assert_notify_ok<T: ResponseExt + ?Sized>(
     }
     assert!(!encoded.contains("provider_retries"));
     assert!(!encoded.contains("delivery_receipts"));
+}
+
+pub(super) fn authenticated_notify_request(url: &str) -> salvo::test::RequestBuilder {
+    salvo::test::TestClient::post(url)
+        .bearer_auth("secret-token")
+        .add_header("Idempotency-Key", "fixture", true)
+        .add_header(
+            "Source-Service-ID",
+            crate::registrations::test_support::SOURCE,
+            true,
+        )
+        .add_header(
+            "Destination-Service-ID",
+            "ak:did_core:web:push.example.com",
+            true,
+        )
 }

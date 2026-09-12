@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use arkret_models_integration::{PushDeviceRoute, PushKey, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, Value};
@@ -18,33 +18,16 @@ use crate::models::{
 use crate::rate_limit::NotifyRateLimitCheck;
 use crate::{AppState, metrics as app_metrics};
 
-pub(super) fn parse_optional_idempotency_key(
-    value: Option<&str>,
-    source: &str,
-) -> Result<Option<String>, String> {
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(format!("{source} must not be empty"));
-    }
-    Ok(Some(value.to_owned()))
-}
-
-pub(super) fn resolve_idempotency_key(req: &Request) -> Result<Option<String>, String> {
-    // `push-notifications.md` §5.1: the idempotency key rides the `Idempotency-Key`
-    // transport header only; it is no longer accepted as a body field.
-    parse_optional_idempotency_key(
-        req.header::<String>("idempotency-key").as_deref(),
-        "Idempotency-Key header",
-    )
+pub(super) fn resolve_idempotency_key(req: &Request) -> Result<String, String> {
+    req.header::<String>("idempotency-key")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Idempotency-Key header is required and must not be empty".to_owned())
 }
 
 pub(super) fn notify_rate_limit_checks(
     req: &Request,
     state: &AppState,
-    notification: &PushNotificationEnvelope,
+    registrations: &[Option<PushRegistrationRecord>],
     origin_id: Option<&arkret_wire::DidCoreId>,
 ) -> Vec<NotifyRateLimitCheck> {
     let Some(rate_limiter) = state.notify_rate_limiter.as_ref() else {
@@ -67,9 +50,9 @@ pub(super) fn notify_rate_limit_checks(
     }
 
     if let Some(limit) = config.per_app_id.filter(|limit| *limit > 0) {
-        let app_ids = notification
-            .devices
+        let app_ids = registrations
             .iter()
+            .flatten()
             .filter_map(DeviceExt::app_id)
             .collect::<HashSet<_>>();
         checks.extend(app_ids.into_iter().map(|app_id| NotifyRateLimitCheck {
@@ -81,9 +64,9 @@ pub(super) fn notify_rate_limit_checks(
     }
 
     if let Some(limit) = config.per_push_key_hash.filter(|limit| *limit > 0) {
-        let push_key_hashes = notification
-            .devices
+        let push_key_hashes = registrations
             .iter()
+            .flatten()
             .map(|device| device.redacted_push_key())
             .collect::<HashSet<_>>();
         checks.extend(
@@ -108,9 +91,9 @@ pub(super) fn notify_rate_limit_checks(
     }
 
     if let Some(limit) = config.per_provider.filter(|limit| *limit > 0) {
-        let providers = notification
-            .devices
+        let providers = registrations
             .iter()
+            .flatten()
             .flat_map(|device| {
                 device
                     .app_id()
@@ -285,7 +268,10 @@ pub(super) async fn mark_delivered_devices(
     }
 }
 
-pub(super) fn rejected_device(device: &PushDeviceRoute, push_key: Option<&str>) -> RejectedDevice {
+pub(super) fn rejected_device(
+    device: &PushRegistrationRecord,
+    push_key: Option<&str>,
+) -> RejectedDevice {
     RejectedDevice::new(
         device.app_id(),
         push_key.or_else(|| device.push_key()).unwrap_or_default(),
@@ -388,35 +374,8 @@ pub(super) fn normalized_notify_dedup_key(
     if let Some(value) = notification.wakeup_kind() {
         normalized.insert("wakeup_kind".to_owned(), Value::String(value.to_owned()));
     }
-    if let Some(value) = notification.timing_profile_hint {
-        normalized.insert(
-            "timing_profile_hint".to_owned(),
-            Value::String(value.as_str().to_owned()),
-        );
-    }
     if let Some(value) = notification.push_hint.as_ref() {
         normalized.insert("push_hint".to_owned(), Value::String(value.clone()));
-    }
-    // Round 4 (spec a77b995) — `mention_redirect_target_route_tokens` is
-    // routing-affecting (two requests with different allow-lists must
-    // not collide in the dedup cache). Sort canonically so the
-    // fingerprint is order-independent.
-    if !notification
-        .mention_redirect_target_route_tokens()
-        .is_empty()
-    {
-        let mut sorted = notification
-            .mention_redirect_target_route_tokens()
-            .iter()
-            .map(|token| token.as_str().to_owned())
-            .filter(|token| !token.is_empty())
-            .collect::<Vec<_>>();
-        sorted.sort();
-        sorted.dedup();
-        normalized.insert(
-            "mention_redirect_target_route_tokens".to_owned(),
-            Value::Array(sorted.into_iter().map(Value::String).collect()),
-        );
     }
     normalized.insert(
         "counts".to_owned(),
@@ -432,22 +391,6 @@ pub(super) fn normalized_notify_dedup_key(
                 "device_id".to_owned(),
                 Value::String(device.device_id.as_str().to_owned()),
             );
-            normalized.insert(
-                "app_id".to_owned(),
-                Value::String(device.app_id().unwrap_or_default().to_owned()),
-            );
-            normalized.insert(
-                "push_key".to_owned(),
-                Value::String(device.push_key().unwrap_or_default().to_owned()),
-            );
-            // Round 4 — `target_route_token` participates in the routing
-            // decision, so it must be part of the canonical fingerprint.
-            if let Some(route_token) = device.target_route_token() {
-                normalized.insert(
-                    "target_route_token".to_owned(),
-                    Value::String(route_token.to_owned()),
-                );
-            }
             Some(Value::Object(normalized))
         })
         .collect::<Option<Vec<_>>>()
@@ -472,8 +415,9 @@ pub(super) async fn enqueue_retry(
     state: &Arc<AppState>,
     request_id: &str,
     pushkin: &str,
-    app_id: &str,
-    push_key: &PushKey,
+    source: &arkret_wire::DidCoreId,
+    notification: &PushNotificationEnvelope,
+    device: &PushRegistrationRecord,
     retry_after: Option<Duration>,
     error: &crate::error::DispatchError,
 ) {
@@ -484,8 +428,15 @@ pub(super) async fn enqueue_retry(
     let envelope = crate::retry_queue::RetryEnvelope::new(
         request_id,
         pushkin,
-        app_id,
-        push_key.clone(),
+        source.clone(),
+        PushNotificationEnvelope {
+            push_target_id: notification.push_target_id.clone(),
+            wakeup_kind: notification.wakeup_kind.clone(),
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device.device_id.clone(),
+            }],
+            ..Default::default()
+        },
         backoff,
         error.to_string(),
     );

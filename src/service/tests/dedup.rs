@@ -18,7 +18,7 @@ async fn notify_supports_header_idempotency_key_replay() {
     let request_body = payload(vec![device("com.example.app", "cached")]);
 
     for _ in 0..2 {
-        let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
             .add_header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -43,7 +43,7 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
         Duration::from_secs(60),
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -55,7 +55,7 @@ async fn notify_duplicate_idempotency_key_with_different_body_returns_conflict()
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -84,7 +84,7 @@ async fn notify_rejects_idempotency_key_in_body() {
     let request_body =
         with_idempotency_key(payload(vec![device("com.example.app", "one")]), "body-key");
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -110,7 +110,7 @@ async fn notify_dedup_cache_serves_repeated_success_without_redispatch() {
     let request_body = payload(vec![device("com.example.app", "cached")]);
 
     for _ in 0..2 {
-        let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
             .add_header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -134,6 +134,16 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
         Duration::from_secs(60),
     );
 
+    crate::registrations::test_support::device(
+        "com.example.app",
+        "cached-1",
+        "ak:device:0196419b-0000-7000-8000-000000000001",
+    );
+    crate::registrations::test_support::device(
+        "com.example.app",
+        "cached-2",
+        "ak:device:0196419b-0000-7000-8000-000000000002",
+    );
     let first = r#"{
             "notification": {
                 "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
@@ -144,23 +154,23 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
                 },
                 "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "wakeup_kind": "message",
-                "timing_profile_hint": "default",
+
                 "push_hint": "new_message",
                 "devices": [
-                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001", "app_id": "com.example.app", "push_key": "cached-1"},
-                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000002", "app_id": "com.example.app", "push_key": "cached-2"}
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001"},
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000002"}
                 ]
             }
         }"#;
     let second = r#"{
             "notification": {
                 "devices": [
-                    {"push_key": "cached-2", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000002"},
-                    {"push_key": "cached-1", "app_id": "com.example.app", "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"}
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000002"},
+                    {"device_id": "ak:device:0196419b-0000-7000-8000-000000000001"}
                 ],
                 "push_hint": "new_message",
                 "wakeup_kind": "message",
-                "timing_profile_hint": "default",
+
                 "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "route_tokens": {
                     "realm_route_token": "realm_route_token_000000001"
@@ -172,7 +182,7 @@ async fn notify_dedup_cache_matches_reordered_equivalent_payloads() {
         }"#;
 
     for request_body in [first, second] {
-        let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
             .add_header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

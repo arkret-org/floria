@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use base64::Engine;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -237,7 +237,7 @@ impl ApnsPushkin {
 
     async fn send_once(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: &Value,
         priority: u8,
     ) -> Result<Vec<String>, DispatchError> {
@@ -304,7 +304,7 @@ impl ApnsPushkin {
         classify_apns_response(status, &reason, device.push_key().unwrap_or_default())
     }
 
-    fn device_token(&self, device: &PushDeviceRoute) -> Result<String, DispatchError> {
+    fn device_token(&self, device: &PushRegistrationRecord) -> Result<String, DispatchError> {
         let push_key = device.push_key().unwrap_or_default();
         if !self.convert_device_token_to_hex {
             return Ok(push_key.to_owned());
@@ -486,7 +486,7 @@ impl Pushkin for ApnsPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -747,13 +747,13 @@ fn epoch_now() -> u64 {
 #[cfg(test)]
 mod tests {
     use arkret_models_integration::{
-        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+        PushCounts, PushNotificationEnvelope, PushRegistrationRecord, PushRouteTokens,
     };
     use serde_json::json;
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.apns", "spqr")
     }
 
@@ -811,7 +811,9 @@ mod tests {
             ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
-            devices: vec![device()],
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device().device_id,
+            }],
             counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
@@ -893,7 +895,9 @@ mod tests {
             ),
             wakeup_kind: None,
             push_hint: None,
-            devices: vec![device.clone()],
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device.device_id.clone(),
+            }],
             counts: Some(PushCounts {
                 badge: None,
                 unread_increment: None,

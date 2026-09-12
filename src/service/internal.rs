@@ -179,7 +179,7 @@ const DEAD_LETTER_SNAPSHOT_MAX_LIMIT: usize = 1000;
 /// Every envelope is serialized to JSON and passed through
 /// [`crate::sanitize::strip_egress_only_keys`] before it is rendered, so
 /// gateway-internal routing/audit fields (`route_tokens`,
-/// `realm_route_token`, `scope_route_token`, `target_route_token`, …)
+/// `realm_route_token`, `scope_route_token`, …)
 /// can never leak through this operator surface even if the envelope
 /// shape grows such fields later.
 #[handler]

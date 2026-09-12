@@ -110,7 +110,6 @@ mod tests {
         // Strip-only routing/audit tail is egress-stripped.
         assert!(is_forbidden_egress_key("route_tokens"));
         assert!(is_forbidden_egress_key("scope_route_token"));
-        assert!(is_forbidden_egress_key("timing_profile_hint"));
         assert!(is_forbidden_egress_key("policy_frontier_digest"));
         // SDK-covered names are egress-stripped.
         assert!(is_forbidden_egress_key("encrypted_content"));
@@ -129,7 +128,6 @@ mod tests {
             "route_tokens": {"realm_route_token": "ak:secret"},
             "Scope_Route_Token": "ak:secret-2",
             "nested": {
-                "target_route_token": "ak:secret-3",
                 "kept": "yes",
                 "list": [
                     {"delivery_binding_frontier_token": "ak:secret-4", "ok": 1}

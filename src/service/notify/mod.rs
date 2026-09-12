@@ -44,21 +44,7 @@ use validation::{
 /// device and no provider retries. The wire constant comes from the SDK.
 const HISTORICAL_ONLY_REASON: &str = arkret_wire::ErrorCode::HISTORICAL_ONLY;
 
-/// Round 4 — private audit reason floria attaches to a RejectedDevice when the
-/// device's `target_route_token` is not present in the
-/// `mention_redirect_target_route_tokens` allow-list. Used by both the
-/// device-loop reject path and the per-device dedup test that the
-/// gate is fail-closed (no provider dispatch, no decryption attempt).
-const MENTION_REDIRECT_NOT_TARGETED_REASON: &str = "mention_redirect_not_targeted";
 const CIRCUIT_BREAKER_RETRY_AFTER: Duration = Duration::from_secs(30);
-#[cfg(not(test))]
-const DEFAULT_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(60);
-#[cfg(test)]
-const DEFAULT_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
-#[cfg(not(test))]
-const HIGH_PRIVACY_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(300);
-#[cfg(test)]
-const HIGH_PRIVACY_PROVIDER_TIMING_BUCKET: Duration = Duration::from_secs(0);
 
 async fn wait_for_provider_timing_bucket(request_id: &str, bucket: Duration) {
     let delay = provider_timing_bucket_delay(SystemTime::now(), bucket);
@@ -72,26 +58,6 @@ async fn wait_for_provider_timing_bucket(request_id: &str, bucket: Duration) {
         "delaying provider dispatch until timing bucket boundary"
     );
     tokio::time::sleep(delay).await;
-}
-
-fn provider_timing_bucket_for_notification(notification: &PushNotificationEnvelope) -> Duration {
-    if notification_uses_high_privacy_timing(notification) {
-        HIGH_PRIVACY_PROVIDER_TIMING_BUCKET
-    } else {
-        DEFAULT_PROVIDER_TIMING_BUCKET
-    }
-}
-
-fn notification_uses_high_privacy_timing(notification: &PushNotificationEnvelope) -> bool {
-    notification
-        .timing_profile_hint
-        .is_some_and(arkret_models_integration::PushTimingProfileHint::is_traffic_metadata_hardened)
-        || notification.evaluation_locus_unresolved.unwrap_or(false)
-        || notification.push_hint.as_deref() == Some("l10n_key")
-        || notification
-            .push_hint_l10n_key
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn provider_timing_bucket_delay(now: SystemTime, bucket: Duration) -> Duration {
@@ -123,7 +89,7 @@ fn accepted_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyD
     notification
         .devices
         .iter()
-        .map(|device| PushNotifyDeviceOutcome::accepted(device.device_id.clone()))
+        .map(|device| PushNotifyDeviceOutcome::duplicate(device.device_id.clone()))
         .collect()
 }
 
@@ -307,6 +273,34 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         );
         return;
     }
+    let idempotency_key = match resolve_idempotency_key(req) {
+        Ok(idempotency_key) => idempotency_key,
+        Err(message) => {
+            finish_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
+                &message,
+                None,
+                Some(&request_id),
+                started,
+            );
+            return;
+        }
+    };
+
+    let Some(source) = caller.origin_id.as_ref() else {
+        finish_error(
+            res,
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
+            "push registration lookup requires an authenticated source service",
+            None,
+            Some(&request_id),
+            started,
+        );
+        return;
+    };
     // Round 4 (spec a77b995) — short-circuit the push pipeline when
     // soland tells us this is a diagnostic replay
     // (`reason_code=historical_only`). We answer 200 with an empty
@@ -450,25 +444,37 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         finish_standard_notify_json(res, StatusCode::OK, &response, started);
         return;
     }
-    let idempotency_key = match resolve_idempotency_key(req) {
-        Ok(idempotency_key) => idempotency_key,
-        Err(message) => {
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                &message,
-                None,
-                Some(&request_id),
-                started,
-            );
-            return;
-        }
-    };
-
     let notification = request.notification;
+    let mut registrations = Vec::with_capacity(notification.devices.len());
+    for device in &notification.devices {
+        match state
+            .registrations
+            .resolve(
+                source,
+                &push_target_id(&notification),
+                &device.device_id,
+                &state.public_base_url,
+            )
+            .await
+        {
+            Ok(registration) => registrations.push(registration),
+            Err(error) => {
+                tracing::error!(%error, "durable registration lookup failed");
+                finish_error(
+                    res,
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::error_codes::ErrorCode::TEMPORARILY_UNAVAILABLE,
+                    "push registration store unavailable",
+                    None,
+                    Some(&request_id),
+                    started,
+                );
+                return;
+            }
+        }
+    }
 
-    match validate_notification_contract(&notification, &caller) {
+    match validate_notification_contract(&notification, &caller, &registrations) {
         Ok(()) => {}
         // T4.3 — blind profile + plaintext metadata is a precondition
         // violation, not an authorization failure: the caller could
@@ -544,10 +550,8 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     let request_fingerprint =
         normalized_notify_dedup_key(&notification).unwrap_or(raw_request_hash);
-    let dedup_key = idempotency_key
-        .as_deref()
-        .map(idempotency_cache_key)
-        .unwrap_or_else(|| request_fingerprint.clone());
+    let request_key = idempotency_cache_key(&idempotency_key);
+    let dedup_key = format!("{}:{}", source, request_key);
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         if deduplicator
             .conflicts_async(&dedup_key, &request_fingerprint)
@@ -568,15 +572,14 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         if let Some(cached) = deduplicator
             .lookup_async(&dedup_key, &request_fingerprint)
             .await
+            && registrations.iter().all(Option::is_some)
         {
             app_metrics::notify_dedup_lookup("hit");
             app_metrics::notify_request_cache_hit();
             tracing::info!(
                 request_id = %request_id,
                 ttl_secs = deduplicator.ttl().as_secs(),
-                idempotency_key = idempotency_key
-                    .as_deref()
-                    .unwrap_or("<canonical-request-hash>"),
+                idempotency_key = %idempotency_key,
                 "serving /notify response from dedup cache"
             );
             let response = cached.response.with_request_id(request_id);
@@ -602,7 +605,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
 
     if let Some(rate_limiter) = state.notify_rate_limiter.as_ref() {
         let checks =
-            notify_rate_limit_checks(req, &state, &notification, caller.origin_id.as_ref());
+            notify_rate_limit_checks(req, &state, &registrations, caller.origin_id.as_ref());
         if let Err(rejection) = rate_limiter.check_many_async(&checks).await {
             app_metrics::notify_rate_limit_reject(rejection.scope);
             tracing::warn!(
@@ -641,7 +644,15 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         allow_plaintext_metadata: caller.allow_plaintext_metadata,
     };
 
-    let summary = dispatch_notification_devices(&state, &notification, &context, &dedup_key).await;
+    let summary = dispatch_notification_devices(
+        &state,
+        &notification,
+        &registrations,
+        source,
+        &context,
+        &dedup_key,
+    )
+    .await;
 
     finish_dispatch(
         &state,

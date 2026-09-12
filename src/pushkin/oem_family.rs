@@ -21,7 +21,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use arkret_models_integration::PushDeviceRoute;
+use arkret_models_integration::PushRegistrationRecord;
 use prometheus::{Histogram, HistogramOpts, IntCounterVec, IntGauge, Opts};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use tokio::sync::Semaphore;
@@ -235,7 +235,7 @@ pub(super) fn no_retry_hook(_attempt: usize, _retry_after: Duration) {}
 pub(super) fn empty_push_key_rejection(
     provider: &str,
     key_field: &str,
-    device: &PushDeviceRoute,
+    device: &PushRegistrationRecord,
 ) -> Option<Vec<String>> {
     if device.push_key().is_some() {
         return None;

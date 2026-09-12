@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use arkret_models_integration::{
-    PushDeviceRoute, PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyOutcome,
-    PushRouteToken,
+    PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyOutcome, PushRegistrationRecord,
 };
 use blake2::Blake2s256;
 use blake2::digest::Digest;
@@ -100,7 +99,6 @@ pub trait NotificationExt {
     fn scope_title(&self) -> Option<&str>;
     fn realm_route_token(&self) -> Option<&str>;
     fn scope_route_token(&self) -> Option<&str>;
-    fn mention_redirect_target_route_tokens(&self) -> &[PushRouteToken];
     fn strand_id(&self) -> Option<&str>;
     fn message_id(&self) -> Option<&str>;
     fn realm_id(&self) -> Option<&str>;
@@ -129,13 +127,6 @@ impl NotificationExt for PushNotificationEnvelope {
             .as_ref()
             .and_then(|routing| routing.scope_route_token.as_deref())
             .and_then(non_empty)
-    }
-
-    fn mention_redirect_target_route_tokens(&self) -> &[PushRouteToken] {
-        self.route_tokens
-            .as_ref()
-            .map(|routing| routing.mention_redirect_target_route_tokens.as_slice())
-            .unwrap_or(&[])
     }
 
     fn strand_id(&self) -> Option<&str> {
@@ -189,22 +180,17 @@ impl NotificationExt for PushNotificationEnvelope {
 pub trait DeviceExt {
     fn app_id(&self) -> Option<&str>;
     fn push_key(&self) -> Option<&str>;
-    fn target_route_token(&self) -> Option<&str>;
     fn visible_notification_opt_in(&self) -> bool;
     fn redacted_push_key(&self) -> String;
 }
 
-impl DeviceExt for PushDeviceRoute {
+impl DeviceExt for PushRegistrationRecord {
     fn app_id(&self) -> Option<&str> {
         self.app_id.as_deref().and_then(non_empty)
     }
 
     fn push_key(&self) -> Option<&str> {
-        self.push_key.as_deref().and_then(non_empty)
-    }
-
-    fn target_route_token(&self) -> Option<&str> {
-        self.target_route_token.as_deref().and_then(non_empty)
+        non_empty(self.push_key.as_str())
     }
 
     fn visible_notification_opt_in(&self) -> bool {

@@ -594,6 +594,28 @@
           "description": "Externally reachable canonical HTTP/JSON base URL advertised by ServiceDescribe; production mode requires https.",
           "format": "uri",
           "type": "string"
+        },
+        "registration_sources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "postgres_url"
+            ],
+            "properties": {
+              "postgres_url": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Authenticated source service core id to read-only Station registration database inside the same trusted deployment."
+        },
+        "provider_timing_bucket_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 60,
+          "description": "Provider timing bucket chosen by deployment policy; notify cannot override it."
         }
       },
       "type": "object"

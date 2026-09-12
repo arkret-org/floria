@@ -28,7 +28,7 @@ async fn agent_pause_event_is_silently_consumed_without_fanout() {
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
     body["event_kind"] = json!("ak.self.agent.pause");
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -62,7 +62,7 @@ async fn agent_resume_event_is_silently_consumed_without_fanout() {
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
     body["event_kind"] = json!("ak.self.agent.resume");
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -93,7 +93,7 @@ async fn agent_deactivate_event_is_silently_consumed_without_fanout() {
     let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
     body["event_kind"] = json!("ak.self.agent.deactivate");
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -130,15 +130,16 @@ async fn agent_actor_private_kinds_are_dropped_without_fanout() {
         let mut body = payload(vec![device("com.example.app", "would-be-pushed-token")]);
         body["event_kind"] = json!(kind);
 
-        let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
-            .add_header(
-                "Arkret-Operation",
-                arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
-                true,
-            )
-            .json(&body)
-            .send(&service)
-            .await;
+        let mut response =
+            authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
+                .add_header(
+                    "Arkret-Operation",
+                    arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                    true,
+                )
+                .json(&body)
+                .send(&service)
+                .await;
 
         assert_eq!(
             response.status_code.unwrap(),
@@ -174,7 +175,7 @@ async fn non_agent_event_kind_falls_through_to_push_fanout() {
     let mut body = payload(vec![device("com.example.app", "alice-token")]);
     body["event_kind"] = json!("ak.message");
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -206,7 +207,7 @@ async fn non_string_event_kind_is_rejected_as_schema_violation() {
     let mut body = payload(vec![device("com.example.app", "x")]);
     body["event_kind"] = json!(42);
 
-    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

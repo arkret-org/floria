@@ -18,7 +18,9 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_integration::{PushCounts, PushDeviceRoute, PushKey, PushNotificationEnvelope};
+use arkret_models_integration::{
+    PushCounts, PushKey, PushNotificationEnvelope, PushRegistrationRecord,
+};
 use async_trait::async_trait;
 use globset::{Glob, GlobMatcher};
 use prometheus::register_int_counter_vec;
@@ -63,20 +65,20 @@ pub trait Pushkin: Send + Sync {
     fn dispatch_targets(
         &self,
         _notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Vec<DispatchTarget> {
-        let (Some(app_id), Some(push_key)) = (device.app_id(), device.push_key.as_ref()) else {
+        let Some(app_id) = device.app_id() else {
             return Vec::new();
         };
         vec![DispatchTarget {
             app_id: app_id.to_owned(),
-            push_key: push_key.clone(),
+            push_key: device.push_key.clone(),
         }]
     }
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError>;
 }
@@ -261,7 +263,7 @@ pub fn sanitized_provider_payload(
         "notification": {
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
         },
         "provider_payload_under_review": serde_json::Value::Object(payload.clone()),
     });
@@ -476,7 +478,7 @@ mod sanitize_tests {
         let payload = json!({
             "client": "android",
             "wakeup_kind": "message",
-            "timing_profile_hint": "traffic_metadata_hardened",
+
             "attestation_evidence": "evidence-blob-ref",
             "audit_purpose": "compliance_lawful_access",
             "attestation_chain": ["chain-item-0", "chain-item-1"],
@@ -497,7 +499,6 @@ mod sanitize_tests {
             "audit_policy_version_digest",
             "policy_frontier_digest",
             "trust_domain",
-            "timing_profile_hint",
         ] {
             assert!(
                 out.get(forbidden).is_none(),

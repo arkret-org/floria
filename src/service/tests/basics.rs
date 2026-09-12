@@ -13,7 +13,7 @@ async fn accepted_devices_are_not_rejected() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -37,7 +37,7 @@ async fn notify_endpoint_accepts_active_payload_shape() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -442,7 +442,7 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -495,7 +495,7 @@ async fn notify_response_conserves_every_requested_device_id() {
         .map(|device| device["device_id"].as_str().unwrap().to_owned())
         .collect::<std::collections::HashSet<_>>();
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -526,7 +526,7 @@ async fn notify_rejects_operation_id_in_body() {
     // rejected as an unknown field (deny_unknown_fields), not validated.
     let service = test_service(vec![]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

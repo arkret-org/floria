@@ -15,6 +15,7 @@ pub mod postgres_support;
 pub mod pushkin;
 pub mod rate_limit;
 pub(crate) mod redis_support;
+pub mod registrations;
 pub mod retry_queue;
 pub mod sanitize;
 pub mod service;
@@ -69,6 +70,8 @@ pub struct AppState {
     pub audit_sink: Option<Arc<dyn AuditSink>>,
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
     pub notify_auth: NotifyAuthConfig,
+    pub registrations: Arc<registrations::RegistrationDirectory>,
+    pub provider_timing_bucket: std::time::Duration,
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
     pub notify_nonce_store: Option<Arc<NonceStore>>,
@@ -90,6 +93,8 @@ impl AppState {
             audit_sink: None,
             notify_deduplicator: None,
             notify_auth: NotifyAuthConfig::default(),
+            registrations: Arc::new(registrations::RegistrationDirectory::default()),
+            provider_timing_bucket: std::time::Duration::ZERO,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
             notify_nonce_store: None,
@@ -111,6 +116,8 @@ impl AppState {
             audit_sink: None,
             notify_deduplicator: Some(notify_deduplicator),
             notify_auth: NotifyAuthConfig::default(),
+            registrations: Arc::new(registrations::RegistrationDirectory::default()),
+            provider_timing_bucket: std::time::Duration::ZERO,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
             notify_nonce_store: None,

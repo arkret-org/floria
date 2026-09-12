@@ -22,7 +22,6 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use arkret_models_integration::PushKey;
 use arkret_retry::{Jitter, RetryPolicy};
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
@@ -208,8 +207,8 @@ impl DeadLetterPgOverlay {
 pub struct RetryEnvelope {
     pub request_id: String,
     pub pushkin: String,
-    pub app_id: String,
-    pub push_key: PushKey,
+    pub source_id: arkret_wire::DidCoreId,
+    pub notification: arkret_models_integration::PushNotificationEnvelope,
     pub retry_at_unix_ms: u64,
     pub attempts: u32,
     pub last_error: String,
@@ -219,16 +218,16 @@ impl RetryEnvelope {
     pub fn new(
         request_id: impl Into<String>,
         pushkin: impl Into<String>,
-        app_id: impl Into<String>,
-        push_key: PushKey,
+        source_id: arkret_wire::DidCoreId,
+        notification: arkret_models_integration::PushNotificationEnvelope,
         retry_after: Duration,
         last_error: impl Into<String>,
     ) -> Self {
         Self {
             request_id: request_id.into(),
             pushkin: pushkin.into(),
-            app_id: app_id.into(),
-            push_key,
+            source_id,
+            notification,
             retry_at_unix_ms: now_unix_ms()
                 .saturating_add(u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX)),
             attempts: 1,
@@ -767,13 +766,13 @@ async fn dead_letter_for_worker(queue: &std::sync::Arc<RetryQueue>, envelope: Re
 pub async fn run_worker(
     queue: std::sync::Arc<RetryQueue>,
     registry: std::sync::Arc<crate::pushkin::PushkinRegistry>,
+    registrations: std::sync::Arc<crate::registrations::RegistrationDirectory>,
+    gateway_url: String,
     poll_interval: Duration,
     batch_item_count: usize,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
     use std::time::Instant;
-
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
 
     use crate::error::DispatchError;
     use crate::models::NotificationContext;
@@ -812,7 +811,42 @@ pub async fn run_worker(
             continue;
         }
         for envelope in due {
-            let pushkins = registry.find_pushkins(&envelope.app_id);
+            let (Some(target), [requested]) = (
+                envelope.notification.push_target_id.as_ref(),
+                envelope.notification.devices.as_slice(),
+            ) else {
+                dead_letter_for_worker(&queue, envelope).await;
+                continue;
+            };
+            let device = match registrations
+                .resolve(
+                    &envelope.source_id,
+                    target,
+                    &requested.device_id,
+                    &gateway_url,
+                )
+                .await
+            {
+                Ok(Some(device)) => device,
+                Ok(None) => {
+                    crate::metrics::notify_dead_letter(&envelope.pushkin, "registration_unknown");
+                    dead_letter_for_worker(&queue, envelope).await;
+                    continue;
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "registration store unavailable during retry");
+                    let mut retry = envelope;
+                    retry.retry_at_unix_ms = now_unix_ms()
+                        .saturating_add(queue.config().default_backoff.as_millis() as u64);
+                    queue.enqueue_async(retry).await;
+                    continue;
+                }
+            };
+            let Some(app_id) = device.app_id.as_deref() else {
+                dead_letter_for_worker(&queue, envelope).await;
+                continue;
+            };
+            let pushkins = registry.find_pushkins(app_id);
             let pushkin = match pushkins
                 .iter()
                 .find(|candidate| candidate.name() == envelope.pushkin)
@@ -821,7 +855,7 @@ pub async fn run_worker(
                 None => {
                     tracing::warn!(
                         pushkin = %envelope.pushkin,
-                        app_id = %envelope.app_id,
+                        app_id = %app_id,
                         request_id = %envelope.request_id,
                         "dead-lettering retry: pushkin no longer registered"
                     );
@@ -831,39 +865,14 @@ pub async fn run_worker(
                 }
             };
 
-            // Reconstruct a minimal PushNotificationEnvelope + PushDeviceRoute shell. We
-            // intentionally do not persist the original notification
-            // body — the retry exists to re-attempt the wakeup, not
-            // to replay payload metadata. Provider implementations
-            // accept blind-wakeup defaults.
-            let device = PushDeviceRoute {
-                device_id: arkret_wire::DeviceId::new(format!(
-                    "ak:device:0196419b-0000-7000-8000-{:012}",
-                    1
-                ))
-                .expect("static retry shell device id is valid"),
-                app_id: Some(envelope.app_id.clone()),
-                push_key: Some(
-                    arkret_models_integration::PushKey::new(envelope.push_key.clone())
-                        .expect("persisted retry push key remains valid"),
-                ),
-                platform: None,
-                target_route_token: None,
-                visible_notification_opt_in: false,
-            };
-            let notification = PushNotificationEnvelope {
-                devices: vec![device.clone()],
-                priority: Some("low".to_owned()),
-                push_hint: Some("new_message".to_owned()),
-                ..PushNotificationEnvelope::default()
-            };
+            let notification = &envelope.notification;
             let context = NotificationContext {
                 request_id: envelope.request_id.clone(),
                 start_time: Instant::now(),
                 allow_plaintext_metadata: false,
             };
             match pushkin
-                .dispatch_notification(&notification, &device, &context)
+                .dispatch_notification(notification, &device, &context)
                 .await
             {
                 Ok(rejected) if rejected.is_empty() => {
@@ -907,6 +916,10 @@ mod tests {
 
     use super::*;
 
+    fn test_notification() -> arkret_models_integration::PushNotificationEnvelope {
+        serde_json::from_value(serde_json::json!({"push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8", "wakeup_kind":"message", "devices":[{"device_id":"ak:device:0196419b-0000-7000-8000-000000000001"}]})).unwrap()
+    }
+
     #[test]
     fn dead_letters_after_max_attempts() {
         let queue = RetryQueue::memory(RetryQueueConfig {
@@ -917,8 +930,8 @@ mod tests {
             RetryEnvelope::new(
                 "req",
                 "apns",
-                "com.example.app",
-                PushKey::new("push_key").unwrap(),
+                arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+                test_notification(),
                 Duration::ZERO,
                 "boom",
             )
@@ -928,8 +941,8 @@ mod tests {
             RetryEnvelope::new(
                 "req",
                 "apns",
-                "com.example.app",
-                PushKey::new("push_key").unwrap(),
+                arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+                test_notification(),
                 Duration::ZERO,
                 "boom",
             )
@@ -953,16 +966,16 @@ mod tests {
         queue.enqueue(RetryEnvelope::new(
             "req",
             "apns",
-            "com.example.app",
-            PushKey::new("push_key").unwrap(),
+            arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+            test_notification(),
             Duration::ZERO,
             "boom",
         ));
         queue.enqueue(RetryEnvelope::new(
             "req",
             "apns",
-            "com.example.app",
-            PushKey::new("push_key").unwrap(),
+            arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+            test_notification(),
             Duration::from_secs(3600),
             "boom",
         ));

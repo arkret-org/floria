@@ -32,7 +32,7 @@ impl Pushkin for NoopPushkin {
     async fn dispatch_notification(
         &self,
         _notification: &arkret_models_integration::PushNotificationEnvelope,
-        _device: &arkret_models_integration::PushDeviceRoute,
+        _device: &arkret_models_integration::PushRegistrationRecord,
         _context: &crate::models::NotificationContext,
     ) -> Result<Vec<String>, crate::error::DispatchError> {
         Ok(vec![])
@@ -52,6 +52,12 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
     notify_auth.service_principals =
         HashMap::from([("ak:did_core:web:sync.example.com".to_owned(), principal)]);
     state.notify_auth = notify_auth;
+    state.registrations = Arc::new(crate::registrations::test_support::directory());
+    crate::registrations::test_support::device(
+        "com.example.app",
+        "accept",
+        "ak:device:0196419b-0000-7000-8000-000000000001",
+    );
     state.notify_nonce_store = Some(Arc::new(NonceStore::memory(Duration::from_secs(300))));
     salvo::Service::new(build_router(Arc::new(state)))
 }
@@ -75,7 +81,7 @@ fn sign_request(
     );
     let now = unix_now_secs();
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\" \"arkret-operation\" \"idempotency-key\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -86,8 +92,10 @@ fn sign_request(
         format!("\"content-digest\": {digest}"),
         "\"source-service-id\": ak:did_core:web:sync.example.com".to_owned(),
         "\"destination-service-id\": ak:did_core:web:push.example.com".to_owned(),
+        "\"arkret-operation\": ak.edge.push.command.notify.v1".to_owned(),
+        "\"idempotency-key\": fixture".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \"source-service-id\" \"destination-service-id\" \"arkret-operation\" \"idempotency-key\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -119,12 +127,10 @@ async fn http_message_signature_authenticates_notify_request() {
             },
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-                "app_id": "com.example.app",
-                "push_key": "accept"
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
             }]
         }
     });
@@ -138,6 +144,7 @@ async fn http_message_signature_authenticates_notify_request() {
     );
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -184,12 +191,10 @@ async fn mtls_profile_authenticates_notify_request() {
             },
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-                "app_id": "com.example.app",
-                "push_key": "accept"
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
             }]
         }
     });
@@ -203,6 +208,7 @@ async fn mtls_profile_authenticates_notify_request() {
     );
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -250,12 +256,10 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
             },
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-                "app_id": "com.example.app",
-                "push_key": "accept"
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
             }]
         }
     });
@@ -269,6 +273,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -326,12 +331,10 @@ async fn rejects_tampered_body() {
             },
             "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "wakeup_kind": "message",
-            "timing_profile_hint": "default",
+
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-                "app_id": "com.example.app",
-                "push_key": "accept"
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
             }]
         }
     });
@@ -348,6 +351,7 @@ async fn rejects_tampered_body() {
     let tampered_body = json!({"hello": "world"});
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -404,7 +408,7 @@ async fn rejects_signature_missing_required_components() {
     // Intentionally omit `@authority` from the covered components —
     // floria's required-component policy must still trip this.
     let signature_input = format!(
-        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+        "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\" \"arkret-operation\" \"idempotency-key\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
         now,
         now + 300
     );
@@ -414,8 +418,10 @@ async fn rejects_signature_missing_required_components() {
         format!("\"content-digest\": {digest}"),
         "\"source-service-id\": ak:did_core:web:sync.example.com".to_owned(),
         "\"destination-service-id\": ak:did_core:web:push.example.com".to_owned(),
+        "\"arkret-operation\": ak.edge.push.command.notify.v1".to_owned(),
+        "\"idempotency-key\": fixture".to_owned(),
         format!(
-            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
+            "\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"source-service-id\" \"destination-service-id\" \"arkret-operation\" \"idempotency-key\");created={};expires={};keyid=\"did:web:sync.example.com#push\";alg=\"ed25519\"",
             now,
             now + 300
         ),
@@ -428,6 +434,7 @@ async fn rejects_signature_missing_required_components() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

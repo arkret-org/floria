@@ -18,7 +18,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use reqwest::StatusCode;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -185,7 +185,7 @@ impl HmsPushkin {
 
     fn build_request_body(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Result<Map<String, Value>, DispatchError> {
         build_request_body(self.vendor.display(), &self.config, device, payload)
@@ -193,7 +193,7 @@ impl HmsPushkin {
 
     async fn send_once(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Result<Vec<String>, DispatchError> {
         // The client-credentials grant is deliberately not routed
@@ -238,7 +238,7 @@ impl HmsPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         handle_response(
             self.vendor.display(),
@@ -264,7 +264,7 @@ impl Pushkin for HmsPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -334,7 +334,7 @@ impl HmsAndroidConfig {
 fn build_request_body(
     provider: &str,
     config: &HmsAndroidConfig,
-    device: &PushDeviceRoute,
+    device: &PushRegistrationRecord,
     payload: AndroidNotificationPayload,
 ) -> Result<Map<String, Value>, DispatchError> {
     let data = serde_json::to_string(&payload.data).map_err(|error| {
@@ -425,7 +425,7 @@ fn handle_response(
     status: StatusCode,
     retry_after: Option<std::time::Duration>,
     body: &str,
-    device: &PushDeviceRoute,
+    device: &PushRegistrationRecord,
 ) -> Result<Vec<String>, DispatchError> {
     match status.as_u16() {
         429 => Err(DispatchError::temporary(
@@ -491,7 +491,7 @@ impl HmsSendResponse {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
 
@@ -500,11 +500,11 @@ mod tests {
         (HmsVendor::Honor, "com.example.honor", "honor-token"),
     ];
 
-    fn device(app_id: &str, push_key: &str) -> PushDeviceRoute {
+    fn device(app_id: &str, push_key: &str) -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device(app_id, push_key)
     }
 
-    fn notification(device: PushDeviceRoute) -> PushNotificationEnvelope {
+    fn notification(device: PushRegistrationRecord) -> PushNotificationEnvelope {
         crate::pushkin::test_fixtures::notification(vec![device], Some("low"), Some(true))
     }
 

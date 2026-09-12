@@ -23,17 +23,12 @@ fn notify_request_with_wakeup_kind(kind: &str) -> arkret_models_integration::Pus
                 .unwrap(),
             ),
             wakeup_kind: Some(kind.to_owned()),
-            timing_profile_hint: Some(arkret_models_integration::PushTimingProfileHint::Default),
+
             devices: vec![arkret_models_integration::PushDeviceRoute {
                 device_id: arkret_wire::DeviceId::new(
                     "ak:device:0196419b-0000-7000-8000-000000000001",
                 )
                 .unwrap(),
-                push_key: Some(arkret_models_integration::PushKey::new("token-1").unwrap()),
-                app_id: Some("com.example.app".to_owned()),
-                platform: None,
-                target_route_token: None,
-                visible_notification_opt_in: false,
             }],
             ..arkret_models_integration::PushNotificationEnvelope::default()
         },
@@ -70,46 +65,10 @@ fn targeted_and_productivity_wakeup_kinds_match_sdk_allow_list() {
 }
 
 #[test]
-fn notify_ingress_accepts_hardened_timing_profile_hint() {
-    let request =
-        serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
-                "notification": {
-                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-                    "wakeup_kind": "message",
-                    "timing_profile_hint": "traffic_metadata_hardened",
-                    "devices": [{
-                        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
-                    }]
-                }
-        }))
-        .unwrap();
-    arkret_models_integration::validate_push_notify_contract_shape(&request).unwrap();
-
-    assert_eq!(
-        request.notification.timing_profile_hint,
-        Some(arkret_models_integration::PushTimingProfileHint::TrafficMetadataHardened)
+fn notify_ingress_rejects_removed_timing_hint() {
+    let mut raw = serde_json::to_value(notify_request_with_wakeup_kind("message")).unwrap();
+    raw["notification"]["timing_profile_hint"] = json!("default");
+    assert!(
+        serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(raw).is_err()
     );
-    assert_eq!(
-        request
-            .notification
-            .push_target_id
-            .as_ref()
-            .map(arkret_wire::PushTargetId::as_str),
-        Some("ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8")
-    );
-}
-
-#[test]
-fn notify_ingress_rejects_unknown_timing_profile_hint() {
-    let err = serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
-            "notification": {
-                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-                "wakeup_kind": "message",
-                "timing_profile_hint": "minimal_metadata",
-                "devices": []
-            }
-    }))
-    .unwrap_err();
-
-    assert!(err.to_string().contains("traffic_metadata_hardened"));
 }

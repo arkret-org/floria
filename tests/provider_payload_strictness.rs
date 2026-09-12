@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use floria::AppState;
 use floria::auth::{DESTINATION_SERVICE_ID_HEADER, SOURCE_SERVICE_ID_HEADER};
@@ -179,9 +179,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "route_tokens",
         "realm_route_token",
         "scope_route_token",
-        "mention_redirect_target_route_tokens",
         "delivery_binding_frontier_token",
-        "target_route_token",
         "sender",
         "sender_actor_display_name",
         "strand_title",
@@ -258,12 +256,10 @@ fn sanitizer_strips_route_token_identifiers() {
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
-            "mention_redirect_target_route_tokens": ["alice_route_token_000000001"],
             "delivery_binding_frontier_token": "frontier_route_token_000000001",
         },
-        "target_route_token": "device_route_token_000000001",
         "wakeup_kind": "message",
-        "timing_profile_hint": "traffic_metadata_hardened",
+
     })
     .as_object()
     .unwrap()
@@ -273,10 +269,7 @@ fn sanitizer_strips_route_token_identifiers() {
         "route_tokens",
         "realm_route_token",
         "scope_route_token",
-        "mention_redirect_target_route_tokens",
         "delivery_binding_frontier_token",
-        "target_route_token",
-        "timing_profile_hint",
     ] {
         assert!(
             sanitized.get(forbidden).is_none(),
@@ -328,11 +321,10 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     let notification: PushNotificationEnvelope = serde_json::from_value(json!({
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
-        "timing_profile_hint": "default",
+
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
-            "mention_redirect_target_route_tokens": ["alice_route_token_000000001"],
         },
         "counts": { "unread_increment": 3 },
     }))
@@ -343,7 +335,6 @@ fn build_blind_provider_data_never_emits_route_tokens() {
         "route_tokens",
         "realm_route_token",
         "scope_route_token",
-        "mention_redirect_target_route_tokens",
         "delivery_binding_frontier_token",
     ] {
         assert!(
@@ -362,7 +353,7 @@ fn notification_rejects_retired_delivery_binding_frontier_token() {
     let error = serde_json::from_value::<PushNotificationEnvelope>(json!({
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
-        "timing_profile_hint": "default",
+
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
             "delivery_binding_frontier_token": "frontier_route_token_000000001"
@@ -393,7 +384,7 @@ impl Pushkin for AcceptPushkin {
     async fn dispatch_notification(
         &self,
         _notification: &PushNotificationEnvelope,
-        _device: &PushDeviceRoute,
+        _device: &PushRegistrationRecord,
         _context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         Ok(vec![])
@@ -421,6 +412,7 @@ fn blind_profile_service() -> salvo::Service {
     )]));
     let mut state = AppState::new(Arc::new(registry));
     state.notify_auth = auth;
+    state.registrations = Arc::new(test_registration_directory());
     salvo::Service::new(build_router(Arc::new(state)))
 }
 
@@ -444,6 +436,7 @@ fn visible_profile_service() -> salvo::Service {
     )]));
     let mut state = AppState::new(Arc::new(registry));
     state.notify_auth = auth;
+    state.registrations = Arc::new(test_registration_directory());
     salvo::Service::new(build_router(Arc::new(state)))
 }
 
@@ -457,11 +450,9 @@ fn blind_payload(extra_notification_fields: serde_json::Map<String, Value>) -> V
         },
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
-        "timing_profile_hint": "default",
+
         "devices": [{
-            "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-            "app_id": "com.example.app",
-            "push_key": "device-token"
+            "device_id": "ak:device:0196419b-0000-7000-8000-000000000a11"
         }]
     });
     let obj = notification.as_object_mut().unwrap();
@@ -484,6 +475,7 @@ async fn notify_blind_profile_rejects_plaintext_sender_actor_display_name() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -531,6 +523,7 @@ async fn notify_blind_profile_rejects_plaintext_content_body() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -578,6 +571,7 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
     body["notification"]["devices"][0]["visible_notification_opt_in"] = json!(true);
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -621,6 +615,7 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -668,6 +663,7 @@ async fn notify_visible_profile_rejects_product_private_content_body() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -706,6 +702,7 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
     let body = blind_payload(serde_json::Map::new());
 
     let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
         .add_header(
             "Arkret-Operation",
@@ -731,4 +728,29 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
         StatusCode::OK,
         "pure blind-wakeup payload must be accepted under the blind profile"
     );
+}
+
+fn test_registration_directory() -> floria::registrations::RegistrationDirectory {
+    let database_url = std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL")
+        .expect("set an isolated Soland-initialized registration test database");
+    let source: arkret_wire::DidCoreId = "ak:did_core:web:sync.example.com".parse().unwrap();
+    let record: arkret_models_integration::PushRegistrationRecord = serde_json::from_value(json!({
+        "registration_id":"push_registration:provider-tests", "account_id":{"principal_id":"ak:did_core:web:provider-fixture.example", "station_id":source},
+        "device_id":"ak:device:0196419b-0000-7000-8000-000000000a11", "push_gateway":"http://127.0.0.1:5000/",
+        "push_key":"device-token", "platform":null, "app_id":"com.example.app", "visible_notification_opt_in":true,
+        "push_route_id":"com.example.app", "push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+        "salt_epoch_id":"fixture", "expires_at":null, "retained_push_targets":[]
+    })).unwrap();
+    let payload = serde_json::to_string(&record).unwrap();
+    floria::postgres_support::PostgresPool::new(&database_url, "provider test registration").unwrap().with_client(|client| {
+        client.execute("INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload", &[&record.registration_id.as_str(), &record.account_id.principal_id.as_str(), &record.device_id.as_str(), &record.push_gateway, &record.push_key.as_str(), &record.app_id, &payload])?;
+        Ok(())
+    }).unwrap();
+    floria::registrations::RegistrationDirectory::new(&std::collections::BTreeMap::from([(
+        source,
+        floria::registrations::RegistrationSourceConfig {
+            postgres_url: database_url,
+        },
+    )]))
+    .unwrap()
 }

@@ -90,6 +90,8 @@ pub(super) fn verify_message_signature(
         Component::Header(CONTENT_DIGEST_HEADER.to_owned()),
         Component::Header(SOURCE_SERVICE_ID_HEADER.to_owned()),
         Component::Header(DESTINATION_SERVICE_ID_HEADER.to_owned()),
+        Component::Header("arkret-operation".to_owned()),
+        Component::Header("idempotency-key".to_owned()),
     ];
     let now = unix_now_secs();
     let created_skew =

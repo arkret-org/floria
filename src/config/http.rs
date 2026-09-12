@@ -21,6 +21,11 @@ pub struct HttpConfig {
     pub notify_dedup_ttl_seconds: u64,
     pub notify_dedup: NotifyDedupConfig,
     pub notify_auth: NotifyAuthConfig,
+    pub registration_sources: std::collections::BTreeMap<
+        arkret_wire::DidCoreId,
+        crate::registrations::RegistrationSourceConfig,
+    >,
+    pub provider_timing_bucket_seconds: u64,
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
@@ -46,6 +51,8 @@ impl Default for HttpConfig {
             notify_dedup_ttl_seconds: 0,
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
+            registration_sources: Default::default(),
+            provider_timing_bucket_seconds: 60,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
@@ -101,6 +108,19 @@ impl HttpConfig {
         }
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
+        for (source, registration) in &self.registration_sources {
+            if !self
+                .notify_auth
+                .service_principals
+                .contains_key(source.as_str())
+            {
+                bail!("registration source must name a configured authenticated service principal");
+            }
+            crate::postgres_support::validate_postgres_url(
+                &registration.postgres_url,
+                "registration_sources.postgres_url",
+            )?;
+        }
         self.internal_auth.validate()?;
         self.notify_rate_limits.validate()?;
         self.notify_retry_queue.validate()?;

@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use reqwest::StatusCode;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -116,7 +116,7 @@ impl XiaomiPushkin {
     fn build_form(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         allow_visible_notification: bool,
     ) -> Result<Vec<(String, String)>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
@@ -198,7 +198,7 @@ impl XiaomiPushkin {
     async fn send_once(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         allow_visible_notification: bool,
     ) -> Result<Vec<String>, DispatchError> {
         let form = self.build_form(notification, device, allow_visible_notification)?;
@@ -238,7 +238,7 @@ impl XiaomiPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         match status.as_u16() {
             429 => Err(DispatchError::temporary(
@@ -284,7 +284,7 @@ impl Pushkin for XiaomiPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -370,11 +370,11 @@ impl XiaomiSendResponse {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.xiaomi", "regid")
     }
 

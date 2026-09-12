@@ -13,7 +13,7 @@ async fn rejected_devices_are_reported() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Reject)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -44,7 +44,7 @@ async fn ambiguous_app_ids_are_rejected() {
         ),
     ]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -72,7 +72,7 @@ async fn remote_provider_errors_are_not_reported_as_accepted() {
         )),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -107,7 +107,7 @@ async fn internal_gateway_errors_return_caller_retryable_outcome() {
         )),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -135,7 +135,7 @@ async fn temporary_errors_without_durable_retry_return_per_device_backoff() {
         )),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -168,7 +168,7 @@ async fn oversized_requests_are_rejected() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -192,7 +192,7 @@ async fn per_pushkin_concurrency_limit_does_not_leak_provider_state() {
         )),
     )]);
 
-    let request_a = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let request_a = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -200,7 +200,7 @@ async fn per_pushkin_concurrency_limit_does_not_leak_provider_state() {
         )
         .json(&payload(vec![device("com.example.app", "one")]))
         .send(&service);
-    let request_b = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let request_b = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -225,7 +225,7 @@ async fn duplicate_device_ids_are_rejected_at_ingress() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Reject)),
     )]);
 
-    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -250,10 +250,13 @@ async fn distinct_device_ids_are_not_deduplicated_within_one_request() {
         Duration::from_secs(60),
     );
     let first = device("com.example.app", "shared-route");
-    let mut second = device("com.example.app", "shared-route");
-    second["device_id"] = serde_json::json!("ak:device:0196419b-0000-7000-8000-000000000099");
+    let second = crate::registrations::test_support::device(
+        "com.example.app",
+        "shared-route",
+        "ak:device:0196419b-0000-7000-8000-000000000099",
+    );
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -275,7 +278,7 @@ async fn blank_device_fields_are_rejected_without_dispatch() {
         Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -315,7 +318,7 @@ async fn mixed_success_and_temporary_failure_returns_200() {
         ),
     ]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -346,7 +349,7 @@ async fn all_temporary_failures_return_conserved_rejections() {
         )),
     )]);
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -385,7 +388,7 @@ async fn exact_replay_returns_the_original_per_device_outcomes() {
         device("com.example.retry", "retry"),
     ]);
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -396,7 +399,7 @@ async fn exact_replay_returns_the_original_per_device_outcomes() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

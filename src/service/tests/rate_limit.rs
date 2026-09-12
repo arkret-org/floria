@@ -42,7 +42,7 @@ async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
         },
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -58,7 +58,7 @@ async fn notify_rate_limit_returns_conserved_outcome_with_retry_after() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -93,7 +93,7 @@ async fn notify_rate_limit_can_apply_per_app_id() {
         },
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -104,7 +104,7 @@ async fn notify_rate_limit_can_apply_per_app_id() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -131,7 +131,7 @@ async fn notify_rate_limit_can_apply_per_provider() {
         },
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -142,7 +142,7 @@ async fn notify_rate_limit_can_apply_per_provider() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -169,7 +169,7 @@ async fn notify_rate_limit_can_apply_per_push_key_hash() {
         },
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -180,7 +180,7 @@ async fn notify_rate_limit_can_apply_per_push_key_hash() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -207,7 +207,7 @@ async fn notify_rate_limit_can_apply_per_endpoint() {
         },
     );
 
-    let first = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let first = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -218,7 +218,7 @@ async fn notify_rate_limit_can_apply_per_endpoint() {
         .await;
     assert_eq!(first.status_code.unwrap(), StatusCode::OK);
 
-    let mut second = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut second = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -247,7 +247,7 @@ async fn dedup_replay_bypasses_rate_limit() {
     let request_body = payload(vec![device("com.example.app", "cached")]);
 
     for _ in 0..2 {
-        let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
             .add_header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

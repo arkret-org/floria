@@ -23,7 +23,7 @@ async fn sanitizer_rejects_binding_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -53,7 +53,7 @@ async fn sanitizer_rejects_subject_proof_signature() {
         "signature": "deadbeef",
     });
 
-    let response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+    let response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,

@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use prometheus::register_int_counter_vec;
 use reqwest::StatusCode;
@@ -152,7 +152,7 @@ impl JpushPushkin {
     fn build_request_body(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Map<String, Value> {
         let mut body = Map::new();
@@ -296,7 +296,7 @@ impl JpushPushkin {
     async fn send_once(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Result<Vec<String>, DispatchError> {
         let body = self.build_request_body(notification, device, payload);
@@ -333,7 +333,7 @@ impl JpushPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         match status.as_u16() {
             200..=299 => Ok(vec![]),
@@ -366,7 +366,7 @@ impl Pushkin for JpushPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -532,11 +532,11 @@ struct JpushErrorBody {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.jpush", "regid")
     }
 

@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use md5::{Digest, Md5};
 use reqwest::StatusCode;
@@ -252,7 +252,7 @@ impl VivoPushkin {
     fn build_request_body(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         allow_visible_notification: bool,
     ) -> Result<Map<String, Value>, DispatchError> {
         let Some(payload) = build_android_notification_payload(
@@ -351,7 +351,7 @@ impl VivoPushkin {
     async fn send_once(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         allow_visible_notification: bool,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.access_token().await?;
@@ -406,7 +406,7 @@ impl VivoPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         match status.as_u16() {
             429 => Err(DispatchError::temporary(
@@ -452,7 +452,7 @@ impl Pushkin for VivoPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -592,7 +592,7 @@ struct VivoSendResponse {
 }
 
 impl VivoSendResponse {
-    fn is_invalid_registration(&self, device: &PushDeviceRoute) -> bool {
+    fn is_invalid_registration(&self, device: &PushRegistrationRecord) -> bool {
         let push_key = device.push_key().unwrap_or_default();
         self.result == 10302
             || self
@@ -615,11 +615,11 @@ struct VivoInvalidUser {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.vivo", "regid")
     }
 

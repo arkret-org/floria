@@ -172,12 +172,12 @@ fn fallback_summary(notification: &PushNotificationEnvelope, sender: &str) -> St
 #[cfg(test)]
 mod tests {
     use arkret_models_integration::{
-        PushCounts, PushDeviceRoute, PushNotificationEnvelope, PushRouteTokens,
+        PushCounts, PushNotificationEnvelope, PushRegistrationRecord, PushRouteTokens,
     };
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.cn", "push_key")
     }
 
@@ -220,7 +220,9 @@ mod tests {
             ),
             wakeup_kind: Some("message".to_owned()),
             push_hint: None,
-            devices: vec![device()],
+            devices: vec![arkret_models_integration::PushDeviceRoute {
+                device_id: device().device_id,
+            }],
             counts: Some(PushCounts {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
@@ -331,7 +333,9 @@ mod tests {
                 ),
                 wakeup_kind: Some("member".to_owned()),
                 push_hint: None,
-                devices: vec![device()],
+                devices: vec![arkret_models_integration::PushDeviceRoute {
+                    device_id: device().device_id,
+                }],
                 counts: Some(PushCounts::default()),
                 ..Default::default()
             },

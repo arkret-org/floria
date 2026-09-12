@@ -114,6 +114,9 @@ fn http_schema() -> Value {
                 }
             },
             "notify_auth": notify_auth_schema(),
+            "registration_sources": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["postgres_url"], "properties": {"postgres_url": {"type": "string"}}}, "description": "Authenticated source service core id to read-only Station registration database inside the same trusted deployment."},
+            "provider_timing_bucket_seconds": {"type": "integer", "minimum": 0, "default": 60, "description": "Provider timing bucket chosen by deployment policy; notify cannot override it."},
+
             "internal_auth": internal_auth_schema(),
             "notify_rate_limits": {
                 "type": "object",

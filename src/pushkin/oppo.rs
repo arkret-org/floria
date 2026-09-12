@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 use async_trait::async_trait;
 use reqwest::StatusCode;
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -237,7 +237,7 @@ impl OppoPushkin {
 
     fn build_request_body(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Map<String, Value> {
         let mut body = self.config.request.clone();
@@ -285,7 +285,7 @@ impl OppoPushkin {
 
     async fn send_once(
         &self,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         payload: AndroidNotificationPayload,
     ) -> Result<Vec<String>, DispatchError> {
         let token = self.access_token().await?;
@@ -337,7 +337,7 @@ impl OppoPushkin {
         status: StatusCode,
         retry_after: Option<Duration>,
         body: &str,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
     ) -> Result<Vec<String>, DispatchError> {
         match status.as_u16() {
             429 => Err(DispatchError::temporary(
@@ -388,7 +388,7 @@ impl Pushkin for OppoPushkin {
     async fn dispatch_notification(
         &self,
         notification: &PushNotificationEnvelope,
-        device: &PushDeviceRoute,
+        device: &PushRegistrationRecord,
         context: &NotificationContext,
     ) -> Result<Vec<String>, DispatchError> {
         let _permit = self.gate.acquire(self.name())?;
@@ -516,11 +516,11 @@ impl OppoSendResponse {
 
 #[cfg(test)]
 mod tests {
-    use arkret_models_integration::{PushDeviceRoute, PushNotificationEnvelope};
+    use arkret_models_integration::{PushNotificationEnvelope, PushRegistrationRecord};
 
     use super::*;
 
-    fn device() -> PushDeviceRoute {
+    fn device() -> PushRegistrationRecord {
         crate::pushkin::test_fixtures::device("com.example.oppo", "target-value")
     }
 

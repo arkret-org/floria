@@ -83,6 +83,11 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         deactivation_ledger,
     ))));
     state.notify_auth = config.http.notify_auth.clone();
+    state.registrations = Arc::new(floria::registrations::RegistrationDirectory::new(
+        &config.http.registration_sources,
+    )?);
+    state.provider_timing_bucket =
+        std::time::Duration::from_secs(config.http.provider_timing_bucket_seconds);
     state.public_base_url = config.http.public_base_url.clone();
     state.internal_auth = config.http.internal_auth.clone();
     if config.http.notify_auth.replay_window_seconds() > 0 {
@@ -217,6 +222,8 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         state.notify_retry_queue = Some(queue.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let registry_clone = state.registry.clone();
+        let registration_directory = state.registrations.clone();
+        let registration_gateway = state.public_base_url.clone();
         let poll_interval = std::time::Duration::from_millis(queue_config.poll_interval_ms.max(50));
         let batch_item_count = queue_config.batch_item_count.max(1) as usize;
         let grace = queue_config.grace_period();
@@ -226,6 +233,8 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
                 floria::retry_queue::run_worker(
                     queue,
                     registry_clone,
+                    registration_directory,
+                    registration_gateway,
                     poll_interval,
                     batch_item_count,
                     shutdown_rx,

@@ -79,8 +79,8 @@ fn dead_letter_envelope(request_id: &str) -> RetryEnvelope {
     RetryEnvelope::new(
         request_id,
         "test-pushkin",
-        "app-1",
-        arkret_models_integration::PushKey::new("push-key-1").unwrap(),
+        arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+        serde_json::from_value(serde_json::json!({"push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8", "wakeup_kind":"message", "devices":[{"device_id":"ak:device:0196419b-0000-7000-8000-000000000001"}]})).unwrap(),
         std::time::Duration::from_secs(30),
         "provider timeout",
     )

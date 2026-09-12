@@ -6,22 +6,24 @@
 //! onto an envelope the others no longer use.
 
 use arkret_models_integration::{
-    PushCountIndicator, PushCounts, PushDeviceRoute, PushKey, PushNotificationEnvelope,
+    PushCountIndicator, PushCounts, PushNotificationEnvelope, PushRegistrationRecord,
     PushRouteToken, PushRouteTokens,
 };
-use arkret_wire::{DeviceId, EventId, MessageId, PushTargetId, StrandId};
+use arkret_wire::{EventId, MessageId, PushTargetId, StrandId};
 
 /// The canonical single-device route every provider test dispatches to,
 /// parameterized only by the provider-specific app id and push key.
-pub(crate) fn device(app_id: &str, push_key: &str) -> PushDeviceRoute {
-    PushDeviceRoute {
-        device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001").unwrap(),
-        app_id: Some(app_id.to_owned()),
-        push_key: Some(PushKey::new(push_key).unwrap()),
-        platform: None,
-        target_route_token: None,
-        visible_notification_opt_in: false,
-    }
+pub(crate) fn device(app_id: &str, push_key: &str) -> PushRegistrationRecord {
+    serde_json::from_value(serde_json::json!({
+        "registration_id":"push_registration:test",
+        "account_id":{"station_id":"ak:did_core:web:station.example", "principal_id":"ak:did_core:web:alice.example"},
+        "device_id":"ak:device:0196419b-0000-7000-8000-000000000001",
+        "push_gateway":"https://push.example/", "push_key":push_key,
+        "platform":null, "app_id":app_id, "visible_notification_opt_in":false,
+        "push_route_id":app_id,
+        "push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+        "salt_epoch_id":"epoch", "expires_at":null, "retained_push_targets":[]
+    })).unwrap()
 }
 
 /// The canonical notification envelope every provider test renders.
@@ -29,7 +31,7 @@ pub(crate) fn device(app_id: &str, push_key: &str) -> PushDeviceRoute {
 /// `priority` and `user_is_target` are the only axes providers vary, so they
 /// stay explicit parameters instead of being copied into per-provider clones.
 pub(crate) fn notification(
-    devices: Vec<PushDeviceRoute>,
+    devices: Vec<PushRegistrationRecord>,
     priority: Option<&str>,
     user_is_target: Option<bool>,
 ) -> PushNotificationEnvelope {
@@ -59,7 +61,12 @@ pub(crate) fn notification(
         ),
         wakeup_kind: Some("message".to_owned()),
         push_hint: None,
-        devices,
+        devices: devices
+            .into_iter()
+            .map(|record| arkret_models_integration::PushDeviceRoute {
+                device_id: record.device_id,
+            })
+            .collect(),
         counts: Some(PushCounts {
             badge: Some(PushCountIndicator::Bucket("2-5".to_owned())),
             unread_increment: Some(2),

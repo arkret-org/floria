@@ -223,3 +223,35 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 Licensed under Apache 2.0. See `LICENSE`.
+
+### Authenticated push registration storage
+
+Notify devices contain only `device_id`. Floria resolves the provider token and
+visible-notification opt-in from the Station's current durable registration.
+For a deployment sharing a trusted PostgreSQL boundary with Soland, configure:
+
+```yaml
+http:
+  public_base_url: https://push.example/
+  registration_sources:
+    "ak:did_core:web:station.example":
+      postgres_url: "postgresql://push_registration_reader@db/soland"
+  provider_timing_bucket_seconds: 60
+```
+
+The source must also be an authenticated `notify_auth.service_principals` entry.
+Use a database role with SELECT access only to `public.push_devices`; no gateway
+schema creation or registration writes are performed. The registration gateway
+URL must resolve to this exact public base URL. Unknown, expired, removed or
+mismatched registrations never reach a provider. Retries resolve registrations
+again and do not retain provider tokens. Registration opt-in changes apply to
+subsequent dispatches.
+
+A gateway with a separate registration database has no standard registration
+transfer operation in the current protocol. Notify cannot create or repair an
+unknown registration. Such a deployment requires a future specified registration
+transport and is not interoperable through notify alone.
+
+The `postgres_registration_identity_rotation_and_removal` regression requires
+`FLORIA_REGISTRATION_TEST_DATABASE_URL` naming an isolated database initialized
+with Soland's initial schema. It never creates SQL files or copies that schema.

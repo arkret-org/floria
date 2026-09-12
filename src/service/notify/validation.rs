@@ -25,6 +25,7 @@ pub(in crate::service) const VISIBLE_DEVICE_OPT_IN_REASON: &str =
 pub(super) fn validate_notification_contract(
     notification: &PushNotificationEnvelope,
     caller: &AuthenticatedNotifyCaller,
+    registrations: &[Option<arkret_models_integration::PushRegistrationRecord>],
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata
         && (notification.sender_actor_display_name.is_some()
@@ -42,7 +43,7 @@ pub(super) fn validate_notification_contract(
 
     // Visible metadata is per-device opt-in even for a caller that is
     // allowed the visible-notification profile.
-    validate_visible_notification_device_opt_in(notification, caller)?;
+    validate_visible_notification_device_opt_in(notification, caller, registrations)?;
 
     if let Some(push_hint) = notification.push_hint.as_deref() {
         validate_push_hint(push_hint)?;
@@ -54,14 +55,15 @@ pub(super) fn validate_notification_contract(
 fn validate_visible_notification_device_opt_in(
     notification: &PushNotificationEnvelope,
     caller: &AuthenticatedNotifyCaller,
+    registrations: &[Option<arkret_models_integration::PushRegistrationRecord>],
 ) -> Result<(), String> {
     if !caller.allow_plaintext_metadata || !notification_has_visible_metadata(notification) {
         return Ok(());
     }
 
-    if let Some(device) = notification
-        .devices
+    if let Some(device) = registrations
         .iter()
+        .flatten()
         .find(|device| !device.visible_notification_opt_in())
     {
         return Err(format!(

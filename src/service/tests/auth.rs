@@ -16,6 +16,7 @@ async fn notify_accepts_authenticated_allowlisted_service() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -51,6 +52,7 @@ async fn notify_requires_bearer_token_when_auth_enabled() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -79,6 +81,7 @@ async fn notify_rejects_invalid_bearer_token() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -111,6 +114,7 @@ async fn notify_accepts_hashed_bearer_token() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -186,6 +190,7 @@ async fn notify_rejects_bearer_without_origin_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -215,6 +220,7 @@ async fn notify_rejects_non_allowlisted_origin_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -254,6 +260,7 @@ async fn notify_rejects_did_in_source_service_id_header() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -289,6 +296,7 @@ async fn notify_rejects_did_in_destination_service_id_header() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -328,6 +336,7 @@ async fn notify_rejects_plaintext_metadata_for_unauthorized_service() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -375,6 +384,7 @@ async fn anonymous_notify_rejects_plaintext_metadata_by_default() {
     )]);
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -415,6 +425,7 @@ async fn notify_rejects_sender_identity_for_unauthorized_service() {
     request_body["notification"]["sender"] = json!("@alice:example.com");
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -457,6 +468,7 @@ async fn notify_rejects_target_did_for_unauthorized_service() {
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -508,6 +520,7 @@ async fn notify_rejects_nested_did_literal_for_unauthorized_service() {
     });
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -550,6 +563,7 @@ async fn notify_rejects_mismatched_destination_id() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -591,6 +605,7 @@ async fn production_mode_rejects_anonymous_requests() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -626,6 +641,7 @@ async fn production_mode_rejects_bearer_only_principal() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -667,6 +683,7 @@ async fn production_mode_rejects_unknown_origin_with_gateway_bearer() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
@@ -718,6 +735,7 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     );
 
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header("Idempotency-Key", "fixture", true)
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
