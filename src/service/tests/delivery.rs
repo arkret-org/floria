@@ -272,34 +272,160 @@ async fn distinct_device_ids_are_not_deduplicated_within_one_request() {
 }
 
 #[tokio::test]
-async fn blank_device_fields_are_rejected_without_dispatch() {
-    let service = test_service(vec![(
-        "com.example.app",
-        Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept)),
-    )]);
-
+async fn unknown_device_registration_is_rejected_without_dispatch() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+    let unknown = json!({"device_id": "ak:device:0196419b-0000-7000-8000-ffffffffffff"});
     let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header(
             "Arkret-Operation",
             arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
             true,
         )
-        .json(&payload(vec![
-            device("   ", "blank-app"),
-            device("com.example.app", "   "),
-        ]))
+        .json(&payload(vec![unknown.clone()]))
         .send(&service)
         .await;
-
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    assert_notify_ok(
-        &mut response,
-        vec![
-            rejected(None, "blank-app"),
-            rejected(Some("com.example.app"), "   "),
-        ],
-    )
-    .await;
+    let body = response
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert_eq!(body.outcomes.len(), 1);
+    assert_eq!(
+        body.outcomes[0].device_id.as_str(),
+        unknown["device_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        body.outcomes[0].gateway_status,
+        arkret_models_integration::PushNotifyGatewayStatus::Rejected
+    );
+    assert_eq!(
+        body.outcomes[0].reason_code,
+        Some(arkret_models_integration::PushNotifyReasonCode::PushTargetUnknown)
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn malformed_device_identity_is_rejected_before_registration_lookup() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+    for device in [
+        json!({}),
+        json!({"device_id": null}),
+        json!({"device_id": ""}),
+        json!({"device_id": "   "}),
+    ] {
+        let mut response =
+            authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
+                .add_header(
+                    "Arkret-Operation",
+                    arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                    true,
+                )
+                .json(&payload(vec![device]))
+                .send(&service)
+                .await;
+        assert_eq!(response.status_code.unwrap(), StatusCode::BAD_REQUEST);
+        assert_notify_error(&mut response, "schema_violation", true).await;
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn notify_cannot_supply_or_override_registration_routing_fields() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+    let registered = device("com.example.app", "registered-route-only");
+    for base in [
+        registered,
+        json!({"device_id": "ak:device:0196419b-0000-7000-8000-fffffffffffe"}),
+    ] {
+        for (field, value) in [
+            ("app_id", json!("com.attacker.app")),
+            ("push_key", json!("unregistered-provider-token")),
+            ("platform", json!("apns")),
+            ("visible_notification_opt_in", json!(true)),
+        ] {
+            let mut candidate = base.clone();
+            candidate[field] = value;
+            let mut response =
+                authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
+                    .add_header(
+                        "Arkret-Operation",
+                        arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                        true,
+                    )
+                    .json(&payload(vec![candidate]))
+                    .send(&service)
+                    .await;
+            assert_eq!(
+                response.status_code.unwrap(),
+                StatusCode::BAD_REQUEST,
+                "notify accepted {field}"
+            );
+            assert_notify_error(&mut response, "schema_violation", true).await;
+        }
+    }
+    for removed_field in [
+        "timing_profile_hint",
+        "mention_redirect_target_route_tokens",
+    ] {
+        let mut body = payload(vec![device("com.example.app", "registered-route-only")]);
+        if removed_field == "timing_profile_hint" {
+            body["notification"][removed_field] = json!("immediate");
+        } else {
+            body["notification"]["route_tokens"][removed_field] = json!([]);
+        }
+        let mut response =
+            authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
+                .add_header(
+                    "Arkret-Operation",
+                    arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+                    true,
+                )
+                .json(&body)
+                .send(&service)
+                .await;
+        assert_eq!(
+            response.status_code.unwrap(),
+            StatusCode::BAD_REQUEST,
+            "notify accepted {removed_field}"
+        );
+        assert_notify_error(&mut response, "schema_violation", true).await;
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn registered_blank_provider_app_is_rejected_without_dispatch() {
+    let pushkin = Arc::new(TestPushkin::new("com.example.app", TestBehavior::Accept));
+    let calls = pushkin.calls.clone();
+    let service = test_service(vec![("com.example.app", pushkin)]);
+    // Invalid routing belongs to retained registration state. The wire carrier
+    // still contains only a typed device identity.
+    let mut response = authenticated_notify_request("http://127.0.0.1/_arkret/edge/push/notify")
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1,
+            true,
+        )
+        .json(&payload(vec![device("   ", "blank-registered-app")]))
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let body = response
+        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .await
+        .unwrap();
+    assert_eq!(
+        body.outcomes[0].reason_code,
+        Some(arkret_models_integration::PushNotifyReasonCode::PushTokenInvalid)
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

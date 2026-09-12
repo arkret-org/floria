@@ -192,6 +192,29 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        // Corrupted durable provider material must fail the lookup. Notify
+        // carries no replacement token and cannot repair this registration.
+        test_support::database(|| {
+            pool.with_client(|client| {
+                client.execute(
+                    "UPDATE public.push_devices SET payload=jsonb_set(payload,'{push_key}','\"   \"'::jsonb) WHERE id=$1",
+                    &[&record.registration_id.as_str()],
+                )?;
+                Ok(())
+            }).unwrap()
+        });
+        assert!(
+            directory
+                .resolve(
+                    &source,
+                    &record.push_target_id,
+                    &record.device_id,
+                    &record.push_gateway
+                )
+                .await
+                .is_err()
+        );
+        save(&record);
         record.push_key = arkret_models_integration::PushKey::new("rotated-token").unwrap();
         record.visible_notification_opt_in = true;
         save(&record);
