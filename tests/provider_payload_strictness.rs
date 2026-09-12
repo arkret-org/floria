@@ -417,6 +417,10 @@ fn blind_profile_service() -> salvo::Service {
 }
 
 fn visible_profile_service() -> salvo::Service {
+    visible_profile_service_for_device(true)
+}
+
+fn visible_profile_service_for_device(opt_in: bool) -> salvo::Service {
     // Authenticated principal scoped to the VISIBLE profile: explicitly
     // a plaintext-eligible service_kind (`sync`) AND
     // allow_plaintext_metadata is set, so the visible-notification
@@ -436,7 +440,7 @@ fn visible_profile_service() -> salvo::Service {
     )]));
     let mut state = AppState::new(Arc::new(registry));
     state.notify_auth = auth;
-    state.registrations = Arc::new(test_registration_directory());
+    state.registrations = Arc::new(test_registration_directory_for_device(opt_in));
     salvo::Service::new(build_router(Arc::new(state)))
 }
 
@@ -602,8 +606,8 @@ async fn notify_visible_profile_accepts_plaintext_metadata() {
 
 #[tokio::test]
 async fn notify_visible_profile_requires_device_visible_opt_in() {
-    let service = visible_profile_service();
-    let body = blind_payload(
+    let service = visible_profile_service_for_device(false);
+    let mut body = blind_payload(
         json!({
             "strand_title": "Mission Control",
             "sender_actor_display_name": "Major Tom",
@@ -613,6 +617,8 @@ async fn notify_visible_profile_requires_device_visible_opt_in() {
         .clone(),
     );
 
+    body["notification"]["devices"][0]["device_id"] =
+        json!("ak:device:0196419b-0000-7000-8000-000000000a12");
     let mut response = TestClient::post("http://127.0.0.1/_arkret/edge/push/notify")
         .add_header("Idempotency-Key", "fixture", true)
         .add_header("authorization", "Bearer secret-token", true)
@@ -730,13 +736,19 @@ async fn notify_blind_profile_accepts_pure_blind_payload() {
 }
 
 fn test_registration_directory() -> floria::registrations::RegistrationDirectory {
+    test_registration_directory_for_device(true)
+}
+
+fn test_registration_directory_for_device(
+    opt_in: bool,
+) -> floria::registrations::RegistrationDirectory {
     let database_url = std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL")
         .expect("set an isolated Soland-initialized registration test database");
     let source: arkret_wire::DidCoreId = "ak:did_core:web:sync.example.com".parse().unwrap();
     let record: arkret_models_integration::PushRegistrationRecord = serde_json::from_value(json!({
-        "registration_id":"push_registration:provider-tests", "account_id":{"principal_id":"ak:did_core:web:provider-fixture.example", "station_id":source},
-        "device_id":"ak:device:0196419b-0000-7000-8000-000000000a11", "push_gateway":"http://127.0.0.1:5000/",
-        "push_key":"device-token", "platform":null, "app_id":"com.example.app", "visible_notification_opt_in":true,
+        "registration_id": if opt_in {"push_registration:provider-tests"} else {"push_registration:provider-no-visible-consent"}, "account_id":{"principal_id":"ak:did_core:web:provider-fixture.example", "station_id":source},
+        "device_id": if opt_in {"ak:device:0196419b-0000-7000-8000-000000000a11"} else {"ak:device:0196419b-0000-7000-8000-000000000a12"}, "push_gateway":"http://127.0.0.1:5000/",
+        "push_key":"device-token", "platform":null, "app_id":"com.example.app", "visible_notification_opt_in":opt_in,
         "push_route_id":"com.example.app", "push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "salt_epoch_id":"fixture", "expires_at":null, "retained_push_targets":[]
     })).unwrap();

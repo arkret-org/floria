@@ -101,20 +101,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     let verified_profiles: Vec<arkret_models_discovery::VerifiedProfileEntry> = Vec::new();
 
     let supported_profiles = describe_supported_profiles(auth);
-    let claimed_profiles = supported_profiles
-        .iter()
-        .map(|&profile_id| {
-            let mut entry = arkret_models_discovery::ClaimedProfileEntry::self_claimed(profile_id);
-            if profile_id == ProfileId::PUSH_GATEWAY_V1 {
-                entry.notes = Some(
-                    "push gateway profile self-claimed; cotest verification not yet wired in (§3.0)"
-                        .to_owned(),
-                );
-            }
-            entry
-        })
-        .collect();
-
     let auth_modes = describe_auth_modes(auth);
     let plaintext_class = describe_plaintext_visibility(auth);
 
@@ -229,7 +215,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         plaintext_visibility,
         privacy_derivation: None,
         receive_policy_constraints: None,
-        claimed_profiles,
         verified_profiles,
         interop_surfaces: vec![],
         development_mode,
@@ -240,7 +225,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         ),
         resource_kinds: vec![],
         restricted_query_proof: None,
-        ingest_modes: vec![],
         accept_policy_kind: None,
         accept_policy_ref: None,
         default_ttl_seconds: None,

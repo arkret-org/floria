@@ -251,19 +251,14 @@ async fn describe_separates_claim_levels() {
         "floria has no cotest verifier wired in; verified_profiles MUST stay empty"
     );
 
-    let claimed = body["claimed_profiles"]
-        .as_array()
-        .expect("claimed_profiles present");
     assert!(
-        !claimed.is_empty(),
-        "floria self-claims ak.profile.push_gateway.v1"
+        body["supported_profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|profile| profile == "ak.profile.push_gateway.v1")
     );
-    for entry in claimed {
-        assert_eq!(
-            entry["claim_kind"], "self_claimed",
-            "claimed_profiles entries MUST be self_claimed; cotest entries go to verified_profiles"
-        );
-    }
+    assert!(body.get("claimed_profiles").is_none());
 
     for surface in body["interop_surfaces"]
         .as_array()
