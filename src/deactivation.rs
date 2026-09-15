@@ -4,7 +4,7 @@
 //! downstream service-bound subscriber when a Station starts
 //! tearing down a principal's footprint. floria receives the broadcast,
 //! drains every queued to-device push for the affected
-//! `(actor, device)` cells, then reports the fanout outcome back to
+//! `(actor, device)` queue partitions, then reports the fanout outcome back to
 //! soland so soland can advance its own
 //! `ak.account.deactivate.fanout_state` machine.
 //!

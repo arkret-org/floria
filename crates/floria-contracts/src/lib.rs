@@ -37,8 +37,8 @@ pub struct AccountDeactivateFanoutBroadcast {
     /// never learns realm contents — only the actor identity.
     pub actor_id: String,
     /// Per-device unbind targets. Empty list means "every device for
-    /// this actor"; floria still answers honestly about how many cells
-    /// it saw.
+    /// this actor"; floria still answers honestly about how many device
+    /// bindings it saw.
     #[serde(default)]
     pub devices: Vec<DeactivateFanoutDevice>,
     /// Optional producer-supplied reason — purely diagnostic, not echoed.
@@ -52,7 +52,7 @@ pub struct AccountDeactivateFanoutBroadcast {
 pub struct DeactivateFanoutDevice {
     pub device_id: String,
     /// Optional explicit push_key_hash hint so floria can match an
-    /// unbind target faster when the actor has many cells. The hint is
+    /// unbind target faster when the actor has many device bindings. The hint is
     /// validated as a `pkh_*` shape; bare push tokens are NEVER carried
     /// across this hop.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,7 +62,7 @@ pub struct DeactivateFanoutDevice {
 /// Outcome a push gateway reports back to the Station for a fanout.
 ///
 /// `partially_completed` is reserved for the case where floria observed at
-/// least one cell it could not drain (e.g. queue subsystem momentarily
+/// least one device queue it could not drain (e.g. queue subsystem momentarily
 /// unavailable).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

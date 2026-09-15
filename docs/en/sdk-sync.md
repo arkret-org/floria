@@ -25,7 +25,7 @@ rationale for governance and correlation names in the shared strip set.
 | `audit_purpose` | Reveals audit routing intent (which downstream audit channel the push will divert to) |
 | `attestation_chain` | Reveals attestation chain material; same leak class as `attestation_evidence` |
 | `audit_policy_version_digest` | Stable audit policy correlator — long-lived, cross-request linkability |
-| `policy_frontier_digest` | Stable policy frontier correlator — same linkability class as the audit policy version |
+| `policy_frontier_digest` | Retired legacy field retained only in the denylist; its stable value has the same linkability risk as an audit policy version |
 | `trust_domain` | Deployment-scope leakage — exposes whether the principal is on a federation edge |
 
 The match is case-insensitive and applies recursively through nested

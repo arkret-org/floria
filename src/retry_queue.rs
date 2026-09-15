@@ -67,7 +67,7 @@ impl RetryQueueCipher {
         Self { cipher }
     }
 
-    fn seal(&self, plaintext: &[u8]) -> Result<String> {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<String> {
         let mut nonce_bytes = [0u8; RETRY_NONCE_LEN];
         rand::rng().fill(&mut nonce_bytes);
         #[allow(deprecated)]
@@ -576,7 +576,7 @@ impl RedisQueue {
     fn serialize_envelope(&self, envelope: &RetryEnvelope) -> Result<String> {
         let json = serde_json::to_string(envelope).context("serialize retry envelope")?;
         match &self.cipher {
-            Some(cipher) => cipher.seal(json.as_bytes()),
+            Some(cipher) => cipher.encrypt(json.as_bytes()),
             None => Ok(json),
         }
     }
