@@ -123,10 +123,25 @@ mod tests {
         .unwrap();
         let save = |record: &PushRegistrationRecord| {
             let payload = serde_json::to_string(record).unwrap();
+            let authorization = serde_json::to_string(&serde_json::json!({
+                "principal_id": record.account_id.principal_id.as_str(),
+                "station_id": record.account_id.station_id.as_str(),
+                "device_id": record.device_id.as_str(),
+                "authorization_ref": {
+                    "event_id": "ak:event:ATExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEx",
+                    "commit_id": "ak:realm_commit:ATIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy",
+                    "stream_ref": {
+                        "kind": "realm",
+                        "realm_id": "ak:realm:ATMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMz"
+                    },
+                    "stream_position": 0
+                }
+            }))
+            .unwrap();
             test_support::database(|| {
                 pool.with_client(|client| {
                 client.execute(
-"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET push_key=EXCLUDED.push_key,payload=EXCLUDED.payload",
+"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET push_key=EXCLUDED.push_key,payload=EXCLUDED.payload",
 &[
 &record.registration_id.as_str(),
 &record.account_id.principal_id.as_str(),
@@ -134,7 +149,8 @@ mod tests {
 &record.push_gateway,
 &record.push_key.as_str(),
 &record.app_id,
-&payload
+&payload,
+&authorization
 ],
 )?;
                 Ok(())
@@ -300,12 +316,27 @@ pub(crate) mod test_support {
             "push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "salt_epoch_id":"epoch", "expires_at":null, "retained_push_targets":[]
         })).unwrap();
+        let authorization = serde_json::to_string(&serde_json::json!({
+            "principal_id": record.account_id.principal_id.as_str(),
+            "station_id": record.account_id.station_id.as_str(),
+            "device_id": record.device_id.as_str(),
+            "authorization_ref": {
+                "event_id": "ak:event:ATExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEx",
+                "commit_id": "ak:realm_commit:ATIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy",
+                "stream_ref": {
+                    "kind": "realm",
+                    "realm_id": "ak:realm:ATMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMz"
+                },
+                "stream_position": 0
+            }
+        }))
+        .unwrap();
         let payload = serde_json::to_string(&record).unwrap();
         database(|| {
             PostgresPool::new(&database_url(), "push fixture registration").unwrap()
 .with_client(|client| {
             client.execute(
-"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb) ON CONFLICT(id) DO UPDATE SET actor_id=EXCLUDED.actor_id,device_id=EXCLUDED.device_id,push_gateway=EXCLUDED.push_gateway,push_key=EXCLUDED.push_key,app_id=EXCLUDED.app_id,payload=EXCLUDED.payload",
+"INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET actor_id=EXCLUDED.actor_id,device_id=EXCLUDED.device_id,push_gateway=EXCLUDED.push_gateway,push_key=EXCLUDED.push_key,app_id=EXCLUDED.app_id,payload=EXCLUDED.payload",
 &[
 &record.registration_id.as_str(),
 &record.account_id.principal_id.as_str(),
@@ -313,7 +344,8 @@ pub(crate) mod test_support {
 &record.push_gateway,
 &record.push_key.as_str(),
 &record.app_id,
-&payload
+&payload,
+&authorization
 ],
 )?;
             Ok(())
