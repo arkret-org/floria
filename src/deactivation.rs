@@ -237,10 +237,10 @@ impl DeactivationLedger {
         }
 
         let mut device_bindings_unbound: usize = 0;
-        let mut observed_at_least_one_cell = false;
+        let mut observed_at_least_one_device = false;
 
         for device in &broadcast.devices {
-            observed_at_least_one_cell = true;
+            observed_at_least_one_device = true;
             let key = (broadcast.actor_id.clone(), device.device_id.clone());
             if lru_insert_absent(&mut inner.unbound_devices, key) {
                 device_bindings_unbound += 1;
@@ -271,7 +271,7 @@ impl DeactivationLedger {
 
         let outcome = if drain_failed {
             DeactivateFanoutOutcome::PartiallyCompleted
-        } else if !observed_at_least_one_cell && actor_bindings_unbound == 0 {
+        } else if !observed_at_least_one_device && actor_bindings_unbound == 0 {
             DeactivateFanoutOutcome::NoOp
         } else {
             DeactivateFanoutOutcome::Completed
