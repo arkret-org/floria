@@ -179,7 +179,6 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "route_tokens",
         "realm_route_token",
         "scope_route_token",
-        "delivery_binding_frontier_token",
         "sender",
         "sender_actor_display_name",
         "strand_title",
@@ -256,7 +255,6 @@ fn sanitizer_strips_route_token_identifiers() {
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
-            "delivery_binding_frontier_token": "frontier_route_token_000000001",
         },
         "wakeup_kind": "message",
 
@@ -265,12 +263,7 @@ fn sanitizer_strips_route_token_identifiers() {
     .unwrap()
     .clone();
     let sanitized = sanitized_provider_payload(payload).unwrap();
-    for forbidden in [
-        "route_tokens",
-        "realm_route_token",
-        "scope_route_token",
-        "delivery_binding_frontier_token",
-    ] {
+    for forbidden in ["route_tokens", "realm_route_token", "scope_route_token"] {
         assert!(
             sanitized.get(forbidden).is_none(),
             "route-token field `{forbidden}` survived the sanitizer"
@@ -292,7 +285,7 @@ fn sanitizer_strips_nested_route_token_metadata() {
             "level_one": {
                 "scope_route_token": "scope_route_token_000000001",
                 "nested": {
-                    "delivery_binding_frontier_token": "frontier_route_token_000000001",
+                    "realm_route_token": "realm_route_token_000000001",
                 },
             },
         },
@@ -308,8 +301,8 @@ fn sanitizer_strips_nested_route_token_metadata() {
         "nested scope_route_token leaked through the recursive sanitizer: {serialized}"
     );
     assert!(
-        !serialized.contains("delivery_binding_frontier_token"),
-        "nested delivery_binding_frontier_token leaked through the recursive sanitizer: {serialized}"
+        !serialized.contains("realm_route_token"),
+        "nested realm_route_token leaked through the recursive sanitizer: {serialized}"
     );
 }
 
@@ -331,12 +324,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     .unwrap();
 
     let data = build_blind_provider_data(&notification);
-    for forbidden in [
-        "route_tokens",
-        "realm_route_token",
-        "scope_route_token",
-        "delivery_binding_frontier_token",
-    ] {
+    for forbidden in ["route_tokens", "realm_route_token", "scope_route_token"] {
         assert!(
             data.get(forbidden).is_none(),
             "blind provider data must never carry `{forbidden}`"
@@ -349,21 +337,21 @@ fn build_blind_provider_data_never_emits_route_tokens() {
 }
 
 #[test]
-fn notification_rejects_retired_delivery_binding_frontier_token() {
+fn notification_rejects_an_unknown_route_token_member() {
     let error = serde_json::from_value::<PushNotificationEnvelope>(json!({
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
 
         "route_tokens": {
             "realm_route_token": "realm_route_token_000000001",
-            "delivery_binding_frontier_token": "frontier_route_token_000000001"
+            "unregistered_route_token": "route_token_000000001"
         }
     }))
     .unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("unknown field `delivery_binding_frontier_token`")
+            .contains("unknown field `unregistered_route_token`")
     );
 }
 

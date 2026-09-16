@@ -129,7 +129,7 @@ mod tests {
             "nested": {
                 "kept": "yes",
                 "list": [
-                    {"delivery_binding_frontier_token": "ak:secret-4", "ok": 1}
+                    {"realm_route_token": "ak:secret-4", "ok": 1}
                 ]
             }
         });
