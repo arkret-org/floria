@@ -53,7 +53,7 @@ three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
-the now-retired legacy name `policy_frontier_digest`, `trust_domain`) and added the internal
+`trust_domain`) and added the internal
 `POST /_floria/internal/account_deactivate_fanout` (T07) broadcast
 endpoint. That endpoint implements the push-gateway half of the
 deactivation fanout required by

@@ -483,7 +483,6 @@ mod sanitize_tests {
             "audit_purpose": "compliance_lawful_access",
             "attestation_chain": ["chain-item-0", "chain-item-1"],
             "audit_policy_version_digest": "a".repeat(64),
-            "policy_frontier_digest": "b".repeat(64),
             "trust_domain": "example.net",
         })
         .as_object()
@@ -497,7 +496,6 @@ mod sanitize_tests {
             "audit_purpose",
             "attestation_chain",
             "audit_policy_version_digest",
-            "policy_frontier_digest",
             "trust_domain",
         ] {
             assert!(

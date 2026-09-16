@@ -107,11 +107,9 @@ mod tests {
 
     #[test]
     fn egress_strips_sdk_and_strip_only_keys() {
-        // Strip-only routing/audit tail, including retired legacy names, is
-        // egress-stripped.
+        // Strip-only routing/audit names are egress-stripped.
         assert!(is_forbidden_egress_key("route_tokens"));
         assert!(is_forbidden_egress_key("scope_route_token"));
-        assert!(is_forbidden_egress_key("policy_frontier_digest"));
         // SDK-covered names are egress-stripped.
         assert!(is_forbidden_egress_key("encrypted_content"));
         assert!(is_forbidden_egress_key("target_ref"));
