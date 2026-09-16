@@ -245,7 +245,6 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-crypto",
  "arkret-models-identity",
- "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
  "chrono",
@@ -407,6 +406,7 @@ dependencies = [
  "unicode-normalization",
  "unicode-security",
  "url",
+ "uuid",
  "web-time",
 ]
 
