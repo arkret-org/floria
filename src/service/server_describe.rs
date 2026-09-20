@@ -223,18 +223,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             arkret_models_discovery::EgressNetworkPolicy::deny_private_defaults(),
         ),
         resource_kinds: vec![],
-        restricted_query_proof: None,
-        accept_policy_kind: None,
-        accept_policy_ref: None,
-        default_ttl_seconds: None,
-        max_ttl_seconds: None,
-        revalidation_grace_seconds: None,
-        accepted_resource_kinds: vec![],
-        accepted_did_methods: vec![],
-        takedown_contact: None,
-        rate_limits: None,
         invite_addressing: None,
-        private_contact_discovery: None,
         extensions: Default::default(),
     };
 
