@@ -123,7 +123,7 @@ pub async fn authenticate_notify_request(
 
         let mut authenticated = false;
         if has_signature_headers(req) {
-            verify_message_signature(req, body, auth, principal, origin_id, request_id)?;
+            verify_message_signature(req, body, principal, origin_id, request_id)?;
             verify_nonce_freshness(req, nonce_store, origin_id, request_id).await?;
             authenticated = true;
         } else if auth.require_message_signatures {

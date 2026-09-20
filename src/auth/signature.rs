@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use arkret_signatures::generated::http_signature_contract::HttpSignatureScenario;
 use arkret_signatures::http_signature::{
-    self as sdk_sig, Component, ContentDigest, HttpMessageVerificationError, SignatureError,
+    self as sdk_sig, ContentDigest, HttpMessageVerificationError, SignatureError,
     SignaturePolicyError, SignatureVerificationPolicy,
 };
 use arkret_wire::DidCoreId;
@@ -10,20 +11,13 @@ use salvo::prelude::Request;
 use sha2::{Digest, Sha256};
 
 use super::helpers::{authority, target_uri, unix_now_secs};
-use super::{
-    AuthFailure, CONTENT_DIGEST_HEADER, DESTINATION_SERVICE_ID_HEADER, SIGNATURE_HEADER,
-    SIGNATURE_INPUT_HEADER, SOURCE_SERVICE_ID_HEADER,
-};
-use crate::config::{NotifyAuthConfig, NotifyServicePrincipalConfig};
+use super::{AuthFailure, CONTENT_DIGEST_HEADER, SIGNATURE_HEADER, SIGNATURE_INPUT_HEADER};
+use crate::config::NotifyServicePrincipalConfig;
 use crate::nonce_store::{NonceCheck, NonceStore};
-
-pub const SIGNATURE_MAX_LIFETIME_SECONDS: i64 = 300;
-pub const SIGNATURE_CREATED_MAX_SKEW_SECONDS: i64 = 30;
 
 pub(super) fn verify_message_signature(
     req: &Request,
     body: &[u8],
-    auth: &NotifyAuthConfig,
     principal: &NotifyServicePrincipalConfig,
     origin_id: &DidCoreId,
     request_id: &str,
@@ -83,19 +77,7 @@ pub(super) fn verify_message_signature(
             message: "Signature key_id does not match configured service principal".to_owned(),
         });
     }
-    let required_components = [
-        Component::Method,
-        Component::TargetUri,
-        Component::Authority,
-        Component::Header(CONTENT_DIGEST_HEADER.to_owned()),
-        Component::Header(SOURCE_SERVICE_ID_HEADER.to_owned()),
-        Component::Header(DESTINATION_SERVICE_ID_HEADER.to_owned()),
-        Component::Header("arkret-operation".to_owned()),
-        Component::Header("idempotency-key".to_owned()),
-    ];
     let now = unix_now_secs();
-    let created_skew =
-        (auth.signature_max_skew_seconds() as i64).min(SIGNATURE_CREATED_MAX_SKEW_SECONDS);
     let public_key_bytes = hex::decode(public_key_hex).map_err(|_| AuthFailure {
         status: StatusCode::UNAUTHORIZED,
         code: arkret_wire::error_codes::ErrorCode::SIGNATURE_INVALID,
@@ -124,10 +106,11 @@ pub(super) fn verify_message_signature(
             )
         })
         .collect();
-    let policy = SignatureVerificationPolicy::new(required_components)
-        .require_content_digest(true)
-        .max_clock_skew_seconds(created_skew)
-        .max_validity_window_seconds(SIGNATURE_MAX_LIFETIME_SECONDS);
+    let policy = SignatureVerificationPolicy::for_scenario(
+        HttpSignatureScenario::ServiceToServiceV1,
+        &["content-digest", "idempotency-key"],
+    )
+    .map_err(|error| map_http_message_error(HttpMessageVerificationError::Policy(error)))?;
     sdk_sig::verify_signed_canonical_json_message(
         req.method().as_str(),
         &target_uri,
