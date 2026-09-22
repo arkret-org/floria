@@ -18,7 +18,7 @@ use base64::Engine;
 use hmac::{Hmac, KeyInit, Mac};
 use prometheus::{Histogram, register_histogram, register_int_counter_vec};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest::{Client, Identity, Proxy};
+use reqwest::{Client, Identity, Proxy, StatusCode};
 use serde_json::{Map, Value, json};
 use sha2::Sha256;
 use tokio::sync::Semaphore;
@@ -246,7 +246,7 @@ impl CustomPushkin {
             .await
             .map_err(|error| {
                 CUSTOM_REQUEST_TIME.observe(started.elapsed().as_secs_f64());
-                DispatchError::temporary(format!("custom pushkin request failed: {error}"), None)
+                DispatchError::temporary(custom_request_failure_message(&error), None)
             })?;
         CUSTOM_REQUEST_TIME.observe(started.elapsed().as_secs_f64());
 
@@ -255,22 +255,29 @@ impl CustomPushkin {
             .with_label_values(&[self.name(), &status.as_u16().to_string()])
             .inc();
         let retry_after = parse_retry_after(response.headers());
-        let body_text = response.text().await.unwrap_or_default();
         match status.as_u16() {
             200..=299 => Ok(vec![]),
             410 | 404 => Ok(vec![device.push_key().unwrap_or_default().to_owned()]),
-            429 | 500..=599 => Err(DispatchError::temporary(
-                format!(
-                    "custom pushkin {} responded {status}: {body_text}",
-                    redact_url_credentials(&url)
-                ),
-                retry_after,
-            )),
-            _ => Err(DispatchError::remote(format!(
-                "custom pushkin {} rejected: {status} {body_text}",
-                redact_url_credentials(&url)
-            ))),
+            _ => Err(custom_response_error(status, retry_after)),
         }
+    }
+}
+
+fn custom_request_failure_message(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "custom pushkin request timed out"
+    } else if error.is_connect() {
+        "custom pushkin connection failed"
+    } else {
+        "custom pushkin request failed"
+    }
+}
+
+fn custom_response_error(status: StatusCode, retry_after: Option<Duration>) -> DispatchError {
+    if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+        DispatchError::temporary(format!("custom pushkin responded {status}"), retry_after)
+    } else {
+        DispatchError::remote(format!("custom pushkin rejected request with {status}"))
     }
 }
 
@@ -369,5 +376,20 @@ mod tests {
         let device = crate::pushkin::test_fixtures::device("com.example.custom", "user/abc");
         let url = pushkin.resolve_url(&device).unwrap();
         assert_eq!(url, "https://example.com/notify/user%2Fabc");
+    }
+
+    #[test]
+    fn provider_failures_do_not_embed_resolved_url_or_response_body() {
+        let retryable = custom_response_error(StatusCode::BAD_GATEWAY, None);
+        let rejected = custom_response_error(StatusCode::BAD_REQUEST, None);
+
+        assert_eq!(
+            retryable.to_string(),
+            "custom pushkin responded 502 Bad Gateway"
+        );
+        assert_eq!(
+            rejected.to_string(),
+            "custom pushkin rejected request with 400 Bad Request"
+        );
     }
 }
