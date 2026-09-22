@@ -88,7 +88,6 @@ mod tests {
             DispatchError::internal(format!("unexpected {provider_token}")),
         ] {
             assert!(!error.safe_summary().contains(provider_token));
-            assert!(!format!("{}", error.safe_summary()).contains(provider_token));
         }
     }
 }
