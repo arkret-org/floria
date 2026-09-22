@@ -248,6 +248,28 @@ pub(super) async fn dispatch_notification_devices(
                             .iter()
                             .cloned()
                             .collect::<HashSet<String>>();
+                        if rejected_set.contains(push_key)
+                            && let Some(store) = state.registration_handoff.as_ref()
+                            && let Err(error) = store
+                                .terminalize_provider_invalidation(source, device)
+                                .await
+                        {
+                            tracing::warn!(
+                                %error,
+                                request_id = %context.request_id,
+                                registration_id = %device.registration_id,
+                                "failed to durably tombstone provider-invalid registration"
+                            );
+                            first_internal_error.get_or_insert_with(|| {
+                                "failed to persist provider registration invalidation".to_owned()
+                            });
+                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                                device.device_id.clone(),
+                                PushNotifyReasonCode::PushGatewayUnreachable,
+                                Some(1000),
+                            ));
+                            continue;
+                        }
                         let delivered_targets = dispatch_targets
                             .iter()
                             .filter(|target| !rejected_set.contains(target.push_key.as_str()))

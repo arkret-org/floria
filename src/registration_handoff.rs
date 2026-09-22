@@ -170,6 +170,34 @@ impl RegistrationHandoffStore {
         .context("registration handoff lookup task failed")?
     }
 
+    /// Permanently suppress a provider route that the provider has rejected.
+    ///
+    /// The Station may subsequently submit the canonical revoked handoff to
+    /// obtain its signed receipt.  Until then the retained active receipt is
+    /// only historical evidence: the ciphertext is gone and an active replay
+    /// cannot restore it.
+    pub async fn terminalize_provider_invalidation(
+        &self,
+        source: &DidCoreId,
+        registration: &PushRegistrationRecord,
+    ) -> Result<()> {
+        let store = self.clone();
+        let source = source.clone();
+        let registration_id = registration.registration_id.as_str().to_owned();
+        let target = registration.push_target_id.clone();
+        let device = registration.device_id.clone();
+        tokio::task::spawn_blocking(move || {
+            store.terminalize_provider_invalidation_blocking(
+                &source,
+                &registration_id,
+                &target,
+                &device,
+            )
+        })
+        .await
+        .context("registration invalidation task failed")?
+    }
+
     fn resolve_blocking(
         &self,
         source: &DidCoreId,
@@ -178,10 +206,13 @@ impl RegistrationHandoffStore {
         gateway_url: &str,
     ) -> Result<Option<PushRegistrationRecord>> {
         self.pool.with_client(|client| {
-            let mut transaction = client.build_transaction().read_only(true).start()?;
+            let mut transaction = client
+                .build_transaction()
+                .isolation_level(postgres::IsolationLevel::Serializable)
+                .start()?;
             let rows = transaction.query(
                 &format!(
-                    "SELECT registration_id,route_ciphertext FROM {table} WHERE source_station_id=$1 AND state='active' AND push_target_id=$2 AND device_id=$3 AND successor_registration_id IS NULL FOR SHARE",
+                    "SELECT registration_id,route_ciphertext FROM {table} WHERE source_station_id=$1 AND state='active' AND push_target_id=$2 AND device_id=$3 AND successor_registration_id IS NULL FOR UPDATE",
                     table = self.table.as_sql(),
                 ),
                 &[&source.as_str(), &target.as_str(), &device.as_str()],
@@ -195,6 +226,15 @@ impl RegistrationHandoffStore {
                     .ok_or_else(|| anyhow::anyhow!("active handoff has no provider route"))?;
                 let route = self.open_route(source, &registration_id, &ciphertext)?;
                 if route.expires_at.is_some_and(|expires_at| at >= expires_at) {
+                    tombstone_route(
+                        &mut transaction,
+                        self.table.as_sql(),
+                        source,
+                        &registration_id,
+                        target,
+                        device,
+                        at,
+                    )?;
                     continue;
                 }
                 let registration = PushRegistrationRecord {
@@ -222,6 +262,32 @@ impl RegistrationHandoffStore {
             }
             transaction.commit()?;
             Ok(selected)
+        })
+    }
+
+    fn terminalize_provider_invalidation_blocking(
+        &self,
+        source: &DidCoreId,
+        registration_id: &str,
+        target: &arkret_wire::PushTargetId,
+        device: &arkret_wire::DeviceId,
+    ) -> Result<()> {
+        self.pool.with_client(|client| {
+            let mut transaction = client
+                .build_transaction()
+                .isolation_level(postgres::IsolationLevel::Serializable)
+                .start()?;
+            tombstone_route(
+                &mut transaction,
+                self.table.as_sql(),
+                source,
+                registration_id,
+                target,
+                device,
+                Utc::now(),
+            )?;
+            transaction.commit()?;
+            Ok(())
         })
     }
 
@@ -281,7 +347,8 @@ impl RegistrationHandoffStore {
                         return Ok(PushRegistrationHandoffOutcome { receipt });
                     }
                     if !matches!(request, PushRegistrationHandoffRequestBody::Revoked { .. })
-                        || existing.state != PushRegistrationHandoffState::Active.as_str()
+                        || (existing.state != PushRegistrationHandoffState::Active.as_str()
+                            && existing.state != PushRegistrationHandoffState::Revoked.as_str())
                         || existing.push_target_id != request.push_target_id().as_str()
                         || existing.device_id != request.device_id().as_str()
                         || existing.successor_registration_id.is_some()
@@ -550,6 +617,30 @@ fn load_existing(
         .transpose()
 }
 
+fn tombstone_route(
+    transaction: &mut postgres::Transaction<'_>,
+    table: &str,
+    source: &DidCoreId,
+    registration_id: &str,
+    target: &arkret_wire::PushTargetId,
+    device: &arkret_wire::DeviceId,
+    at: chrono::DateTime<Utc>,
+) -> Result<()> {
+    transaction.execute(
+        &format!(
+            "UPDATE {table} SET state='revoked',route_ciphertext=NULL,stored_at=$5 WHERE source_station_id=$1 AND registration_id=$2 AND state='active' AND push_target_id=$3 AND device_id=$4 AND successor_registration_id IS NULL AND route_ciphertext IS NOT NULL"
+        ),
+        &[
+            &source.as_str(),
+            &registration_id,
+            &target.as_str(),
+            &device.as_str(),
+            &arkret_canonical::format_timestamp_canonical(at),
+        ],
+    )?;
+    Ok(())
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("registration conflict")]
 struct ConflictMarker;
@@ -761,8 +852,76 @@ mod tests {
                 .is_none()
         );
         assert!(matches!(
-            store.apply(source, gateway, request).await,
+            store.apply(source.clone(), gateway.clone(), request).await,
             Err(ApplyRegistrationError::Conflict)
         ));
+
+        let provider_invalid_request: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": format!("registration_{}", uuid::Uuid::new_v4().simple()),
+                "push_target_id": revoked.push_target_id(),
+                "device_id": revoked.device_id(),
+                "state": "active",
+                "push_key": "provider-invalid-secret",
+                "platform": "apns",
+                "app_id": "org.arkret.fixture",
+                "visible_notification_opt_in": false
+            }))
+            .unwrap();
+        store
+            .apply(
+                source.clone(),
+                gateway.clone(),
+                provider_invalid_request.clone(),
+            )
+            .await
+            .unwrap();
+        let provider_invalid_registration = store
+            .resolve(
+                &source,
+                provider_invalid_request.push_target_id(),
+                provider_invalid_request.device_id(),
+                "https://gateway.example/",
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        store
+            .terminalize_provider_invalidation(&source, &provider_invalid_registration)
+            .await
+            .unwrap();
+        assert!(
+            store
+                .resolve(
+                    &source,
+                    provider_invalid_request.push_target_id(),
+                    provider_invalid_request.device_id(),
+                    "https://gateway.example/",
+                )
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let provider_invalid_revoked: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": provider_invalid_request.registration_id(),
+                "push_target_id": provider_invalid_request.push_target_id(),
+                "device_id": provider_invalid_request.device_id(),
+                "state": "revoked"
+            }))
+            .unwrap();
+        let terminal_receipt = store
+            .apply(source, gateway, provider_invalid_revoked.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            terminal_receipt.receipt.state,
+            PushRegistrationHandoffState::Revoked
+        );
+        assert_eq!(
+            terminal_receipt.receipt.request_digest,
+            provider_invalid_revoked.request_digest().unwrap()
+        );
     }
 }
