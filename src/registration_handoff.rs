@@ -1,5 +1,6 @@
 //! Durable Station-to-public-Gateway push registration handoff.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -305,11 +306,13 @@ impl RegistrationHandoffStore {
                     .build_transaction()
                     .isolation_level(postgres::IsolationLevel::Serializable)
                     .start()?;
-                let route_lock_key = format!(
-                    "route\0{}\0{}\0{}",
-                    source.as_str(),
-                    request.push_target_id().as_str(),
-                    request.device_id().as_str(),
+                let route_lock_key = advisory_lock_key(
+                    "route",
+                    [
+                        source.as_str(),
+                        request.push_target_id().as_str(),
+                        request.device_id().as_str(),
+                    ],
                 );
                 transaction.query_one(
                     "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -325,7 +328,10 @@ impl RegistrationHandoffStore {
                 }
                 lock_ids.sort_unstable();
                 for registration_id in lock_ids {
-                    let lock_key = format!("{}\0{registration_id}", source.as_str());
+                    let lock_key = advisory_lock_key(
+                        "registration",
+                        [source.as_str(), registration_id],
+                    );
                     transaction.query_one(
                         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
                         &[&lock_key],
@@ -591,6 +597,14 @@ fn route_aad(source: &DidCoreId, registration_id: &str) -> Vec<u8> {
     aad
 }
 
+fn advisory_lock_key<'a>(namespace: &str, parts: impl IntoIterator<Item = &'a str>) -> String {
+    let mut key = String::from(namespace);
+    for part in parts {
+        write!(&mut key, "|{}:{part}", part.len()).expect("writing to String cannot fail");
+    }
+    key
+}
+
 fn load_existing(
     transaction: &mut postgres::Transaction<'_>,
     table: &str,
@@ -750,6 +764,15 @@ mod tests {
                 .open_route(&source_a, "registration_fedcba9876543210", &sealed)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn advisory_lock_keys_are_postgres_text_and_unambiguous() {
+        let first = advisory_lock_key("route", ["ab", "c"]);
+        let second = advisory_lock_key("route", ["a", "bc"]);
+        assert_ne!(first, second);
+        assert!(!first.as_bytes().contains(&0));
+        assert_eq!(first, "route|2:ab|1:c");
     }
 
     #[tokio::test]
