@@ -56,4 +56,39 @@ impl DispatchError {
             _ => None,
         }
     }
+
+    /// Stable operator-safe classification for logs, traces, caches and
+    /// durable retry/dead-letter state.
+    ///
+    /// Adapter messages may contain an upstream response body or URL. Some
+    /// providers echo the device token in those values, so they must never
+    /// cross the dispatch boundary into observability or storage.
+    pub fn safe_summary(&self) -> &'static str {
+        match self {
+            Self::Temporary { .. } => "push provider temporary failure",
+            Self::Remote { .. } => "push provider rejected request",
+            Self::Internal { .. } => "push provider internal failure",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_summary_never_exposes_adapter_message() {
+        let provider_token = "provider-secret-device-token";
+        for error in [
+            DispatchError::temporary(
+                format!("upstream echoed {provider_token}"),
+                Some(Duration::from_secs(1)),
+            ),
+            DispatchError::remote(format!("bad target {provider_token}")),
+            DispatchError::internal(format!("unexpected {provider_token}")),
+        ] {
+            assert!(!error.safe_summary().contains(provider_token));
+            assert!(!format!("{}", error.safe_summary()).contains(provider_token));
+        }
+    }
 }

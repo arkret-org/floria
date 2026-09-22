@@ -767,6 +767,9 @@ pub async fn run_worker(
     queue: std::sync::Arc<RetryQueue>,
     registry: std::sync::Arc<crate::pushkin::PushkinRegistry>,
     registrations: std::sync::Arc<crate::registrations::RegistrationDirectory>,
+    registration_handoff: Option<
+        std::sync::Arc<crate::registration_handoff::RegistrationHandoffStore>,
+    >,
     gateway_url: String,
     poll_interval: Duration,
     batch_item_count: usize,
@@ -818,14 +821,15 @@ pub async fn run_worker(
                 dead_letter_for_worker(&queue, envelope).await;
                 continue;
             };
-            let device = match registrations
-                .resolve(
-                    &envelope.source_id,
-                    target,
-                    &requested.device_id,
-                    &gateway_url,
-                )
-                .await
+            let device = match crate::resolve_registration(
+                registrations.as_ref(),
+                registration_handoff.as_deref(),
+                &gateway_url,
+                &envelope.source_id,
+                target,
+                &requested.device_id,
+            )
+            .await
             {
                 Ok(Some(device)) => device,
                 Ok(None) => {
@@ -902,7 +906,7 @@ pub async fn run_worker(
                     crate::metrics::notify_retry_replayed(&envelope.pushkin, "remote_error");
                     crate::metrics::notify_dead_letter(&envelope.pushkin, "permanent_error");
                     let mut envelope = envelope;
-                    envelope.last_error = error.to_string();
+                    envelope.last_error = error.safe_summary().to_owned();
                     dead_letter_for_worker(&queue, envelope).await;
                 }
             }
@@ -912,12 +916,179 @@ pub async fn run_worker(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
+
+    use arkret_models_integration::{
+        PushNotificationEnvelope, PushRegistrationHandoffRequestBody, PushRegistrationRecord,
+    };
 
     use super::*;
 
+    struct CountingPushkin {
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::pushkin::Pushkin for CountingPushkin {
+        fn name(&self) -> &str {
+            "org.arkret.fixture"
+        }
+
+        fn handles_app_id(&self, app_id: &str) -> bool {
+            app_id == self.name()
+        }
+
+        async fn dispatch_notification(
+            &self,
+            _notification: &PushNotificationEnvelope,
+            _device: &PushRegistrationRecord,
+            _context: &crate::models::NotificationContext,
+        ) -> Result<Vec<String>, crate::error::DispatchError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Vec::new())
+        }
+    }
+
     fn test_notification() -> arkret_models_integration::PushNotificationEnvelope {
         serde_json::from_value(serde_json::json!({"push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8", "wakeup_kind":"message", "devices":[{"device_id":"ak:device:0196419b-0000-7000-8000-000000000001"}]})).unwrap()
+    }
+
+    async fn drain_one_handoff_retry(
+        store: Arc<crate::registration_handoff::RegistrationHandoffStore>,
+        source: arkret_wire::DidCoreId,
+        expect_dispatches: usize,
+    ) -> (usize, usize) {
+        let queue = Arc::new(RetryQueue::memory(RetryQueueConfig::default()));
+        queue.enqueue(RetryEnvelope::new(
+            "handoff-retry",
+            "org.arkret.fixture",
+            source,
+            test_notification(),
+            Duration::ZERO,
+            "push provider temporary failure",
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let registry = Arc::new(crate::pushkin::PushkinRegistry::new(HashMap::from([(
+            "org.arkret.fixture".to_owned(),
+            Arc::new(CountingPushkin {
+                calls: calls.clone(),
+            }) as Arc<dyn crate::pushkin::Pushkin>,
+        )])));
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let worker_queue = queue.clone();
+        let handle = tokio::spawn(async move {
+            run_worker(
+                worker_queue,
+                registry,
+                Arc::new(crate::registrations::RegistrationDirectory::default()),
+                Some(store),
+                "https://gateway.example/".to_owned(),
+                Duration::from_millis(5),
+                1,
+                shutdown_rx,
+            )
+            .await;
+        });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let dead_letters = queue.dead_letter_snapshot(10).len();
+                if queue.pending_len() == 0
+                    && (calls.load(Ordering::SeqCst) == expect_dispatches || dead_letters == 1)
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("retry worker did not settle the handoff envelope");
+        shutdown_tx.send(true).unwrap();
+        handle.await.unwrap();
+        (
+            calls.load(Ordering::SeqCst),
+            queue.dead_letter_snapshot(10).len(),
+        )
+    }
+
+    #[tokio::test]
+    async fn handoff_retry_uses_exact_source_and_honors_revocation() {
+        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
+            return;
+        };
+        let gateway = arkret_wire::project_did_to_core_id(
+            &arkret_wire::Did::new("did:web:gateway.example").unwrap(),
+        )
+        .unwrap();
+        let mut config = crate::config::RegistrationHandoffConfig::default();
+        config.postgres_url = Some(postgres_url);
+        config.encryption_key_hex = Some(hex::encode([11_u8; 32]));
+        config.receipt_signing_key_seed_hex = Some(hex::encode([7_u8; 32]));
+        config.receipt_verification_method = Some("did:web:gateway.example#receipt".to_owned());
+        let store = Arc::new(
+            crate::registration_handoff::RegistrationHandoffStore::from_config(
+                &config,
+                gateway.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap(),
+        );
+        let source = arkret_wire::DidCoreId::new(format!(
+            "ak:did_core:web:retry-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .unwrap();
+        let request: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": format!("registration_{}", uuid::Uuid::new_v4().simple()),
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
+                "state": "active",
+                "push_key": "provider-secret-never-persisted-in-retry",
+                "platform": "apns",
+                "app_id": "org.arkret.fixture",
+                "visible_notification_opt_in": false
+            }))
+            .unwrap();
+        store
+            .apply(source.clone(), gateway.clone(), request.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            drain_one_handoff_retry(store.clone(), source.clone(), 1).await,
+            (1, 0),
+            "an active exact-tenant handoff retry must reach the provider"
+        );
+
+        let other_source = arkret_wire::DidCoreId::new(format!(
+            "ak:did_core:web:other-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .unwrap();
+        assert_eq!(
+            drain_one_handoff_retry(store.clone(), other_source, 0).await,
+            (0, 1),
+            "a different source Station must not resolve the provider route"
+        );
+
+        let revoked: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": request.registration_id(),
+                "push_target_id": request.push_target_id(),
+                "device_id": request.device_id(),
+                "state": "revoked"
+            }))
+            .unwrap();
+        store.apply(source.clone(), gateway, revoked).await.unwrap();
+        assert_eq!(
+            drain_one_handoff_retry(store, source, 0).await,
+            (0, 1),
+            "a revoked route must be rejected before provider dispatch"
+        );
     }
 
     #[test]

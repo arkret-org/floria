@@ -64,6 +64,9 @@ pub(super) fn notify_rate_limit_checks(
     }
 
     if let Some(limit) = config.per_push_key_hash.filter(|limit| *limit > 0) {
+        let tenant = origin_id
+            .map(arkret_wire::DidCoreId::as_str)
+            .unwrap_or("anonymous");
         let push_key_hashes = registrations
             .iter()
             .flatten()
@@ -74,7 +77,7 @@ pub(super) fn notify_rate_limit_checks(
                 .into_iter()
                 .map(|push_key_hash| NotifyRateLimitCheck {
                     scope: "push_key_hash",
-                    subject: push_key_hash,
+                    subject: tenant_push_key_rate_limit_subject(tenant, &push_key_hash),
                     limit,
                     units: 1,
                 }),
@@ -111,6 +114,16 @@ pub(super) fn notify_rate_limit_checks(
     }
 
     checks
+}
+
+fn tenant_push_key_rate_limit_subject(tenant: &str, push_key_hash: &str) -> String {
+    request_hash(
+        format!(
+            "push-key-rate-limit\0{}:{tenant}\0{push_key_hash}",
+            tenant.len()
+        )
+        .as_bytes(),
+    )
 }
 
 pub(super) fn optional_owned_string(value: Option<&str>) -> Option<String> {
@@ -438,8 +451,26 @@ pub(super) async fn enqueue_retry(
             ..Default::default()
         },
         backoff,
-        error.to_string(),
+        error.safe_summary(),
     );
     queue.enqueue_async(envelope).await;
     app_metrics::notify_retry_enqueued(pushkin);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tenant_push_key_rate_limit_subject;
+
+    #[test]
+    fn push_key_rate_limit_subject_is_tenant_scoped_and_opaque() {
+        let token_hash = "pkh_0123456789abcdef";
+        let first =
+            tenant_push_key_rate_limit_subject("ak:did_core:web:station-a.example", token_hash);
+        let second =
+            tenant_push_key_rate_limit_subject("ak:did_core:web:station-b.example", token_hash);
+
+        assert_ne!(first, second);
+        assert!(!first.contains(token_hash));
+        assert!(!second.contains(token_hash));
+    }
 }

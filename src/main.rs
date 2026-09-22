@@ -237,6 +237,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let registry_clone = state.registry.clone();
         let registration_directory = state.registrations.clone();
+        let registration_handoff = state.registration_handoff.clone();
         let registration_gateway = state.public_base_url.clone();
         let poll_interval = std::time::Duration::from_millis(queue_config.poll_interval_ms.max(50));
         let batch_item_count = queue_config.batch_item_count.max(1) as usize;
@@ -248,6 +249,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
                     queue,
                     registry_clone,
                     registration_directory,
+                    registration_handoff,
                     registration_gateway,
                     poll_interval,
                     batch_item_count,

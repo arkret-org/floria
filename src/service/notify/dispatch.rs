@@ -217,7 +217,7 @@ pub(super) async fn dispatch_notification_devices(
                             );
                             if opened {
                                 tracing::warn!(
-                                    error = %error,
+                                    error = error.safe_summary(),
                                     request_id = %context.request_id,
                                     app_id,
                                     pushkin = %pushkin.name(),
@@ -314,7 +314,7 @@ pub(super) async fn dispatch_notification_devices(
                     Err(error) if error.is_temporary() => {
                         let retry_after = error.retry_after();
                         tracing::warn!(
-                            error = %error,
+                            error = error.safe_summary(),
                             request_id = %context.request_id,
                             app_id,
                             push_key_hash = %device.redacted_push_key(),
@@ -353,7 +353,7 @@ pub(super) async fn dispatch_notification_devices(
                             ));
                         }
                         first_temporary_error
-                            .get_or_insert_with(|| (error.to_string(), retry_after));
+                            .get_or_insert_with(|| (error.safe_summary().to_owned(), retry_after));
                     }
                     Err(error) if error.is_remote() => {
                         outcomes.push(PushNotifyDeviceOutcome::rejected(
@@ -362,7 +362,7 @@ pub(super) async fn dispatch_notification_devices(
                             Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
                         ));
                         tracing::warn!(
-                            error = %error,
+                            error = error.safe_summary(),
                             request_id = %context.request_id,
                             app_id,
                             push_key_hash = %device.redacted_push_key(),
@@ -377,7 +377,7 @@ pub(super) async fn dispatch_notification_devices(
                                 &context.request_id,
                             ));
                         }
-                        first_remote_error.get_or_insert_with(|| error.to_string());
+                        first_remote_error.get_or_insert_with(|| error.safe_summary().to_owned());
                     }
                     Err(error) => {
                         outcomes.push(PushNotifyDeviceOutcome::rejected(
@@ -386,7 +386,7 @@ pub(super) async fn dispatch_notification_devices(
                             Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
                         ));
                         tracing::error!(
-                            error = %error,
+                            error = error.safe_summary(),
                             request_id = %context.request_id,
                             app_id,
                             push_key_hash = %device.redacted_push_key(),
@@ -401,7 +401,7 @@ pub(super) async fn dispatch_notification_devices(
                                 &context.request_id,
                             ));
                         }
-                        first_internal_error.get_or_insert_with(|| error.to_string());
+                        first_internal_error.get_or_insert_with(|| error.safe_summary().to_owned());
                     }
                 }
             }

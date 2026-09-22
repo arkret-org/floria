@@ -94,25 +94,15 @@ impl AppState {
         target: &arkret_wire::PushTargetId,
         device: &arkret_wire::DeviceId,
     ) -> anyhow::Result<Option<arkret_models_integration::PushRegistrationRecord>> {
-        let handed_off = match self.registration_handoff.as_ref() {
-            Some(store) => {
-                store
-                    .resolve(source, target, device, &self.public_base_url)
-                    .await?
-            }
-            None => None,
-        };
-        let shared = self
-            .registrations
-            .resolve(source, target, device, &self.public_base_url)
-            .await?;
-        match (handed_off, shared) {
-            (Some(_), Some(_)) => anyhow::bail!(
-                "registration exists in both public handoff and shared authority stores"
-            ),
-            (Some(registration), None) | (None, Some(registration)) => Ok(Some(registration)),
-            (None, None) => Ok(None),
-        }
+        resolve_registration(
+            self.registrations.as_ref(),
+            self.registration_handoff.as_deref(),
+            &self.public_base_url,
+            source,
+            target,
+            device,
+        )
+        .await
     }
 
     pub fn new(registry: Arc<PushkinRegistry>) -> Self {
@@ -158,5 +148,39 @@ impl AppState {
             broadcast_bus: None,
             metrics_detailed_circle_labels: false,
         }
+    }
+}
+
+/// Resolve a provider route through the same tenant-bound sources used by
+/// both the synchronous notify path and the asynchronous retry worker.
+///
+/// Keeping this merge in one place prevents a retry from silently falling
+/// back to the shared-deployment directory after the original dispatch used
+/// a public-Gateway handoff route.
+pub async fn resolve_registration(
+    registrations: &registrations::RegistrationDirectory,
+    registration_handoff: Option<&registration_handoff::RegistrationHandoffStore>,
+    public_base_url: &str,
+    source: &arkret_wire::DidCoreId,
+    target: &arkret_wire::PushTargetId,
+    device: &arkret_wire::DeviceId,
+) -> anyhow::Result<Option<arkret_models_integration::PushRegistrationRecord>> {
+    let handed_off = match registration_handoff {
+        Some(store) => {
+            store
+                .resolve(source, target, device, public_base_url)
+                .await?
+        }
+        None => None,
+    };
+    let shared = registrations
+        .resolve(source, target, device, public_base_url)
+        .await?;
+    match (handed_off, shared) {
+        (Some(_), Some(_)) => {
+            anyhow::bail!("registration exists in both public handoff and shared authority stores")
+        }
+        (Some(registration), None) | (None, Some(registration)) => Ok(Some(registration)),
+        (None, None) => Ok(None),
     }
 }
