@@ -887,7 +887,31 @@ pub async fn run_worker(
                 Ok(rejected) if rejected.is_empty() => {
                     crate::metrics::notify_retry_replayed(&envelope.pushkin, "delivered");
                 }
-                Ok(_) => {
+                Ok(rejected) => {
+                    let current_route_rejected = rejected
+                        .iter()
+                        .any(|push_key| push_key == device.push_key.as_str());
+                    if current_route_rejected
+                        && let Some(store) = registration_handoff.as_deref()
+                        && let Err(error) = store
+                            .terminalize_provider_invalidation(&envelope.source_id, &device)
+                            .await
+                    {
+                        tracing::warn!(
+                            %error,
+                            request_id = %envelope.request_id,
+                            registration_id = %device.registration_id,
+                            "failed to durably tombstone provider-invalid registration during retry"
+                        );
+                        let mut retry = envelope;
+                        retry.retry_at_unix_ms = now_unix_ms()
+                            .saturating_add(queue.config().default_backoff.as_millis() as u64);
+                        retry.last_error =
+                            "registration invalidation persistence failed".to_owned();
+                        crate::metrics::notify_retry_replayed(&retry.pushkin, "retry");
+                        enqueue_for_worker(&queue, retry).await;
+                        continue;
+                    }
                     crate::metrics::notify_retry_replayed(&envelope.pushkin, "rejected");
                     dead_letter_for_worker(&queue, envelope).await;
                 }
@@ -957,8 +981,121 @@ mod tests {
         }
     }
 
+    struct RejectingPushkin {
+        calls: Arc<AtomicUsize>,
+        started: Option<Arc<tokio::sync::Semaphore>>,
+        release: Option<Arc<tokio::sync::Notify>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::pushkin::Pushkin for RejectingPushkin {
+        fn name(&self) -> &str {
+            "org.arkret.fixture"
+        }
+
+        fn handles_app_id(&self, app_id: &str) -> bool {
+            app_id == self.name()
+        }
+
+        async fn dispatch_notification(
+            &self,
+            _notification: &PushNotificationEnvelope,
+            device: &PushRegistrationRecord,
+            _context: &crate::models::NotificationContext,
+        ) -> Result<Vec<String>, crate::error::DispatchError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if let Some(started) = &self.started {
+                started.add_permits(1);
+            }
+            if let Some(release) = &self.release {
+                release.notified().await;
+            }
+            Ok(vec![device.push_key.as_str().to_owned()])
+        }
+    }
+
     fn test_notification() -> arkret_models_integration::PushNotificationEnvelope {
         serde_json::from_value(serde_json::json!({"push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8", "wakeup_kind":"message", "devices":[{"device_id":"ak:device:0196419b-0000-7000-8000-000000000001"}]})).unwrap()
+    }
+
+    async fn isolated_handoff_store(
+        postgres_url: &str,
+    ) -> (
+        Arc<crate::registration_handoff::RegistrationHandoffStore>,
+        arkret_wire::DidCoreId,
+        String,
+    ) {
+        let gateway = arkret_wire::project_did_to_core_id(
+            &arkret_wire::Did::new("did:web:gateway.example").unwrap(),
+        )
+        .unwrap();
+        let table = format!("floria_retry_handoff_{}", uuid::Uuid::new_v4().simple());
+        let mut config = crate::config::RegistrationHandoffConfig::default();
+        config.postgres_url = Some(postgres_url.to_owned());
+        config.table = table.clone();
+        config.encryption_key_hex = Some(hex::encode([11_u8; 32]));
+        config.receipt_signing_key_seed_hex = Some(hex::encode([7_u8; 32]));
+        config.receipt_verification_method = Some("did:web:gateway.example#receipt".to_owned());
+        let store = Arc::new(
+            crate::registration_handoff::RegistrationHandoffStore::from_config(
+                &config,
+                gateway.clone(),
+            )
+            .await
+            .unwrap()
+            .unwrap(),
+        );
+        (store, gateway, table)
+    }
+
+    fn active_handoff_request(
+        registration_id: impl serde::Serialize,
+        push_key: &str,
+        supersedes_registration_id: Option<&arkret_models_integration::PushRegistrationId>,
+    ) -> PushRegistrationHandoffRequestBody {
+        serde_json::from_value(serde_json::json!({
+            "registration_id": registration_id,
+            "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+            "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
+            "state": "active",
+            "push_key": push_key,
+            "platform": "apns",
+            "app_id": "org.arkret.fixture",
+            "visible_notification_opt_in": false,
+            "supersedes_registration_id": supersedes_registration_id
+        }))
+        .unwrap()
+    }
+
+    fn spawn_handoff_retry_worker(
+        queue: Arc<RetryQueue>,
+        store: Arc<crate::registration_handoff::RegistrationHandoffStore>,
+        pushkin: Arc<dyn crate::pushkin::Pushkin>,
+    ) -> (
+        tokio::sync::watch::Sender<bool>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let registry = Arc::new(crate::pushkin::PushkinRegistry::new(HashMap::from([(
+            "org.arkret.fixture".to_owned(),
+            pushkin,
+        )])));
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = tokio::spawn(async move {
+            run_worker(
+                queue,
+                registry,
+                Arc::new(crate::registrations::RegistrationDirectory::default()),
+                Some(store),
+                RetryWorkerConfig {
+                    gateway_url: "https://gateway.example/".to_owned(),
+                    poll_interval: Duration::from_millis(5),
+                    batch_item_count: 1,
+                },
+                shutdown_rx,
+            )
+            .await;
+        });
+        (shutdown_tx, handle)
     }
 
     async fn drain_one_handoff_retry(
@@ -1096,6 +1233,233 @@ mod tests {
             (0, 1),
             "a revoked route must be rejected before provider dispatch"
         );
+    }
+
+    #[tokio::test]
+    async fn provider_rejection_durably_tombstones_handoff_before_dead_letter() {
+        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
+            return;
+        };
+        let (store, gateway, _) = isolated_handoff_store(&postgres_url).await;
+        let source = arkret_wire::DidCoreId::new(format!(
+            "ak:did_core:web:retry-reject-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .unwrap();
+        let request = active_handoff_request(
+            format!("registration_{}", uuid::Uuid::new_v4().simple()),
+            "provider-invalid-retry-secret",
+            None,
+        );
+        store
+            .apply(source.clone(), gateway, request.clone())
+            .await
+            .unwrap();
+
+        let queue = Arc::new(RetryQueue::memory(RetryQueueConfig::default()));
+        queue.enqueue(RetryEnvelope::new(
+            "handoff-provider-rejection",
+            "org.arkret.fixture",
+            source.clone(),
+            test_notification(),
+            Duration::ZERO,
+            "push provider temporary failure",
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (shutdown_tx, handle) = spawn_handoff_retry_worker(
+            queue.clone(),
+            store.clone(),
+            Arc::new(RejectingPushkin {
+                calls: calls.clone(),
+                started: None,
+                release: None,
+            }),
+        );
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while queue.dead_letter_snapshot(10).len() != 1 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("provider rejection did not reach the dead letter");
+        shutdown_tx.send(true).unwrap();
+        handle.await.unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(
+            store
+                .resolve(
+                    &source,
+                    request.push_target_id(),
+                    request.device_id(),
+                    "https://gateway.example/",
+                )
+                .await
+                .unwrap()
+                .is_none(),
+            "the dead letter must not become visible until the provider-invalid route is tombstoned"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_retry_rejection_cannot_tombstone_a_successor_registration() {
+        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
+            return;
+        };
+        let (store, gateway, _) = isolated_handoff_store(&postgres_url).await;
+        let source = arkret_wire::DidCoreId::new(format!(
+            "ak:did_core:web:retry-stale-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .unwrap();
+        let predecessor = active_handoff_request(
+            format!("registration_{}", uuid::Uuid::new_v4().simple()),
+            "stale-provider-secret",
+            None,
+        );
+        store
+            .apply(source.clone(), gateway.clone(), predecessor.clone())
+            .await
+            .unwrap();
+
+        let queue = Arc::new(RetryQueue::memory(RetryQueueConfig::default()));
+        queue.enqueue(RetryEnvelope::new(
+            "handoff-stale-rejection",
+            "org.arkret.fixture",
+            source.clone(),
+            test_notification(),
+            Duration::ZERO,
+            "push provider temporary failure",
+        ));
+        let started = Arc::new(tokio::sync::Semaphore::new(0));
+        let release = Arc::new(tokio::sync::Notify::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (shutdown_tx, handle) = spawn_handoff_retry_worker(
+            queue.clone(),
+            store.clone(),
+            Arc::new(RejectingPushkin {
+                calls: calls.clone(),
+                started: Some(started.clone()),
+                release: Some(release.clone()),
+            }),
+        );
+        tokio::time::timeout(Duration::from_secs(2), started.acquire())
+            .await
+            .expect("provider dispatch did not start")
+            .unwrap()
+            .forget();
+
+        let successor = active_handoff_request(
+            format!("registration_{}", uuid::Uuid::new_v4().simple()),
+            "successor-provider-secret",
+            Some(predecessor.registration_id()),
+        );
+        store
+            .apply(source.clone(), gateway, successor.clone())
+            .await
+            .unwrap();
+        release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while queue.dead_letter_snapshot(10).len() != 1 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("stale provider rejection did not settle");
+        shutdown_tx.send(true).unwrap();
+        handle.await.unwrap();
+
+        let current = store
+            .resolve(
+                &source,
+                successor.push_target_id(),
+                successor.device_id(),
+                "https://gateway.example/",
+            )
+            .await
+            .unwrap()
+            .expect("successor must remain active");
+        assert_eq!(
+            current.registration_id.as_str(),
+            successor.registration_id().as_str()
+        );
+        assert_eq!(current.push_key.as_str(), "successor-provider-secret");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn tombstone_storage_failure_requeues_instead_of_dead_lettering() {
+        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
+            return;
+        };
+        let (store, gateway, table) = isolated_handoff_store(&postgres_url).await;
+        let source = arkret_wire::DidCoreId::new(format!(
+            "ak:did_core:web:retry-storage-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .unwrap();
+        let request = active_handoff_request(
+            format!("registration_{}", uuid::Uuid::new_v4().simple()),
+            "storage-failure-provider-secret",
+            None,
+        );
+        store.apply(source.clone(), gateway, request).await.unwrap();
+
+        let queue = Arc::new(RetryQueue::memory(RetryQueueConfig {
+            default_backoff: Duration::from_secs(60),
+            max_backoff: Duration::from_secs(60),
+            ..RetryQueueConfig::default()
+        }));
+        queue.enqueue(RetryEnvelope::new(
+            "handoff-storage-failure",
+            "org.arkret.fixture",
+            source,
+            test_notification(),
+            Duration::ZERO,
+            "push provider temporary failure",
+        ));
+        let started = Arc::new(tokio::sync::Semaphore::new(0));
+        let release = Arc::new(tokio::sync::Notify::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (shutdown_tx, handle) = spawn_handoff_retry_worker(
+            queue.clone(),
+            store,
+            Arc::new(RejectingPushkin {
+                calls: calls.clone(),
+                started: Some(started.clone()),
+                release: Some(release.clone()),
+            }),
+        );
+        tokio::time::timeout(Duration::from_secs(2), started.acquire())
+            .await
+            .expect("provider dispatch did not start")
+            .unwrap()
+            .forget();
+        let postgres_url_for_drop = postgres_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut client = postgres::Client::connect(&postgres_url_for_drop, postgres::NoTls)
+                .expect("connect test PostgreSQL");
+            client
+                .batch_execute(&format!("DROP TABLE {table}"))
+                .expect("drop isolated handoff table");
+        })
+        .await
+        .unwrap();
+        release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while queue.pending_len() != 1 {
+                assert!(queue.dead_letter_snapshot(10).is_empty());
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("failed tombstone was not requeued");
+        shutdown_tx.send(true).unwrap();
+        handle.await.unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(queue.pending_len(), 1);
+        assert!(queue.dead_letter_snapshot(10).is_empty());
     }
 
     #[test]
