@@ -96,7 +96,8 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
             floria::registration_handoff::RegistrationHandoffStore::from_config(
                 &config.http.registration_handoff,
                 gateway_id,
-            )?
+            )
+            .await?
             .map(Arc::new);
     }
     state.provider_timing_bucket =

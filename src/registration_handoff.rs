@@ -78,7 +78,7 @@ struct ExistingRegistration {
 }
 
 impl RegistrationHandoffStore {
-    pub fn from_config(
+    pub async fn from_config(
         config: &RegistrationHandoffConfig,
         gateway_id: DidCoreId,
     ) -> Result<Option<Self>> {
@@ -106,7 +106,10 @@ impl RegistrationHandoffStore {
             )),
             encryption_master_key: config.encryption_key()?,
         };
-        store.ensure_schema()?;
+        let schema_store = store.clone();
+        tokio::task::spawn_blocking(move || schema_store.ensure_schema())
+            .await
+            .context("registration handoff schema task failed")??;
         Ok(Some(store))
     }
 
@@ -487,7 +490,7 @@ impl RegistrationHandoffStore {
         request: &PushRegistrationHandoffRequestBody,
         request_digest: Hash,
     ) -> Result<PushRegistrationInstallationReceipt> {
-        let stored_at = Utc::now();
+        let stored_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
         let mut receipt = PushRegistrationInstallationReceipt {
             registration_id: request.registration_id().clone(),
             push_target_id: request.push_target_id().clone(),
@@ -787,6 +790,7 @@ mod tests {
         config.receipt_signing_key_seed_hex = Some(hex::encode([7_u8; 32]));
         config.receipt_verification_method = Some("did:web:gateway.example#receipt".to_owned());
         let store = RegistrationHandoffStore::from_config(&config, gateway.clone())
+            .await
             .unwrap()
             .unwrap();
         let source = source(&format!(
@@ -960,6 +964,7 @@ mod tests {
         config.receipt_signing_key_seed_hex = Some(hex::encode([7_u8; 32]));
         config.receipt_verification_method = Some("did:web:gateway.example#receipt".to_owned());
         let store = RegistrationHandoffStore::from_config(&config, gateway.clone())
+            .await
             .unwrap()
             .unwrap();
         let source_a = source(&format!(
@@ -1080,7 +1085,7 @@ mod tests {
         let wrong_target_revocation: PushRegistrationHandoffRequestBody =
             serde_json::from_value(serde_json::json!({
                 "registration_id": successor.registration_id(),
-                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm9",
+                "push_target_id": "ak:pseudonym:push:lg8aqJ2eJjms1GQpkzloxGn8F802f8RfmfmfsC85eRo",
                 "device_id": device,
                 "state": "revoked"
             }))
