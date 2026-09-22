@@ -924,4 +924,155 @@ mod tests {
             provider_invalid_revoked.request_digest().unwrap()
         );
     }
+
+    #[tokio::test]
+    async fn postgres_handoff_supersede_and_tenant_isolation() {
+        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
+            return;
+        };
+        let gateway = source("did:web:gateway.example");
+        let mut config = RegistrationHandoffConfig::default();
+        config.postgres_url = Some(postgres_url);
+        config.encryption_key_hex = Some(hex::encode([11_u8; 32]));
+        config.receipt_signing_key_seed_hex = Some(hex::encode([7_u8; 32]));
+        config.receipt_verification_method = Some("did:web:gateway.example#receipt".to_owned());
+        let store = RegistrationHandoffStore::from_config(&config, gateway.clone())
+            .unwrap()
+            .unwrap();
+        let source_a = source(&format!(
+            "did:web:station-a-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let source_b = source(&format!(
+            "did:web:station-b-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let source_c = source(&format!(
+            "did:web:station-c-{}.example",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let predecessor_id = format!("registration_{}", uuid::Uuid::new_v4().simple());
+        let successor_id = format!("registration_{}", uuid::Uuid::new_v4().simple());
+        let target = "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8";
+        let device = "ak:device:01904100-0000-7000-8000-000000000001";
+        let predecessor: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": predecessor_id,
+                "push_target_id": target,
+                "device_id": device,
+                "state": "active",
+                "push_key": "tenant-local-provider-secret",
+                "platform": "apns",
+                "app_id": "org.arkret.fixture",
+                "visible_notification_opt_in": false
+            }))
+            .unwrap();
+
+        let receipt_a = store
+            .apply(source_a.clone(), gateway.clone(), predecessor.clone())
+            .await
+            .unwrap();
+        let receipt_b = store
+            .apply(source_b.clone(), gateway.clone(), predecessor.clone())
+            .await
+            .unwrap();
+        assert_eq!(receipt_a.receipt.source_station_id, source_a);
+        assert_eq!(receipt_b.receipt.source_station_id, source_b);
+        assert_ne!(receipt_a.receipt, receipt_b.receipt);
+
+        let successor: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": successor_id,
+                "push_target_id": target,
+                "device_id": device,
+                "state": "active",
+                "push_key": "rotated-provider-secret",
+                "platform": "apns",
+                "app_id": "org.arkret.fixture",
+                "visible_notification_opt_in": true,
+                "supersedes_registration_id": predecessor.registration_id()
+            }))
+            .unwrap();
+        store
+            .apply(source_a.clone(), gateway.clone(), successor.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .resolve(
+                    &source_a,
+                    successor.push_target_id(),
+                    successor.device_id(),
+                    "https://gateway.example/",
+                )
+                .await
+                .unwrap()
+                .unwrap()
+                .push_key
+                .as_str(),
+            "rotated-provider-secret"
+        );
+        assert!(matches!(
+            store
+                .apply(source_a.clone(), gateway.clone(), predecessor.clone())
+                .await,
+            Err(ApplyRegistrationError::Conflict)
+        ));
+        assert_eq!(
+            store
+                .resolve(
+                    &source_b,
+                    predecessor.push_target_id(),
+                    predecessor.device_id(),
+                    "https://gateway.example/",
+                )
+                .await
+                .unwrap()
+                .unwrap()
+                .push_key
+                .as_str(),
+            "tenant-local-provider-secret"
+        );
+
+        let cross_tenant_successor: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": format!("registration_{}", uuid::Uuid::new_v4().simple()),
+                "push_target_id": target,
+                "device_id": device,
+                "state": "active",
+                "push_key": "cross-tenant-attempt",
+                "platform": "apns",
+                "app_id": "org.arkret.fixture",
+                "visible_notification_opt_in": false,
+                "supersedes_registration_id": predecessor.registration_id()
+            }))
+            .unwrap();
+        assert!(matches!(
+            store
+                .apply(source_c, gateway.clone(), cross_tenant_successor)
+                .await,
+            Err(ApplyRegistrationError::Conflict)
+        ));
+
+        let wrong_target_revocation: PushRegistrationHandoffRequestBody =
+            serde_json::from_value(serde_json::json!({
+                "registration_id": successor.registration_id(),
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm9",
+                "device_id": device,
+                "state": "revoked"
+            }))
+            .unwrap();
+        assert!(matches!(
+            store
+                .apply(source_a.clone(), gateway.clone(), wrong_target_revocation)
+                .await,
+            Err(ApplyRegistrationError::Conflict)
+        ));
+        assert!(matches!(
+            store
+                .apply(source_a, source("did:web:wrong-gateway.example"), successor,)
+                .await,
+            Err(ApplyRegistrationError::Conflict)
+        ));
+    }
 }
