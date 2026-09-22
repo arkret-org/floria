@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use salvo::http::StatusCode;
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::ResponseExt;
 use serde_json::{Value, json};
 
 use super::*;

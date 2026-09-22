@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use salvo::http::StatusCode;
-use salvo::test::{ResponseExt, TestClient};
+use salvo::test::ResponseExt;
 use serde_json::json;
 
 use super::*;
