@@ -239,6 +239,16 @@ impl RegistrationHandoffStore {
                     .build_transaction()
                     .isolation_level(postgres::IsolationLevel::Serializable)
                     .start()?;
+                let route_lock_key = format!(
+                    "route\0{}\0{}\0{}",
+                    source.as_str(),
+                    request.push_target_id().as_str(),
+                    request.device_id().as_str(),
+                );
+                transaction.query_one(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    &[&route_lock_key],
+                )?;
                 let mut lock_ids = vec![request.registration_id().as_str()];
                 if let PushRegistrationHandoffRequestBody::Active {
                     supersedes_registration_id: Some(predecessor_id),
@@ -307,7 +317,27 @@ impl RegistrationHandoffStore {
                         supersedes_registration_id,
                         ..
                     } => {
+                        let active_registration_ids = transaction
+                            .query(
+                                &format!(
+                                    "SELECT registration_id FROM {table} WHERE source_station_id=$1 AND state='active' AND push_target_id=$2 AND device_id=$3 FOR UPDATE",
+                                    table = self.table.as_sql(),
+                                ),
+                                &[
+                                    &source.as_str(),
+                                    &request.push_target_id().as_str(),
+                                    &request.device_id().as_str(),
+                                ],
+                            )?
+                            .into_iter()
+                            .map(|row| row.get::<_, String>(0))
+                            .collect::<Vec<_>>();
                         if let Some(predecessor_id) = supersedes_registration_id {
+                            if active_registration_ids.as_slice()
+                                != [predecessor_id.as_str()]
+                            {
+                                bail!(ConflictMarker);
+                            }
                             let predecessor = load_existing(
                                 &mut transaction,
                                 self.table.as_sql(),
@@ -333,6 +363,8 @@ impl RegistrationHandoffStore {
                                     &request.registration_id().as_str(),
                                 ],
                             )?;
+                        } else if !active_registration_ids.is_empty() {
+                            bail!(ConflictMarker);
                         }
                         let route = EncryptedProviderRoute {
                             push_key: push_key.clone(),
