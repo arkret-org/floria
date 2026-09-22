@@ -12,6 +12,15 @@ use crate::AppState;
 use crate::auth::authenticate_registration_handoff_request;
 use crate::registration_handoff::ApplyRegistrationError;
 
+/// The generated registry binding implemented by this handler. Keeping the
+/// binding next to the handler lets ServiceDescribe prove coverage without
+/// maintaining a second, handwritten operation list.
+pub(super) const OPERATION_BINDING: arkret_wire::OperationBindingPair =
+    arkret_wire::OperationBindingPair {
+        operation_id: arkret_wire::ServiceOperationId::EdgePushCommandApplyRegistrationV1,
+        binding_kind: arkret_wire::BindingKind::HttpJson,
+    };
+
 #[handler]
 pub(super) async fn apply(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let started = Instant::now();

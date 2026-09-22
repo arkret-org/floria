@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use arkret_wire::{Did, DidCoreId, ProfileId, ServiceOperationId};
+use arkret_wire::{
+    Did, DidCoreId, OperationBindingPair, ProfileId, ServiceKind, ServiceOperationId,
+    operation_bundle_descriptor,
+};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde_json::{Map, json};
@@ -9,6 +12,9 @@ use super::MAX_REQUEST_SIZE;
 use super::metrics::render_problem;
 use crate::AppState;
 use crate::config::NotifyAuthConfig;
+
+pub(super) const REGISTRATION_HANDOFF_BUNDLE_ID: &str =
+    "ak.operation_bundle.push_gateway.registration_handoff.v1";
 
 /// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
 /// `ServiceDescribe` (`arkret_models_discovery::ServiceDescribe` = `ServiceDescribe`)
@@ -182,6 +188,17 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         );
         return;
     };
+    let mut supported_operation_bundles = vec![
+        "ak.operation_bundle.push_gateway.describe.v1".to_owned(),
+        "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
+    ];
+    if let Some(bundle) = registration_handoff_bundle_if_ready(
+        state.registration_handoff.is_some(),
+        &[super::registration_handoff::OPERATION_BINDING],
+    ) {
+        supported_operation_bundles.push(bundle.to_owned());
+    }
+
     let body = arkret_models_discovery::ServiceDescribe {
         service_id,
         service_resolution,
@@ -194,10 +211,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         protocol_version: arkret_models_discovery::ServiceProtocolVersion::V1,
         supported_profiles: supported_profiles.iter().map(|p| p.to_string()).collect(),
         profile_bindings: Default::default(),
-        supported_operation_bundles: vec![
-            "ak.operation_bundle.push_gateway.describe.v1".to_owned(),
-            "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
-        ],
+        supported_operation_bundles,
         transport_bindings: vec![arkret_models_discovery::TransportBinding::HttpJson {
             base_url: state.public_base_url.clone(),
             extension_profile_required: (),
@@ -234,6 +248,25 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
 
     res.status_code(StatusCode::OK);
     res.render(Json(body));
+}
+
+fn registration_handoff_bundle_if_ready(
+    handoff_store_ready: bool,
+    installed_handler_bindings: &[OperationBindingPair],
+) -> Option<&'static str> {
+    if !handoff_store_ready {
+        return None;
+    }
+    let bundle = operation_bundle_descriptor(REGISTRATION_HANDOFF_BUNDLE_ID)?;
+    if bundle.service_kind != ServiceKind::PushGateway
+        || !bundle
+            .members
+            .iter()
+            .all(|member| installed_handler_bindings.contains(member))
+    {
+        return None;
+    }
+    Some(bundle.operation_bundle_id)
 }
 
 /// Profiles the gateway actually supports and gates on, in claim order.
@@ -323,4 +356,27 @@ pub(super) fn describe_rate_limit_scopes(
         scopes.push("endpoint");
     }
     scopes
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn registration_handoff_advertisement_requires_store_and_all_generated_members() {
+        let handler = super::super::registration_handoff::OPERATION_BINDING;
+        let descriptor = operation_bundle_descriptor(REGISTRATION_HANDOFF_BUNDLE_ID)
+            .expect("generated registration handoff bundle");
+        assert_eq!(descriptor.members, &[handler]);
+
+        assert_eq!(
+            registration_handoff_bundle_if_ready(true, &[handler]),
+            Some(REGISTRATION_HANDOFF_BUNDLE_ID)
+        );
+        assert_eq!(registration_handoff_bundle_if_ready(true, &[]), None);
+        assert_eq!(
+            registration_handoff_bundle_if_ready(false, &[handler]),
+            None
+        );
+    }
 }
