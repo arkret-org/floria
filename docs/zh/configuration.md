@@ -97,6 +97,14 @@ http {
     //   }
     // }
   }
+  // 只有独立存储的公共 Gateway 才启用。三项密钥/verification method 与 postgres_url 必须同时配置。
+  // registration_handoff {
+  //   postgres_url "postgres://floria@db/floria"
+  //   table "floria_push_registration_handoffs"
+  //   encryption_key_hex "<64-hex>"
+  //   receipt_signing_key_seed_hex "<64-hex>"
+  //   receipt_verification_method "did:web:push.example.com#registration-receipt"
+  // }
   internal_auth {
     // bearer_tokens "replace-me-internal"
     bearer_token_hashes "sha256:<hex-digest>"
@@ -134,6 +142,7 @@ http {
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | 由入口层注入、携带客户端证书 Subject DN 的 header |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | 由入口层注入、携带逗号分隔 SAN 列表的 header |
 | `notify_auth.service_principals` | object | — | 以 origin service core ID 为键的逐服务鉴权配置，支持 bearer 回退、签名公钥、endpoint 绑定、plaintext metadata 权限和可选 mTLS |
+| `registration_handoff` | object | — | 可选公共 Gateway 交接存储；按认证 Station 分区并加密 provider route，只有五项配置完整时启用 |
 | `internal_auth.bearer_tokens` | string/string[] | — | `/_floria/internal/*`、`/_floria/admin/push/status/*` 使用的内部/运维 bearer token |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | 内部 bearer token 的 SHA-256 摘要，可带 `sha256:` 前缀；两组内部凭据都为空时内部/运维路由 fail-closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | `/notify` 内存限流的固定时间窗口 |

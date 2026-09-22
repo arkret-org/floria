@@ -448,13 +448,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let mut registrations = Vec::with_capacity(notification.devices.len());
     for device in &notification.devices {
         match state
-            .registrations
-            .resolve(
-                source,
-                &push_target_id(&notification),
-                &device.device_id,
-                &state.public_base_url,
-            )
+            .resolve_registration(source, &push_target_id(&notification), &device.device_id)
             .await
         {
             Ok(registration) => registrations.push(registration),

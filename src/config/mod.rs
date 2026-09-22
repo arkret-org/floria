@@ -29,6 +29,7 @@ mod kdl;
 mod notify;
 mod notify_auth;
 mod observability;
+mod registration_handoff;
 mod schema;
 
 #[cfg(test)]
@@ -47,6 +48,7 @@ pub use observability::{
     AccessLogConfig, LogConfig, LogSetupConfig, MetricsConfig, ObservabilityConfig,
     OpentracingConfig, PrometheusConfig, SentryConfig, TracingFormat, TracingLevel,
 };
+pub use registration_handoff::RegistrationHandoffConfig;
 pub use schema::config_json_schema;
 
 #[derive(Debug, Clone, Deserialize)]

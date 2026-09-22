@@ -86,6 +86,19 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
     state.registrations = Arc::new(floria::registrations::RegistrationDirectory::new(
         &config.http.registration_sources,
     )?);
+    if config.http.registration_handoff.enabled() {
+        let gateway_id = config
+            .http
+            .notify_auth
+            .gateway_service_core_id()?
+            .expect("validated registration handoff gateway identity");
+        state.registration_handoff =
+            floria::registration_handoff::RegistrationHandoffStore::from_config(
+                &config.http.registration_handoff,
+                gateway_id,
+            )?
+            .map(Arc::new);
+    }
     state.provider_timing_bucket =
         std::time::Duration::from_secs(config.http.provider_timing_bucket_seconds);
     state.public_base_url = config.http.public_base_url.clone();

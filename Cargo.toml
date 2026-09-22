@@ -24,6 +24,7 @@ todo = "deny"
 unimplemented = "deny"
 
 [workspace.dependencies]
+arkret-canonical = { path = "../arkret-rust-sdk/crates/canonical", default-features = false }
 arkret-egress-reqwest = { path = "../arkret-rust-sdk/crates/egress-reqwest", default-features = false }
 arkret-models-discovery = { path = "../arkret-rust-sdk/crates/models-discovery", default-features = false }
 arkret-models-identity = { path = "../arkret-rust-sdk/crates/models-identity", default-features = false }
@@ -85,6 +86,7 @@ x509-parser = "0.18.1"
 [dependencies]
 # Push and service wire models come from the edge leaf; HTTP signatures use
 # the transport-only signatures feature so the gateway does not compile core.
+arkret-canonical.workspace = true
 arkret-egress-reqwest.workspace = true
 arkret-models-discovery = { workspace = true, default-features = false }
 arkret-models-identity = { workspace = true, default-features = false }

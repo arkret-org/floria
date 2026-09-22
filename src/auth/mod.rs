@@ -212,6 +212,36 @@ pub async fn authenticate_notify_request(
     authenticate_bearer_request(req, auth, origin_id.as_ref(), request_id)
 }
 
+/// Authenticate the public registration handoff profile. Unlike `/notify`,
+/// this operation never permits bearer-only, mTLS-only, or anonymous access:
+/// the exact source, destination, and content digest must be carried by the
+/// verified HTTP Message Signature.
+pub async fn authenticate_registration_handoff_request(
+    req: &Request,
+    body: &[u8],
+    auth: &NotifyAuthConfig,
+    nonce_store: Option<&Arc<NonceStore>>,
+    request_id: &str,
+) -> Result<AuthenticatedNotifyCaller, AuthFailure> {
+    if !has_signature_headers(req) {
+        return Err(AuthFailure {
+            status: StatusCode::UNAUTHORIZED,
+            code: arkret_wire::error_codes::ErrorCode::UNAUTHENTICATED,
+            message: "registration handoff requires an HTTP Message Signature".to_owned(),
+        });
+    }
+    let caller = authenticate_notify_request(req, body, auth, nonce_store, request_id).await?;
+    if caller.origin_id.is_none() || caller.destination_id.is_none() {
+        return Err(AuthFailure {
+            status: StatusCode::FORBIDDEN,
+            code: arkret_wire::error_codes::ErrorCode::CAPABILITY_DENIED,
+            message: "registration handoff requires exact source and destination service ids"
+                .to_owned(),
+        });
+    }
+    Ok(caller)
+}
+
 fn principal_is_plaintext_eligible(principal: &NotifyServicePrincipalConfig) -> bool {
     let Some(kind) = principal
         .service_kind

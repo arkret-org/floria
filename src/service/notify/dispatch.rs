@@ -165,13 +165,7 @@ pub(super) async fn dispatch_notification_devices(
                 // Timing buckets may outlive a token rotation or user opt-out.
                 // Recheck the durable registration immediately before provider I/O.
                 let current = state
-                    .registrations
-                    .resolve(
-                        source,
-                        &push_target_id(notification),
-                        &device.device_id,
-                        &state.public_base_url,
-                    )
+                    .resolve_registration(source, &push_target_id(notification), &device.device_id)
                     .await;
                 match current {
                     Ok(Some(current))

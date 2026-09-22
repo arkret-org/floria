@@ -286,7 +286,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -1373,6 +1372,7 @@ version = "0.3.0"
 dependencies = [
  "aes-gcm 0.11.1",
  "anyhow",
+ "arkret-canonical",
  "arkret-egress-reqwest",
  "arkret-models-discovery",
  "arkret-models-identity",

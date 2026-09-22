@@ -114,6 +114,18 @@ fn http_schema() -> Value {
                 }
             },
             "notify_auth": notify_auth_schema(),
+            "registration_handoff": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Optional durable public-Gateway registration handoff store. All five fields are required together; secrets are never emitted in logs or receipts.",
+                "properties": {
+                    "postgres_url": {"type": ["string", "null"]},
+                    "table": {"type": "string", "default": "floria_push_registration_handoffs"},
+                    "encryption_key_hex": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"},
+                    "receipt_signing_key_seed_hex": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"},
+                    "receipt_verification_method": {"type": ["string", "null"]}
+                }
+            },
             "registration_sources": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["postgres_url"], "properties": {"postgres_url": {"type": "string"}}}, "description": "Authenticated source service core id to read-only Station registration database inside the same trusted deployment."},
             "provider_timing_bucket_seconds": {"type": "integer", "minimum": 0, "default": 60, "description": "Provider timing bucket chosen by deployment policy; notify cannot override it."},
 

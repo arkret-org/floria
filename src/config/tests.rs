@@ -27,6 +27,39 @@ apps: {}
 }
 
 #[test]
+fn registration_handoff_requires_complete_gateway_bound_secrets() {
+    let mut config = Config::default();
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.registration_handoff.postgres_url =
+        Some("postgres://floria@localhost/floria".to_owned());
+    assert!(
+        config
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("http.registration_handoff.encryption_key_hex is required")
+    );
+
+    config.http.registration_handoff.encryption_key_hex = Some("11".repeat(32));
+    config
+        .http
+        .registration_handoff
+        .receipt_signing_key_seed_hex = Some("22".repeat(32));
+    config.http.registration_handoff.receipt_verification_method =
+        Some("did:web:other.example#receipt".to_owned());
+    assert!(config.validate().unwrap_err().to_string().contains(
+        "receipt verification method controller must equal the configured gateway service id"
+    ));
+
+    config.http.registration_handoff.receipt_verification_method =
+        Some("did:web:push.example.com#receipt".to_owned());
+    config.validate().unwrap();
+    let debug = format!("{:?}", config.http.registration_handoff);
+    assert!(!debug.contains(&"11".repeat(32)));
+    assert!(!debug.contains(&"22".repeat(32)));
+}
+
+#[test]
 fn formats_prometheus_ipv6_listen_address() {
     let config = PrometheusConfig {
         enabled: true,
@@ -47,6 +80,7 @@ fn keeps_explicit_http_ports() {
         notify_dedup_ttl_seconds: 0,
         notify_dedup: NotifyDedupConfig::default(),
         notify_auth: NotifyAuthConfig::default(),
+        registration_handoff: RegistrationHandoffConfig::default(),
         registration_sources: Default::default(),
         provider_timing_bucket_seconds: 60,
         internal_auth: InternalAuthConfig::default(),
@@ -71,6 +105,7 @@ fn supports_bracketed_ipv6_without_explicit_port() {
         notify_dedup_ttl_seconds: 0,
         notify_dedup: NotifyDedupConfig::default(),
         notify_auth: NotifyAuthConfig::default(),
+        registration_handoff: RegistrationHandoffConfig::default(),
         registration_sources: Default::default(),
         provider_timing_bucket_seconds: 60,
         internal_auth: InternalAuthConfig::default(),

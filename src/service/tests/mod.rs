@@ -24,6 +24,7 @@ mod dedup;
 mod delivery;
 mod internal;
 mod rate_limit;
+mod registration_handoff;
 mod sanitizer;
 
 #[derive(Debug, Clone)]

@@ -15,6 +15,7 @@ mod internal;
 mod metrics;
 mod notify;
 mod operation_selector;
+mod registration_handoff;
 mod server_describe;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
@@ -31,6 +32,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::with_hoop(affix_state::inject(state))
         .hoop(operation_selector::OperationSelectorMiddleware)
         .push(notify_route("_arkret/edge/push/notify"))
+        .push(
+            Router::with_path("_arkret/edge/push/registrations:apply")
+                .post(registration_handoff::apply),
+        )
         .push(
             Router::with_path("_floria/integration/describe")
                 .get(integration_describe::integration_describe),

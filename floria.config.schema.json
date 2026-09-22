@@ -601,6 +601,43 @@
           "format": "uri",
           "type": "string"
         },
+        "registration_handoff": {
+          "additionalProperties": false,
+          "description": "Optional durable public-Gateway registration handoff store. All five fields are required together; secrets are never emitted in logs or receipts.",
+          "properties": {
+            "encryption_key_hex": {
+              "pattern": "^[0-9a-fA-F]{64}$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "postgres_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "receipt_signing_key_seed_hex": {
+              "pattern": "^[0-9a-fA-F]{64}$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "receipt_verification_method": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "table": {
+              "default": "floria_push_registration_handoffs",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
         "registration_sources": {
           "additionalProperties": {
             "additionalProperties": false,

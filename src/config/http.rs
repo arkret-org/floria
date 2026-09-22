@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use super::notify::{NotifyDedupConfig, NotifyRateLimitConfig, NotifyRetryQueueConfig};
 use super::notify_auth::NotifyAuthConfig;
+use super::registration_handoff::RegistrationHandoffConfig;
 use super::{
     normalize_listen_addr, string_or_vec, validate_bearer_token_hashes, warn_unknown_fields,
 };
@@ -25,6 +26,7 @@ pub struct HttpConfig {
         arkret_wire::DidCoreId,
         crate::registrations::RegistrationSourceConfig,
     >,
+    pub registration_handoff: RegistrationHandoffConfig,
     pub provider_timing_bucket_seconds: u64,
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
@@ -52,6 +54,7 @@ impl Default for HttpConfig {
             notify_dedup: NotifyDedupConfig::default(),
             notify_auth: NotifyAuthConfig::default(),
             registration_sources: Default::default(),
+            registration_handoff: RegistrationHandoffConfig::default(),
             provider_timing_bucket_seconds: 60,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
@@ -80,6 +83,7 @@ impl HttpConfig {
         );
         self.notify_dedup.emit_startup_warnings();
         self.notify_auth.emit_startup_warnings();
+        self.registration_handoff.emit_startup_warnings();
         self.internal_auth.emit_startup_warnings();
         self.notify_rate_limits.emit_startup_warnings();
         self.notify_retry_queue.emit_startup_warnings();
@@ -108,6 +112,9 @@ impl HttpConfig {
         }
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
+        let gateway_service_id = self.notify_auth.gateway_service_core_id()?;
+        self.registration_handoff
+            .validate(gateway_service_id.as_ref())?;
         for (source, registration) in &self.registration_sources {
             if !self
                 .notify_auth

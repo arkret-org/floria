@@ -15,6 +15,7 @@ pub mod postgres_support;
 pub mod pushkin;
 pub mod rate_limit;
 pub(crate) mod redis_support;
+pub mod registration_handoff;
 pub mod registrations;
 pub mod retry_queue;
 pub mod sanitize;
@@ -71,6 +72,7 @@ pub struct AppState {
     pub notify_deduplicator: Option<Arc<NotifyDeduplicator>>,
     pub notify_auth: NotifyAuthConfig,
     pub registrations: Arc<registrations::RegistrationDirectory>,
+    pub registration_handoff: Option<Arc<registration_handoff::RegistrationHandoffStore>>,
     pub provider_timing_bucket: std::time::Duration,
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limiter: Option<Arc<NotifyRateLimiter>>,
@@ -86,6 +88,33 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub async fn resolve_registration(
+        &self,
+        source: &arkret_wire::DidCoreId,
+        target: &arkret_wire::PushTargetId,
+        device: &arkret_wire::DeviceId,
+    ) -> anyhow::Result<Option<arkret_models_integration::PushRegistrationRecord>> {
+        let handed_off = match self.registration_handoff.as_ref() {
+            Some(store) => {
+                store
+                    .resolve(source, target, device, &self.public_base_url)
+                    .await?
+            }
+            None => None,
+        };
+        let shared = self
+            .registrations
+            .resolve(source, target, device, &self.public_base_url)
+            .await?;
+        match (handed_off, shared) {
+            (Some(_), Some(_)) => anyhow::bail!(
+                "registration exists in both public handoff and shared authority stores"
+            ),
+            (Some(registration), None) | (None, Some(registration)) => Ok(Some(registration)),
+            (None, None) => Ok(None),
+        }
+    }
+
     pub fn new(registry: Arc<PushkinRegistry>) -> Self {
         Self {
             registry,
@@ -94,6 +123,7 @@ impl AppState {
             notify_deduplicator: None,
             notify_auth: NotifyAuthConfig::default(),
             registrations: Arc::new(registrations::RegistrationDirectory::default()),
+            registration_handoff: None,
             provider_timing_bucket: std::time::Duration::ZERO,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
@@ -117,6 +147,7 @@ impl AppState {
             notify_deduplicator: Some(notify_deduplicator),
             notify_auth: NotifyAuthConfig::default(),
             registrations: Arc::new(registrations::RegistrationDirectory::default()),
+            registration_handoff: None,
             provider_timing_bucket: std::time::Duration::ZERO,
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limiter: None,
