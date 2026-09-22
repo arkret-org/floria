@@ -28,9 +28,10 @@ mod tests;
 use dispatch::dispatch_notification_devices;
 pub(super) use helpers::idempotency_cache_key;
 use helpers::{
-    cache_success_response, delivery_receipt, enqueue_retry, finish_standard_notify_json,
-    mark_delivered_devices, normalized_notify_dedup_key, notify_rate_limit_checks,
-    optional_owned_string, record_required_audit_event, rejected_device, resolve_idempotency_key,
+    RetryDispatch, cache_success_response, delivery_receipt, enqueue_retry,
+    finish_standard_notify_json, mark_delivered_devices, normalized_notify_dedup_key,
+    notify_rate_limit_checks, optional_owned_string, record_required_audit_event, rejected_device,
+    resolve_idempotency_key,
 };
 use response::finish_dispatch;
 use validation::{

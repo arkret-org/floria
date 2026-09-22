@@ -330,11 +330,13 @@ pub(super) async fn dispatch_notification_devices(
                             ));
                             enqueue_retry(
                                 state,
-                                &context.request_id,
-                                pushkin.name(),
-                                source,
-                                notification,
-                                device,
+                                RetryDispatch {
+                                    request_id: &context.request_id,
+                                    pushkin: pushkin.name(),
+                                    source,
+                                    notification,
+                                    device,
+                                },
                                 retry_after,
                                 &error,
                             )

@@ -763,6 +763,13 @@ async fn dead_letter_for_worker(queue: &std::sync::Arc<RetryQueue>, envelope: Re
 ///
 /// The worker exits cleanly when `shutdown.recv().is_err()` (sender
 /// dropped) or after observing a single shutdown notification.
+#[derive(Clone, Debug)]
+pub struct RetryWorkerConfig {
+    pub gateway_url: String,
+    pub poll_interval: Duration,
+    pub batch_item_count: usize,
+}
+
 pub async fn run_worker(
     queue: std::sync::Arc<RetryQueue>,
     registry: std::sync::Arc<crate::pushkin::PushkinRegistry>,
@@ -770,9 +777,7 @@ pub async fn run_worker(
     registration_handoff: Option<
         std::sync::Arc<crate::registration_handoff::RegistrationHandoffStore>,
     >,
-    gateway_url: String,
-    poll_interval: Duration,
-    batch_item_count: usize,
+    config: RetryWorkerConfig,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
     use std::time::Instant;
@@ -805,10 +810,10 @@ pub async fn run_worker(
                 depth as i64,
             );
         }
-        let due = dequeue_due_for_worker(&queue, batch_item_count.max(1)).await;
+        let due = dequeue_due_for_worker(&queue, config.batch_item_count.max(1)).await;
         if due.is_empty() {
             tokio::select! {
-                _ = tokio::time::sleep(poll_interval) => {}
+                _ = tokio::time::sleep(config.poll_interval) => {}
                 _ = shutdown.changed() => break,
             }
             continue;
@@ -824,7 +829,7 @@ pub async fn run_worker(
             let device = match crate::resolve_registration(
                 registrations.as_ref(),
                 registration_handoff.as_deref(),
-                &gateway_url,
+                &config.gateway_url,
                 &envelope.source_id,
                 target,
                 &requested.device_id,
@@ -985,9 +990,11 @@ mod tests {
                 registry,
                 Arc::new(crate::registrations::RegistrationDirectory::default()),
                 Some(store),
-                "https://gateway.example/".to_owned(),
-                Duration::from_millis(5),
-                1,
+                RetryWorkerConfig {
+                    gateway_url: "https://gateway.example/".to_owned(),
+                    poll_interval: Duration::from_millis(5),
+                    batch_item_count: 1,
+                },
                 shutdown_rx,
             )
             .await;

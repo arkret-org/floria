@@ -424,13 +424,17 @@ pub(super) fn normalized_notify_dedup_key(
         .map(|bytes| request_hash(&bytes))
 }
 
+pub(super) struct RetryDispatch<'a> {
+    pub request_id: &'a str,
+    pub pushkin: &'a str,
+    pub source: &'a arkret_wire::DidCoreId,
+    pub notification: &'a PushNotificationEnvelope,
+    pub device: &'a PushRegistrationRecord,
+}
+
 pub(super) async fn enqueue_retry(
     state: &Arc<AppState>,
-    request_id: &str,
-    pushkin: &str,
-    source: &arkret_wire::DidCoreId,
-    notification: &PushNotificationEnvelope,
-    device: &PushRegistrationRecord,
+    dispatch: RetryDispatch<'_>,
     retry_after: Option<Duration>,
     error: &crate::error::DispatchError,
 ) {
@@ -439,14 +443,14 @@ pub(super) async fn enqueue_retry(
     };
     let backoff = retry_after.unwrap_or(queue.config().default_backoff);
     let envelope = crate::retry_queue::RetryEnvelope::new(
-        request_id,
-        pushkin,
-        source.clone(),
+        dispatch.request_id,
+        dispatch.pushkin,
+        dispatch.source.clone(),
         PushNotificationEnvelope {
-            push_target_id: notification.push_target_id.clone(),
-            wakeup_kind: notification.wakeup_kind.clone(),
+            push_target_id: dispatch.notification.push_target_id.clone(),
+            wakeup_kind: dispatch.notification.wakeup_kind.clone(),
             devices: vec![arkret_models_integration::PushDeviceRoute {
-                device_id: device.device_id.clone(),
+                device_id: dispatch.device.device_id.clone(),
             }],
             ..Default::default()
         },
@@ -454,7 +458,7 @@ pub(super) async fn enqueue_retry(
         error.safe_summary(),
     );
     queue.enqueue_async(envelope).await;
-    app_metrics::notify_retry_enqueued(pushkin);
+    app_metrics::notify_retry_enqueued(dispatch.pushkin);
 }
 
 #[cfg(test)]

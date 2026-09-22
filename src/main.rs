@@ -250,9 +250,11 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
                     registry_clone,
                     registration_directory,
                     registration_handoff,
-                    registration_gateway,
-                    poll_interval,
-                    batch_item_count,
+                    floria::retry_queue::RetryWorkerConfig {
+                        gateway_url: registration_gateway,
+                        poll_interval,
+                        batch_item_count,
+                    },
                     shutdown_rx,
                 )
                 .await;
