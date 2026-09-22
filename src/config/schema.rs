@@ -117,7 +117,7 @@ fn http_schema() -> Value {
             "registration_handoff": {
                 "type": "object",
                 "additionalProperties": false,
-                "description": "Optional durable public-Gateway registration handoff store. All five fields are required together; secrets are never emitted in logs or receipts.",
+                "description": "Optional durable public-Gateway registration handoff store. The URL, both keys, and verification method are required together; table has a safe default. Secrets are never emitted in logs or receipts.",
                 "properties": {
                     "postgres_url": {"type": ["string", "null"]},
                     "table": {"type": "string", "default": "floria_push_registration_handoffs"},

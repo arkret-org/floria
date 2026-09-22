@@ -162,7 +162,7 @@ http {
 | `notify_auth.mtls_subject_dn_header` | string | `"x-client-certificate-subject"` | Ingress-provided header carrying the client certificate Subject DN |
 | `notify_auth.mtls_subject_alt_names_header` | string | `"x-client-certificate-san"` | Ingress-provided header carrying the comma-joined SAN list |
 | `notify_auth.service_principals` | object | — | Per-service auth profile keyed by origin service core ID; supports bearer fallback, signature key, endpoint binding, plaintext metadata permission, and optional mTLS |
-| `registration_handoff` | object | — | Optional public-Gateway handoff store; provider routes are partitioned and encrypted per authenticated Station, and all five settings are required to enable it |
+| `registration_handoff` | object | — | Optional public-Gateway handoff store; provider routes are partitioned and encrypted per authenticated Station; URL, both keys, and verification method are required, while table is optional |
 | `internal_auth.bearer_tokens` | string/string[] | — | Internal/operator bearer tokens for `/_floria/internal/*` and `/_floria/admin/push/status/*` |
 | `internal_auth.bearer_token_hashes` | string/string[] | — | SHA-256 internal bearer token digests, optionally prefixed with `sha256:`; when both internal credential lists are empty, internal/operator routes fail closed |
 | `notify_rate_limits.window_seconds` | u64 | `60` | Fixed window size for in-memory `/notify` rate limits |
