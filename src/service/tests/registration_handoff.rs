@@ -115,6 +115,16 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
     let mut request_body = body();
     request_body["registration_id"] =
         json!(format!("registration_{}", uuid::Uuid::new_v4().simple()));
+    // A new registration must not collide with a previous run's active
+    // target/device pair; replacing that pair requires an explicit predecessor.
+    request_body["push_target_id"] = json!(
+        arkret_wire::PushTargetId::new(format!(
+            "ak:pseudonym:push:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(Sha256::digest(uuid::Uuid::new_v4().as_bytes()))
+        ))
+        .unwrap()
+    );
     let body_bytes = serde_json::to_vec(&request_body).unwrap();
     let target_uri = "http://127.0.0.1/_arkret/edge/push/registrations:apply";
     let (content_digest, signature_input, signature) =
