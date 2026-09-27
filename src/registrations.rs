@@ -308,10 +308,18 @@ pub(crate) mod test_support {
         .unwrap()
     }
     pub(crate) fn device(app_id: &str, push_key: &str, device_id: &str) -> serde_json::Value {
+        device_at_gateway(app_id, push_key, device_id, GATEWAY)
+    }
+    pub(crate) fn device_at_gateway(
+        app_id: &str,
+        push_key: &str,
+        device_id: &str,
+        gateway: &str,
+    ) -> serde_json::Value {
         let record: PushRegistrationRecord = serde_json::from_value(serde_json::json!({
             "registration_id":format!("push_registration:{}", device_id.rsplit(':').next().unwrap()),
             "account_id":{"principal_id":"ak:did_core:web:fixture.example", "station_id":SOURCE},
-            "device_id":device_id, "push_gateway":GATEWAY, "push_key":push_key, "platform":null,
+            "device_id":device_id, "push_gateway":gateway, "push_key":push_key, "platform":null,
             "app_id":app_id, "visible_notification_opt_in":true, "push_route_id":app_id,
             "push_target_id":"ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
             "salt_epoch_id":"epoch", "expires_at":null, "retained_push_targets":[]

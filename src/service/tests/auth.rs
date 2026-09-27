@@ -5,6 +5,16 @@ use serde_json::{Value, json};
 
 use super::*;
 
+fn authenticated_gateway_device(app_id: &str, push_key: &str) -> Value {
+    let device_id = format!("ak:device:{}", uuid::Uuid::now_v7());
+    crate::registrations::test_support::device_at_gateway(
+        app_id,
+        push_key,
+        &device_id,
+        "https://push.example.com/",
+    )
+}
+
 #[tokio::test]
 async fn notify_accepts_authenticated_allowlisted_service() {
     let service = test_service_with_auth(
@@ -33,7 +43,10 @@ async fn notify_accepts_authenticated_allowlisted_service() {
             "ak:did_core:web:push.example.com",
             true,
         )
-        .json(&payload(vec![device("com.example.app", "accept")]))
+        .json(&payload(vec![authenticated_gateway_device(
+            "com.example.app",
+            "accept",
+        )]))
         .send(&service)
         .await;
 
@@ -131,7 +144,10 @@ async fn notify_accepts_hashed_bearer_token() {
             "ak:did_core:web:push.example.com",
             true,
         )
-        .json(&payload(vec![device("com.example.app", "accept")]))
+        .json(&payload(vec![authenticated_gateway_device(
+            "com.example.app",
+            "accept",
+        )]))
         .send(&service)
         .await;
 
