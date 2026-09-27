@@ -112,6 +112,18 @@ impl HttpConfig {
         }
         self.notify_dedup.validate(self.notify_dedup_ttl_seconds)?;
         self.notify_auth.validate()?;
+        if let Some(resolution) = &self.notify_auth.gateway_service_resolution {
+            let projection = resolution.projection().map_err(|error| {
+                anyhow::anyhow!(
+                    "http.notify_auth.gateway_service_resolution route is invalid: {error}"
+                )
+            })?;
+            if projection.base_url != self.public_base_url {
+                bail!(
+                    "http.notify_auth.gateway_service_resolution endpoint must equal http.public_base_url"
+                );
+            }
+        }
         let gateway_service_id = self.notify_auth.gateway_service_core_id()?;
         self.registration_handoff
             .validate(gateway_service_id.as_ref())?;

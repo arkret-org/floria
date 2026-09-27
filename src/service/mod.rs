@@ -17,6 +17,7 @@ mod notify;
 mod operation_selector;
 mod registration_handoff;
 mod server_describe;
+mod service_resolution;
 
 pub const MAX_REQUEST_SIZE: usize = 512 * 1024;
 
@@ -41,6 +42,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .get(integration_describe::integration_describe),
         )
         .push(Router::with_path("_arkret/describe").get(server_describe::describe))
+        .push(
+            Router::with_path("_arkret/open/services/{service_id}/resolution")
+                .get(service_resolution::publish),
+        )
         // Internal account-lifecycle broadcast endpoint.
         .push(
             Router::with_path("_floria/internal/account_deactivate_fanout")

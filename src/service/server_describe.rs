@@ -41,24 +41,23 @@ fn floria_service_did(auth: &NotifyAuthConfig) -> arkret_wire::Result<Did> {
 }
 
 fn floria_service_identity(
-    auth: &NotifyAuthConfig,
+    state: &AppState,
 ) -> arkret_wire::Result<(DidCoreId, arkret_models_identity::ResolutionCommitment)> {
+    let auth = &state.notify_auth;
     let did = floria_service_did(auth)?;
     let service_id = arkret_wire::project_did_to_core_id(&did)?;
-    let method_history_head = auth
-        .gateway_service_method_history_head
-        .clone()
-        .unwrap_or_else(|| "development-unverified".to_owned());
-    let version_id = auth
-        .gateway_service_version_id
-        .clone()
-        .unwrap_or_else(|| "development-unverified".to_owned());
+    let resolution = state.gateway_service_resolution.as_deref().ok_or_else(|| {
+        arkret_wire::WireError::Protocol(
+            "authenticated gateway service resolution is not configured".to_owned(),
+        )
+    })?;
+    let boundary = resolution.method_history_evidence.boundary();
     Ok((
         service_id,
         arkret_models_identity::ResolutionCommitment {
             did,
-            method_history_head,
-            version_id,
+            method_history_head: boundary.to_method_history_head.clone(),
+            version_id: boundary.to_version_id.clone(),
         },
     ))
 }
@@ -176,7 +175,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         arkret_models_discovery::PlaintextVisibility::none()
     };
 
-    let Ok((service_id, service_resolution)) = floria_service_identity(auth) else {
+    let Ok((service_id, service_resolution)) = floria_service_identity(state) else {
         render_problem(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -193,7 +192,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
     ];
     if let Some(bundle) = registration_handoff_bundle_if_ready(
-        state.registration_handoff.is_some(),
+        state.registration_handoff.is_some() && state.gateway_service_resolution.is_some(),
         &[super::registration_handoff::OPERATION_BINDING],
     ) {
         supported_operation_bundles.push(bundle.to_owned());

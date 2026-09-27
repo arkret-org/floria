@@ -26,6 +26,10 @@ pub struct NotifyAuthConfig {
     /// production mode so Describe never invents resolution state.
     pub gateway_service_method_history_head: Option<String>,
     pub gateway_service_version_id: Option<String>,
+    /// Complete method-native evidence published by the open service-resolution
+    /// endpoint.  The commitment fields above are retained for compatibility,
+    /// but when this value is present they must name its exact terminal state.
+    pub gateway_service_resolution: Option<arkret_models_identity::AuthenticatedServiceResolution>,
     pub require_message_signatures: bool,
     pub signature_max_skew_seconds: u64,
     pub mtls_verified_header: String,
@@ -79,6 +83,13 @@ impl fmt::Debug for NotifyAuthConfig {
             .field(
                 "gateway_service_version_id",
                 &self.gateway_service_version_id,
+            )
+            .field(
+                "gateway_service_resolution",
+                &self
+                    .gateway_service_resolution
+                    .as_ref()
+                    .map(|resolution| (&resolution.service_id, &resolution.service_kind)),
             )
             .field(
                 "require_message_signatures",
@@ -212,6 +223,36 @@ impl NotifyAuthConfig {
                 "http.notify_auth.gateway_service_method_history_head and gateway_service_version_id must be configured together"
             );
         }
+        if let Some(resolution) = &self.gateway_service_resolution {
+            let gateway_service_id = self.gateway_service_core_id()?.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "http.notify_auth.gateway_service_resolution requires gateway_service_did"
+                )
+            })?;
+            resolution
+                .validate_shape(&gateway_service_id, chrono::Utc::now())
+                .context("http.notify_auth.gateway_service_resolution is invalid")?;
+            if resolution.service_kind != arkret_wire::ServiceKind::PushGateway.as_str() {
+                bail!(
+                    "http.notify_auth.gateway_service_resolution must bind service_kind push_gateway"
+                );
+            }
+            if resolution.normalized_did_document.id.as_str()
+                != self.gateway_service_did.as_deref().unwrap_or_default()
+            {
+                bail!(
+                    "http.notify_auth.gateway_service_resolution DID must equal gateway_service_did"
+                );
+            }
+            let boundary = resolution.method_history_evidence.boundary();
+            if history_head != Some(boundary.to_method_history_head.as_str())
+                || version_id != Some(boundary.to_version_id.as_str())
+            {
+                bail!(
+                    "gateway service commitment must equal gateway_service_resolution terminal coordinates"
+                );
+            }
+        }
         if self.require_message_signatures && self.service_principals.is_empty() {
             bail!(
                 "http.notify_auth.require_message_signatures requires at least one service_principal"
@@ -327,6 +368,7 @@ impl Default for NotifyAuthConfig {
             gateway_service_did: None,
             gateway_service_method_history_head: None,
             gateway_service_version_id: None,
+            gateway_service_resolution: None,
             require_message_signatures: false,
             signature_max_skew_seconds: 300,
             mtls_verified_header: "x-client-certificate-verified".to_owned(),

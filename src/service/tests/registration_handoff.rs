@@ -94,6 +94,9 @@ async fn configured_handoff_test_service(postgres_url: String) -> Service {
 
     let mut state = AppState::new(Arc::new(PushkinRegistry::new(HashMap::new())));
     state.notify_auth = auth;
+    let resolution = super::test_gateway_service_resolution();
+    state.public_base_url = resolution.projection().unwrap().base_url;
+    state.gateway_service_resolution = Some(Arc::new(resolution));
     state.notify_nonce_store = Some(Arc::new(crate::nonce_store::NonceStore::memory(
         Duration::from_secs(300),
     )));

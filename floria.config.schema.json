@@ -188,6 +188,13 @@
                 "null"
               ]
             },
+            "gateway_service_resolution": {
+              "description": "Complete authenticated method evidence served by ak.open.service.read.resolution.v1. Its DID, service kind, terminal coordinates and ArkretService endpoint must match this Gateway configuration.",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
             "gateway_service_version_id": {
               "minLength": 1,
               "type": [

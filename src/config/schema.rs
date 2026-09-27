@@ -235,6 +235,10 @@ fn notify_auth_schema() -> Value {
             },
             "gateway_service_method_history_head": {"type": ["string", "null"], "minLength": 1},
             "gateway_service_version_id": {"type": ["string", "null"], "minLength": 1},
+            "gateway_service_resolution": {
+                "type": ["object", "null"],
+                "description": "Complete authenticated method evidence served by ak.open.service.read.resolution.v1. Its DID, service kind, terminal coordinates and ArkretService endpoint must match this Gateway configuration."
+            },
             "require_message_signatures": {"type": "boolean", "default": false},
             "signature_max_skew_seconds": {"type": "integer", "minimum": 1, "default": 300},
             "mtls_verified_header": {"type": "string", "default": "x-client-certificate-verified"},

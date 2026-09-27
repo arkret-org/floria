@@ -178,7 +178,7 @@ pub(super) fn test_service_with_dedup_and_rate_limits(
 
 pub(super) fn test_service_with_auth(
     pushkins: Vec<(&str, Arc<dyn Pushkin>)>,
-    notify_auth: NotifyAuthConfig,
+    mut notify_auth: NotifyAuthConfig,
 ) -> Service {
     let registry = PushkinRegistry::new(
         pushkins
@@ -187,9 +187,72 @@ pub(super) fn test_service_with_auth(
             .collect::<HashMap<_, _>>(),
     );
     let mut state = AppState::new(Arc::new(registry));
+    if notify_auth.gateway_service_did.as_deref() == Some("did:web:push.example.com") {
+        let resolution = test_gateway_service_resolution();
+        let boundary = resolution.method_history_evidence.boundary();
+        notify_auth.gateway_service_method_history_head =
+            Some(boundary.to_method_history_head.clone());
+        notify_auth.gateway_service_version_id = Some(boundary.to_version_id.clone());
+        notify_auth.gateway_service_resolution = Some(resolution.clone());
+        state.public_base_url = "https://push.example.com/".to_owned();
+        state.gateway_service_resolution = Some(Arc::new(resolution));
+    }
     state.notify_auth = notify_auth;
     state.registrations = Arc::new(crate::registrations::test_support::directory());
     Service::new(build_router(Arc::new(state)))
+}
+
+pub(super) fn test_gateway_service_resolution()
+-> arkret_models_identity::AuthenticatedServiceResolution {
+    use arkret_models_identity::{
+        DidDocument, ResolutionDidBindingEvidenceKind, ResolutionDidBindingEvidenceReceipt,
+        ResolutionMethodEvidenceBoundary, ResolutionMethodHistoryEvidence,
+    };
+
+    let did = arkret_wire::Did::new("did:web:push.example.com").unwrap();
+    let document: DidDocument = serde_json::from_value(json!({
+        "@context": ["https://www.w3.org/ns/did/v1"],
+        "id": did,
+        "verificationMethod": [{
+            "id": "did:web:push.example.com#receipt",
+            "controller": "did:web:push.example.com",
+            "type": "Multikey",
+            "publicKeyMultibase": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
+        }],
+        "authentication": ["did:web:push.example.com#receipt"],
+        "assertionMethod": ["did:web:push.example.com#receipt"],
+        "service": [{
+            "id": "did:web:push.example.com#gateway",
+            "type": "ArkretService",
+            "serviceKind": "push_gateway",
+            "serviceEndpoint": "https://push.example.com/"
+        }]
+    }))
+    .unwrap();
+    let digest = arkret_models_identity::normalized_did_document_digest(&document).unwrap();
+    let version = format!(
+        "synthetic-jcs-sha256:{}",
+        digest.as_str().trim_start_matches("sha256:")
+    );
+    arkret_models_identity::AuthenticatedServiceResolution {
+        service_id: arkret_wire::project_did_to_core_id(&did).unwrap(),
+        service_kind: arkret_wire::ServiceKind::PushGateway.as_str().to_owned(),
+        method_history_evidence: ResolutionMethodHistoryEvidence::DidWebDocument {
+            boundary: ResolutionMethodEvidenceBoundary {
+                from_method_history_head: digest.to_string(),
+                from_version_id: version.clone(),
+                to_method_history_head: digest.to_string(),
+                to_version_id: version,
+            },
+            evidence: ResolutionDidBindingEvidenceReceipt {
+                kind: ResolutionDidBindingEvidenceKind::AkDidBindingEvidenceV1,
+                method: "web".to_owned(),
+                document_digest: digest,
+                method_proofs: Vec::new(),
+            },
+        },
+        normalized_did_document: document,
+    }
 }
 
 pub(super) fn describe_test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {

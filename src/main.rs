@@ -83,6 +83,12 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         deactivation_ledger,
     ))));
     state.notify_auth = config.http.notify_auth.clone();
+    state.gateway_service_resolution = config
+        .http
+        .notify_auth
+        .gateway_service_resolution
+        .clone()
+        .map(Arc::new);
     state.registrations = Arc::new(floria::registrations::RegistrationDirectory::new(
         &config.http.registration_sources,
     )?);

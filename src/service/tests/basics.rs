@@ -110,11 +110,44 @@ async fn describe_endpoint_advertises_gateway_profile() {
     assert_eq!(body["transport_bindings"][0]["kind"], "http_json");
     assert_eq!(
         body["transport_bindings"][0]["base_url"],
-        "http://127.0.0.1:5000/"
+        "https://push.example.com/"
     );
     assert_eq!(
         body["supported_features"],
         json!(["ak.feature.notifications.v1"])
+    );
+}
+
+#[tokio::test]
+async fn gateway_publishes_exact_authenticated_service_resolution() {
+    let resolution = test_gateway_service_resolution();
+    let mut state = AppState::new(Arc::new(PushkinRegistry::new(HashMap::new())));
+    state.notify_auth.gateway_service_did = Some(resolution.normalized_did_document.id.to_string());
+    state.public_base_url = resolution.projection().unwrap().base_url;
+    state.gateway_service_resolution = Some(Arc::new(resolution.clone()));
+    let service = Service::new(build_router(Arc::new(state)));
+    let path = arkret_models_identity::canonical_service_resolution_path(&resolution.service_id);
+    let mut response = TestClient::get(format!("http://127.0.0.1{path}"))
+        .add_header(
+            "Arkret-Operation",
+            ServiceOperationId::OPEN_SERVICE_READ_RESOLUTION_V1,
+            true,
+        )
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let published = response
+        .take_json::<arkret_models_identity::AuthenticatedServiceResolution>()
+        .await
+        .unwrap();
+    assert_eq!(published, resolution);
+    published
+        .validate_shape(&published.service_id, chrono::Utc::now())
+        .unwrap();
+    assert_eq!(
+        published.projection().unwrap().base_url,
+        "https://push.example.com/"
     );
 }
 
