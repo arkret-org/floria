@@ -212,7 +212,7 @@ Two environmental constraints, recorded because they affect reproducibility:
    outright. Two such windows were observed during this task:
    - `crates/models-identity/src/signer_key_operations.rs` — three errors
      (`validate_for_selector` missing on `ResolvedSignerKey`;
-     `SignerKeyQueryResult::selector` used as a field at lines 278 and 308).
+     `SignerKeyQueryOutcome::selector` used as a field at lines 278 and 308).
    - `crates/signatures/src/detached_object.rs:134` —
      `verify_ed25519_raw_transcript_signature` not found at the crate root.
 
