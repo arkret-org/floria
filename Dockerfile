@@ -3,10 +3,8 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — Cargo dependency cache.
 #
-# Only `Cargo.toml` and `Cargo.lock` move into this stage so the dependency
-# graph compiles into the cargo cache layers. Subsequent rebuilds reuse this
-# layer until either manifest changes — typical incremental builds touch only
-# the source-build stage.
+# Root manifests and the local contracts crate move into this stage so Cargo
+# can resolve every workspace member while warming the dependency cache.
 # ---------------------------------------------------------------------------
 FROM rust:bookworm AS deps
 
@@ -14,6 +12,7 @@ WORKDIR /app
 
 COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
 
 RUN mkdir -p src \
     && echo "fn main() {}" > src/main.rs \
@@ -39,6 +38,7 @@ COPY --from=deps /usr/local/cargo /usr/local/cargo
 COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY crates ./crates
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
