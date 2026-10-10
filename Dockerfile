@@ -71,6 +71,7 @@ FROM debian:bookworm-slim AS runtime
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && for i in 1 2 3 4 5; do \
         apt-get update \
+        && apt-get upgrade --yes \
         && apt-get install --yes --no-install-recommends \
             ca-certificates \
             libnghttp2-14 \
