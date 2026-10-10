@@ -1,5 +1,9 @@
 [default]
 extend-ignore-re = [
+    # Canonical IDs, signatures and public keys are encoded fixture data.
+    "[A-Za-z0-9_-]{40,}",
+    "[A-Za-z0-9+/=]{40,}",
+    "z[1-9A-HJ-NP-Za-km-z]{20,}",
     # Git SHA fragments in comments.
     "[0-9a-f]{7,40}",
 ]

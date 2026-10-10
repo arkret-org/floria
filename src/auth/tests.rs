@@ -39,7 +39,10 @@ impl Pushkin for NoopPushkin {
     }
 }
 
-fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo::Service {
+fn test_service_with_principal(
+    principal: NotifyServicePrincipalConfig,
+) -> (salvo::Service, String) {
+    let device_id = arkret_wire::new_prefixed_uuid7("ak:device:");
     let registry = PushkinRegistry::new(HashMap::from([(
         "com.example.app".to_owned(),
         Arc::new(NoopPushkin) as Arc<dyn Pushkin>,
@@ -53,13 +56,12 @@ fn test_service_with_principal(principal: NotifyServicePrincipalConfig) -> salvo
         HashMap::from([("ak:did_core:web:sync.example.com".to_owned(), principal)]);
     state.notify_auth = notify_auth;
     state.registrations = Arc::new(crate::registrations::test_support::directory());
-    crate::registrations::test_support::device(
-        "com.example.app",
-        "accept",
-        "ak:device:0196419b-0000-7000-8000-000000000001",
-    );
+    crate::registrations::test_support::device("com.example.app", "accept", &device_id);
     state.notify_nonce_store = Some(Arc::new(NonceStore::memory(Duration::from_secs(300))));
-    salvo::Service::new(build_router(Arc::new(state)))
+    (
+        salvo::Service::new(build_router(Arc::new(state))),
+        device_id,
+    )
 }
 
 fn sign_request(
@@ -116,7 +118,7 @@ async fn http_message_signature_authenticates_notify_request() {
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
-    let service = test_service_with_principal(principal);
+    let (service, device_id) = test_service_with_principal(principal);
     let body = json!({
         "notification": {
             "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
@@ -130,7 +132,7 @@ async fn http_message_signature_authenticates_notify_request() {
 
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
+                "device_id": device_id
             }]
         }
     });
@@ -180,7 +182,7 @@ async fn mtls_profile_authenticates_notify_request() {
     principal.signature_public_key_hex = Some(public_key_hex);
     principal.require_mtls = true;
     principal.mtls_cert_fingerprints = vec!["aa:bb:cc".to_owned()];
-    let service = test_service_with_principal(principal);
+    let (service, device_id) = test_service_with_principal(principal);
     let body = json!({
         "notification": {
             "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
@@ -194,7 +196,7 @@ async fn mtls_profile_authenticates_notify_request() {
 
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
+                "device_id": device_id
             }]
         }
     });
@@ -245,7 +247,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
     principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
     principal.require_mtls = true;
-    let service = test_service_with_principal(principal);
+    let (service, device_id) = test_service_with_principal(principal);
     let body = json!({
         "notification": {
             "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
@@ -259,7 +261,7 @@ async fn mtls_profile_rejects_missing_verified_client_certificate() {
 
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
+                "device_id": device_id
             }]
         }
     });
@@ -320,7 +322,7 @@ async fn rejects_tampered_body() {
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
-    let service = test_service_with_principal(principal);
+    let (service, device_id) = test_service_with_principal(principal);
     let body = json!({
         "notification": {
             "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
@@ -334,7 +336,7 @@ async fn rejects_tampered_body() {
 
             "push_hint": "new_message",
             "devices": [{
-                "device_id": "ak:device:0196419b-0000-7000-8000-000000000001"
+                "device_id": device_id
             }]
         }
     });
@@ -390,7 +392,7 @@ async fn rejects_signature_missing_required_components() {
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some(public_key_hex);
-    let service = test_service_with_principal(principal);
+    let (service, _device_id) = test_service_with_principal(principal);
     let body = json!({"operation_id": "ak.edge.push.command.notify.v1"});
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
