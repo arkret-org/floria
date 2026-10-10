@@ -1,0 +1,12 @@
+// Starts the real service without contacting a push provider.
+http {
+    bind_addresses "127.0.0.1"
+    port 5000
+}
+apps {
+    ci.example.jpush {
+        type "jpush"
+        app_key "ci-test-key"
+        master_secret "ci-test-secret"
+    }
+}

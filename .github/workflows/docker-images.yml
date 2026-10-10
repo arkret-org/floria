@@ -55,6 +55,29 @@ jobs:
             --tag "${LOCAL_IMAGE}" \
             .
 
+      - name: Verify service startup and health probe
+        run: |
+          trap 'docker rm --force floria-ci-runtime >/dev/null 2>&1 || true' EXIT
+          docker create --name floria-ci-runtime \
+            --health-interval=1s --health-start-period=1s "${LOCAL_IMAGE}"
+          docker cp tools/docker-smoke.kdl floria-ci-runtime:/app/floria.kdl
+          docker start floria-ci-runtime
+          healthy=false
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' floria-ci-runtime)" = healthy ]; then
+              healthy=true
+              break
+            fi
+            sleep 1
+          done
+          docker logs floria-ci-runtime
+          test "$healthy" = true
+          docker exec floria-ci-runtime /usr/local/bin/floria-healthcheck
+          if docker run --rm --entrypoint /usr/local/bin/floria-healthcheck "${LOCAL_IMAGE}"; then
+            echo "Health probe unexpectedly accepted a stopped listener"
+            exit 1
+          fi
+
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
