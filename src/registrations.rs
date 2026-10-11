@@ -87,7 +87,7 @@ mod tests {
     #[tokio::test]
     async fn postgres_registration_identity_rotation_and_removal() {
         let url = std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL").expect(
-            "set FLORIA_REGISTRATION_TEST_DATABASE_URL to an isolated Soland-initialized database",
+            "set FLORIA_REGISTRATION_TEST_DATABASE_URL to an isolated Coland-initialized database",
         );
         let source = DidCoreId::new(format!(
             "ak:did_core:web:station-{}.example",
@@ -296,7 +296,7 @@ pub(crate) mod test_support {
     pub(crate) const SOURCE: &str = "ak:did_core:web:sync.example.com";
     pub(crate) const GATEWAY: &str = "http://127.0.0.1:5000/";
     fn database_url() -> String {
-        std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL").expect("set FLORIA_REGISTRATION_TEST_DATABASE_URL to a Soland-initialized isolated test database")
+        std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL").expect("set FLORIA_REGISTRATION_TEST_DATABASE_URL to a Coland-initialized isolated test database")
     }
     pub(crate) fn directory() -> RegistrationDirectory {
         RegistrationDirectory::new(&BTreeMap::from([(

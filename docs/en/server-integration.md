@@ -1,6 +1,6 @@
 # Server Integration Guide
 
-This guide covers soland or another trusted server calling floria's push
+This guide covers coland or another trusted server calling floria's push
 gateway APIs. Mobile clients do not call floria directly.
 
 ## Discovery
@@ -107,7 +107,7 @@ or malformed-request errors use the standard `ok=false` envelope with
 ## Broadcast Endpoints
 
 The internal endpoint `POST /_floria/internal/account_deactivate_fanout` is for
-soland's private broadcast path. Keep it on a private listener, service mesh,
+coland's private broadcast path. Keep it on a private listener, service mesh,
 or reverse-proxy route. It is not a mobile or third-party server API. Contact,
 Direct Conversation, Agent participation, Sidecar and operation-control gates
 are evaluated before the caller constructs the push-notify request.

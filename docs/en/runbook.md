@@ -91,7 +91,7 @@ floria can issue two profiles of notifications to a device:
 
 - **Blind wakeup** — silent / data-only notification; the device wakes
   the app, the app pulls the actual payload from the protocol layer
-  (soland / inkson), no user-visible notification is rendered by the OS.
+  (coland / inkson), no user-visible notification is rendered by the OS.
 - **Visible notification** — OS-rendered banner / sound / badge; the
   payload itself carries the displayable content.
 
@@ -170,7 +170,7 @@ Operational signals:
 floria's role in the `ak.self.call.media.exchange.issue_token.v1` strand is **not an
 issuer** in v1. The current floria HTTP router and describe endpoints do
 not expose a public `/rtc/token` minting surface. If a deployment adds a
-separate proxy in front of soland, the canonical issuer is still soland
+separate proxy in front of coland, the canonical issuer is still coland
 and floria must relay responses byte-for-byte without caching,
 re-signing, or mutating tokens. See
 [`docs/zh/media-token-issuer-cn.md`](../zh/media-token-issuer-cn.md) for

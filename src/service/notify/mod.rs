@@ -39,7 +39,7 @@ use validation::{
     validate_plaintext_identity_metadata,
 };
 
-/// Round 4 — `reason_code=historical_only` short-circuits soland's
+/// Round 4 — `reason_code=historical_only` short-circuits coland's
 /// diagnostic replay. floria MUST NOT fan the request out a second
 /// time; it answers 200 with one accepted gateway outcome per input
 /// device and no provider retries. The wire constant comes from the SDK.
@@ -303,9 +303,9 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     };
     // Round 4 (spec a77b995) — short-circuit the push pipeline when
-    // soland tells us this is a diagnostic replay
+    // coland tells us this is a diagnostic replay
     // (`reason_code=historical_only`). We answer 200 with an empty
-    // fanout body so soland's idempotency cache stays consistent but
+    // fanout body so coland's idempotency cache stays consistent but
     // no provider call is issued and no per-device dedup state is
     // touched. Any other `reason_code` value is rejected — floria
     // only honors the well-known no-op shape on the request side.

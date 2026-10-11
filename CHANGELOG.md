@@ -33,7 +33,7 @@ parent Arkret spec's round-numbering for grouping wire-breaking changes.
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (arkret-spec @ b47ff6ec)
 
-- MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token.v1` role — proxy-to-soland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
+- MEDIA-1: documented floria's `ak.self.call.media.exchange.issue_token.v1` role — proxy-to-coland for the v1 cycle; self-issue (option b) was deferred and the local media-token module has since been removed.
 - MEDIA-2: Arkret-native binding token scaffolding (`ArkretNativeBackendToken`, `ArkretNativeTokenPayload`, `ArkretNativeMediaCaps`) per `bindings/arkret-native.md` §2; signing path fails closed until R3.1.
 - MEDIA-3: LiveKit binding token scaffolding (`LiveKitBackendToken`, `LiveKitClaims`, `LiveKitVideoGrant`) — `video.recorder=false` by construction, no `metadata` / `canUpdateOwnMetadata`; HS256 JWT signing path stubbed for R3.1.
 - MEDIA-4 / MEDIA-5: TTL ceiling (`TOKEN_TTL_MAX_SECS` = 600s, default 300s), issuer-anchor / focus-strict-match guards, and canonical `participant_binding` bytes helper (`participant_binding_canonical_bytes`); Ed25519 signing fails closed pending R3.1.
@@ -121,20 +121,20 @@ Push-gateway alignment with the round-4 protocol-review commits. See
 This release closes 17 P0/P1 tasks from spec rounds 2+3. Several of the changes
 are intentionally **wire-breaking**: aggressive mode is on, there is no
 backward-compatibility shim. Operators upgrading from a pre-round-2 floria
-MUST upgrade soland and the station fanout to a matching version.
+MUST upgrade coland and the station fanout to a matching version.
 
 #### Added
 
 - **`/api/v1/internal/account_deactivate_fanout`** (T07) — POST endpoint that
-  consumes soland's `account_deactivate_fanout` broadcast. Performs per-actor
+  consumes coland's `account_deactivate_fanout` broadcast. Performs per-actor
   and per-device unbind, tracks the outcome in a small idempotent ledger
   (`deactivation::DeactivationLedger`), and returns an honest
-  `outcome=completed|partially_completed|no_op` ack so soland's fanout state
+  `outcome=completed|partially_completed|no_op` ack so coland's fanout state
   machine can advance. Sealed push channels (provider rejected the token) are
-  counted as drained and **do not** block soland's fanout — per the round-2
+  counted as drained and **do not** block coland's fanout — per the round-2
   spec contract.
 - **`/api/v1/internal/consent_revoke`** (T17) — POST endpoint that consumes
-  soland's `consent_revoke{scope=any}` broadcast. Invalidates every cached
+  coland's `consent_revoke{scope=any}` broadcast. Invalidates every cached
   push-contact PSI verdict for the affected principal in the new
   `push_contact_cache::PushContactCache` (in-memory + optional disk-overlay
   tombstone). Scoped (per-realm) revocations are rejected with
@@ -142,7 +142,7 @@ MUST upgrade soland and the station fanout to a matching version.
 - New `AppState` fields `deactivation_ledger` and `push_contact_cache` so a
   deployment can opt in to the broadcast surfaces. When unset, the internal
   endpoints answer `503 service_unavailable` so misconfigurations surface in
-  operator dashboards rather than silently swallowing soland broadcasts.
+  operator dashboards rather than silently swallowing coland broadcasts.
 
 #### Changed
 

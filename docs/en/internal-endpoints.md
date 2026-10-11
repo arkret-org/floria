@@ -9,7 +9,7 @@ different auth and rate-limit posture.
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/_floria/internal/account_deactivate_fanout` | POST | soland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
+| `/_floria/internal/account_deactivate_fanout` | POST | coland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
 | `/_floria/admin/push/status/{idempotency_key}` | GET | operator status lookup for an outstanding or recently completed `/notify` request (dedup-cache backed; 404 when unknown, 503 when the dedup cache is disabled) |
 | `/_floria/admin/push/dead-letters?limit=N` | GET | operator snapshot of the push retry dead-letter ring, newest first (`limit` defaults to 100, max 1000; 503 when `notify_retry_queue` is disabled). Envelopes are passed through the `sanitize.rs` strip-only egress list before rendering, so routing/audit fields such as `route_tokens` never appear in the response |
 
@@ -39,7 +39,7 @@ broadcast channels return `503 service_unavailable`.
 ## Rate limit posture
 
 The internal endpoint is NOT subject to `notify_rate_limits`. The
-expectation is that the upstream broadcast bus (soland) backpressures
+expectation is that the upstream broadcast bus (coland) backpressures
 on its own queue depth, and floria's role is to drain whatever shows
 up. If you need strand control, set it on the upstream bus rather than
 on floria.

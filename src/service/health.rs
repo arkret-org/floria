@@ -24,7 +24,7 @@ pub(super) async fn health(depot: &mut Depot, res: &mut Response) {
 }
 
 /// Derive the hardening snapshot from `AppState`. floria itself does
-/// not own a global "development_mode" toggle the way soland / starid
+/// not own a global "development_mode" toggle the way coland / starid
 /// do — the closest signal is the per-`NotifyAuthConfig`
 /// `production_mode` flag, which forbids dev conveniences (anonymous
 /// bypass, bearer fallback). We surface that as the

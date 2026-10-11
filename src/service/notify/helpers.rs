@@ -416,7 +416,7 @@ pub(super) fn normalized_notify_dedup_key(
 
     // Canonicalize the whole fingerprint tree via the SDK so the
     // blind-wakeup digest is byte-identical to every other arkret
-    // service (soland/inkson/chime). `canonical_json_bytes` recursively
+    // service (coland/inkson/chime). `canonical_json_bytes` recursively
     // sorts object keys and emits the v1 canonical encoding, replacing
     // floria's former local `canonical_json_value` helper.
     arkret_wire::canonical::canonical_json_bytes(&Value::Object(normalized))

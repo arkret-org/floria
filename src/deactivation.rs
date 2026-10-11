@@ -1,17 +1,17 @@
 //! Account-deactivation fanout integration for the deactivation protocol.
 //!
-//! soland broadcasts an `account_deactivate_fanout` event to every
+//! coland broadcasts an `account_deactivate_fanout` event to every
 //! downstream service-bound subscriber when a Station starts
 //! tearing down a principal's footprint. floria receives the broadcast,
 //! drains every queued to-device push for the affected
 //! `(actor, device)` queue partitions, then reports the fanout outcome back to
-//! soland so soland can advance its own
+//! coland so coland can advance its own
 //! `ak.account.deactivate.fanout_state` machine.
 //!
 //! The wire shape is the audited `floria-contracts` crate (workspace member
-//! `crates/floria-contracts`), shared with soland as the producer: per-actor +
+//! `crates/floria-contracts`), shared with coland as the producer: per-actor +
 //! per-device unbind targets, an idempotent `fanout_id`, and an
-//! `outcome` enum that includes `partially_completed` so soland never
+//! `outcome` enum that includes `partially_completed` so coland never
 //! has to guess whether floria saw the full set.
 //!
 //! When configured with PostgreSQL, floria drains the local
@@ -120,7 +120,7 @@ impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
 
 /// Idempotent in-memory ledger of which fanouts we've already handled.
 ///
-/// Keyed by `(fanout_id)` since soland guarantees that id is stable
+/// Keyed by `(fanout_id)` since coland guarantees that id is stable
 /// across retries.
 pub struct DeactivationLedger {
     inner: Mutex<DeactivationLedgerInner>,

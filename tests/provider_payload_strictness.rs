@@ -731,7 +731,7 @@ fn test_registration_directory_for_device(
     opt_in: bool,
 ) -> floria::registrations::RegistrationDirectory {
     let database_url = std::env::var("FLORIA_REGISTRATION_TEST_DATABASE_URL")
-        .expect("set an isolated Soland-initialized registration test database");
+        .expect("set an isolated Coland-initialized registration test database");
     let source: arkret_wire::DidCoreId = "ak:did_core:web:sync.example.com".parse().unwrap();
     let record: arkret_models_integration::PushRegistrationRecord = serde_json::from_value(json!({
         "registration_id": if opt_in {"push_registration:provider-tests"} else {"push_registration:provider-no-visible-consent"}, "account_id":{"principal_id":"ak:did_core:web:provider-fixture.example", "station_id":source},

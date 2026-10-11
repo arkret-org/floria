@@ -94,17 +94,17 @@ jobs:
         with:
           components: rustfmt
 
-      - name: Checkout Soland registration schema
+      - name: Checkout Coland registration schema
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.repository_owner }}/soland
-          path: soland
+          repository: ${{ github.repository_owner }}/coland
+          path: coland
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - name: Initialize registration test database
         run: >-
           psql "$FLORIA_REGISTRATION_TEST_DATABASE_URL" --set ON_ERROR_STOP=1
-          --file ../soland/crates/storage-postgres/migrations/00000000000000_initial/up.sql
+          --file ../coland/crates/storage-postgres/migrations/00000000000000_initial/up.sql
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2

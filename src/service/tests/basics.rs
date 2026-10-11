@@ -669,7 +669,7 @@ async fn readyz_endpoint_fails_when_registry_is_empty() {
 }
 
 /// T8.3 — `/health` MUST return a JSON body with a `hardening` block
-/// (production deployment checklist snapshot) so the sodmin
+/// (production deployment checklist snapshot) so the codmin
 /// `/hardening` dashboard can aggregate it.
 #[tokio::test]
 async fn healthz_exposes_hardening_status() {

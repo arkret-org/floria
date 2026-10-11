@@ -144,7 +144,7 @@ field or a protocol-only name.
   the carrier that makes `push-notifications.md` §3.3/§3.4's requirement
   reachable — "注册更新、注销、设备撤销、过期与 provider 失效回收 MUST 对
   Gateway 的后续接管生效" — because without it a revocation decision has no
-  committed reference to point at. In the Soland-initialised schema the column
+  committed reference to point at. In the Coland-initialised schema the column
   is `jsonb NOT NULL` (verified directly against the test database), so any
   fixture that omits it fails at insert time; the fixtures had to grow the
   column the moment the Station started writing it.
@@ -225,7 +225,7 @@ Two environmental constraints, recorded because they affect reproducibility:
    it. Both 273/0 results above were taken in windows where floria's own SDK
    subset compiled. **Nothing in the SDK was changed to obtain them.**
 2. **Postgres is required.** The registration regression needs a live database
-   initialised with Soland's schema. On this machine
+   initialised with Coland's schema. On this machine
    `postgres://postgres:root@127.0.0.1:5432/floria_reg_test` already carried the
    schema, including `public.push_devices.device_authorization jsonb NOT NULL`.
    A checkout without that database cannot run a complete suite.

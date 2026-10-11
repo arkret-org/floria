@@ -56,11 +56,11 @@ use retry_queue::RetryQueue;
 // Those gates are evaluated by the upstream Sync / notification service before
 // it constructs the closed push-notify envelope.
 //
-// `deactivation_ledger` accepts `account_deactivate_fanout` events from soland,
+// `deactivation_ledger` accepts `account_deactivate_fanout` events from coland,
 // performs per-actor + per-device unbinds, and tracks whether the fanout completed
 // fully or partially.
 //
-// It is optional so deployments that do not subscribe to the soland
+// It is optional so deployments that do not subscribe to the coland
 // broadcast bus can leave it unset; the endpoint then answers
 // `503 service_unavailable` so misconfigurations surface in operator dashboards
 // rather than silently swallowing broadcasts.

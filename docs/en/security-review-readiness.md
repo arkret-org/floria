@@ -115,7 +115,7 @@ implemented:
    `/_arkret/describe` does not advertise an RTC/media token
    self-issue feature, and the production router does not expose a
    public `/rtc/token` minting route. The canonical issuer remains
-   soland unless a future release wires a real media-service keystore.
+   coland unless a future release wires a real media-service keystore.
 
 ## Known Limitations
 

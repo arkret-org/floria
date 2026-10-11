@@ -1,7 +1,7 @@
 //! Wire contract for floria's private internal account-lifecycle endpoints.
 //!
 //! `/_floria/internal/*` is an implementation-private (non-`ak.`) rail between
-//! a Station (soland) and the floria push gateway. Per the
+//! a Station (coland) and the floria push gateway. Per the
 //! account-lifecycle spec §7.1 Push-route completion criterion, the Station
 //! MUST notify the gateway over a registered internal channel and obtain a
 //! processing result before the Push-route fanout row counts as complete.
@@ -16,7 +16,7 @@
 //! - The request ([`AccountDeactivateFanoutBroadcast`]) is `deny_unknown_fields`: the consumer
 //!   (floria) fails closed on producer drift, so new request fields require a coordinated release.
 //! - The response ([`AccountDeactivateFanoutAck`]) intentionally tolerates unknown fields on the
-//!   consumer (soland) side, so the gateway may add ack fields without breaking older producers.
+//!   consumer (coland) side, so the gateway may add ack fields without breaking older producers.
 
 use serde::{Deserialize, Serialize};
 

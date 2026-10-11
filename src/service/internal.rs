@@ -1,6 +1,6 @@
 //! Internal account-lifecycle broadcast endpoints.
 //!
-//! These routes are intended for the soland-broadcast channel (or an
+//! These routes are intended for the coland-broadcast channel (or an
 //! equivalent in-process message bus). They are exposed under
 //! `/_floria/internal/...` and intentionally do NOT share the public
 //! `/_arkret/edge/push/notify` request shape. They are protected by the
@@ -323,8 +323,8 @@ pub(super) async fn account_deactivate_fanout(
 
     let Some(bus) = state.broadcast_bus.as_ref() else {
         // The endpoint exists even when the ledger isn't wired up so
-        // soland can detect misconfigurations early. We answer 503 so
-        // soland retries rather than reporting fanout_complete on a
+        // coland can detect misconfigurations early. We answer 503 so
+        // coland retries rather than reporting fanout_complete on a
         // dropped broadcast.
         finish_error(
             res,
@@ -364,7 +364,7 @@ pub(super) async fn account_deactivate_fanout(
     );
 
     // Note: even when `outcome == PartiallyCompleted` we return 200 OK
-    // with an honest ack body — the partial signal is for soland's
+    // with an honest ack body — the partial signal is for coland's
     // bookkeeping, not an HTTP transport error.
     finish_json(res, StatusCode::OK, ack, started);
 }

@@ -46,7 +46,7 @@
     },
     "audit": {
       "additionalProperties": false,
-      "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the soland audit endpoint.",
+      "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the coland audit endpoint.",
       "properties": {
         "backend": {
           "default": "disabled",

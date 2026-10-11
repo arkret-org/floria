@@ -11,7 +11,7 @@ manifests below show the StatefulSet pattern that anchors them.
 ```
 +----------------+        +-----------------+        +---------------+
 | floria (Deploy)| -----> | redis (StatefulSet, HA) | <----+ chime / |
-+----------------+        +-----------------+        |   sodmin    |
++----------------+        +-----------------+        |   codmin    |
         |                                            +---------------+
         v
 +----------------+

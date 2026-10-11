@@ -114,7 +114,7 @@ The config format is detected by file extension:
 - `.yaml` / `.yml` YAML
 
 See [docs/en/configuration.md](./docs/en/configuration.md) for the full configuration reference.
-See [docs/en/server-integration.md](./docs/en/server-integration.md) for soland / server-side `/notify` integration.
+See [docs/en/server-integration.md](./docs/en/server-integration.md) for coland / server-side `/notify` integration.
 See [docs/en/mobile-integration.md](./docs/en/mobile-integration.md) for chime / mobile-client integration boundaries.
 See [docs/en/credential-rotation.md](./docs/en/credential-rotation.md) for the credential rotation runbook.
 See [docs/en/reverse-proxy.md](./docs/en/reverse-proxy.md) for the TLS-termination / mTLS reverse-proxy reference (sample nginx and Caddy configs in `examples/reverse-proxy/`).
@@ -207,7 +207,7 @@ See [examples/compose.yml](./examples/compose.yml) for full instructions.
 
 Before exposing floria to the public internet, walk every item below.
 The same list will be computed at runtime and surfaced on
-`/health.hardening` so sodmin's `/hardening` dashboard can flag failing
+`/health.hardening` so codmin's `/hardening` dashboard can flag failing
 checks across the whole fleet (see T8.3 for the cross-service shape).
 
 - [ ] `http.notify_auth.production_mode true` (surfaced as `hardening.admin_auth_mode`)
@@ -228,14 +228,14 @@ Licensed under Apache 2.0. See `LICENSE`.
 
 Notify devices contain only `device_id`. Floria resolves the provider token and
 visible-notification opt-in from the Station's current durable registration.
-For a deployment sharing a trusted PostgreSQL boundary with Soland, configure:
+For a deployment sharing a trusted PostgreSQL boundary with Coland, configure:
 
 ```yaml
 http:
   public_base_url: https://push.example/
   registration_sources:
     "ak:did_core:web:station.example":
-      postgres_url: "postgresql://push_registration_reader@db/soland"
+      postgres_url: "postgresql://push_registration_reader@db/coland"
   provider_timing_bucket_seconds: 60
 ```
 
@@ -254,4 +254,4 @@ transport and is not interoperable through notify alone.
 
 The `postgres_registration_identity_rotation_and_removal` regression requires
 `FLORIA_REGISTRATION_TEST_DATABASE_URL` naming an isolated database initialized
-with Soland's initial schema. It never creates SQL files or copies that schema.
+with Coland's initial schema. It never creates SQL files or copies that schema.

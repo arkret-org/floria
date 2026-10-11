@@ -64,7 +64,7 @@ fn audit_schema() -> Value {
     serde_json::json!({
         "type": "object",
         "additionalProperties": false,
-        "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the soland audit endpoint.",
+        "description": "Audit sink for policy-access and rejected-device events. disabled keeps audit events unavailable; file writes local JSONL; http POSTs JSON to the coland audit endpoint.",
         "properties": {
             "backend": {"type": "string", "enum": ["disabled", "file", "http"], "default": "disabled"},
             "file_path": {
