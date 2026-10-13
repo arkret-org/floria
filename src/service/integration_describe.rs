@@ -69,7 +69,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
             "canonical_discovery": {
                 "describe": {
                     "path": "/_arkret/describe",
-                    "operation_bundle": "ak.operation_bundle.push_gateway.describe.v1"
+                    "operation_bundle": arkret_wire::OperationBundleDescriptor::PUSH_GATEWAY_DESCRIBE_V1
                 },
                 "notify": {
                     "path": "/_arkret/edge/push/notify",

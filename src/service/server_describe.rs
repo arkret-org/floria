@@ -14,7 +14,7 @@ use crate::AppState;
 use crate::config::NotifyAuthConfig;
 
 pub(super) const REGISTRATION_HANDOFF_BUNDLE_ID: &str =
-    "ak.operation_bundle.push_gateway.registration_handoff.v1";
+    arkret_wire::OperationBundleDescriptor::PUSH_GATEWAY_REGISTRATION_HANDOFF_V1;
 
 /// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
 /// `ServiceDescribe` (`arkret_models_discovery::ServiceDescribe` = `ServiceDescribe`)
@@ -188,8 +188,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         return;
     };
     let mut supported_operation_bundles = vec![
-        "ak.operation_bundle.push_gateway.describe.v1".to_owned(),
-        "ak.operation_bundle.push_gateway.http_notify.v1".to_owned(),
+        arkret_wire::OperationBundleDescriptor::PUSH_GATEWAY_DESCRIBE_V1.to_owned(),
+        arkret_wire::OperationBundleDescriptor::PUSH_GATEWAY_HTTP_NOTIFY_V1.to_owned(),
     ];
     if let Some(bundle) = registration_handoff_bundle_if_ready(
         state.registration_handoff.is_some() && state.gateway_service_resolution.is_some(),
@@ -215,7 +215,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             base_url: state.public_base_url.clone(),
             extension_profile_required: (),
         }],
-        supported_features: vec!["ak.feature.notifications.v1".to_owned()],
+        supported_features: vec![arkret_wire::FeatureDescriptor::NOTIFICATIONS_V1.to_owned()],
         // A push gateway claims no Calendar profile, so it advertises no
         // executable TZDB release set. `service-describe.schema.json` requires
         // this field only for a service that claims one.
