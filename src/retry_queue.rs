@@ -161,8 +161,8 @@ impl DeadLetterPgOverlay {
              )",
             table = self.table.as_sql()
         );
-        self.pool.with_client(|client| {
-            client.batch_execute(&stmt).with_context(|| {
+        self.pool.with_client(async |client| {
+            client.batch_execute(&stmt).await.with_context(|| {
                 format!(
                     "deadletter PG: failed to create table {}",
                     self.table.as_sql()
@@ -180,7 +180,7 @@ impl DeadLetterPgOverlay {
             "INSERT INTO {table} (request_id, pushkin, last_error) VALUES ($1, $2, $3)",
             table = self.table.as_sql()
         );
-        if let Err(error) = self.pool.with_client(|client| {
+        if let Err(error) = self.pool.with_client(async |client| {
             client
                 .execute(
                     stmt.as_str(),
@@ -190,6 +190,7 @@ impl DeadLetterPgOverlay {
                         &envelope.last_error,
                     ],
                 )
+                .await
                 .map(|_| ())
                 .context("deadletter PG: insert failed")
         }) {

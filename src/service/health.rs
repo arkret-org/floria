@@ -120,7 +120,10 @@ pub(super) async fn ready(depot: &mut Depot, res: &mut Response) {
         res.render(Text::Plain("application state missing"));
         return;
     };
+    run_readiness(Arc::clone(state), res, ready_response).await;
+}
 
+fn ready_response(state: &AppState, res: &mut Response) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref()
         && let Err(error) = deduplicator.ready()
     {
@@ -151,7 +154,10 @@ pub(super) async fn readyz(depot: &mut Depot, res: &mut Response) {
         })));
         return;
     };
+    run_readiness(Arc::clone(state), res, readyz_response).await;
+}
 
+fn readyz_response(state: &AppState, res: &mut Response) {
     let provider_names = state.registry.provider_names();
     let provider_registry_ok = !provider_names.is_empty();
     let mut dependency_checks = Vec::new();
@@ -265,5 +271,24 @@ fn dependency_check(
             }),
             false,
         ),
+    }
+}
+
+async fn run_readiness(
+    state: Arc<AppState>,
+    response: &mut Response,
+    check: fn(&AppState, &mut Response),
+) {
+    let operation = tokio::task::spawn_blocking(move || {
+        let mut response = Response::new();
+        check(&state, &mut response);
+        response
+    });
+    match tokio::time::timeout(std::time::Duration::from_secs(5), operation).await {
+        Ok(Ok(result)) => *response = result,
+        _ => {
+            response.status_code(StatusCode::SERVICE_UNAVAILABLE);
+            response.render(Json(json!({"ok":false,"service":"floria","error":"dependency readiness timed out or failed"})));
+        }
     }
 }

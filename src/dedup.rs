@@ -854,13 +854,13 @@ mod tests {
             dedup.insert_success(&key, &fingerprint, sample_response(index));
 
             let response_key = backend.response_key(&key);
-            assert_redis_ttl(&mut connection, &response_key, ttl)?;
+            assert_redis_ttl(&mut *connection, &response_key, ttl)?;
             keys.push(response_key);
 
             let push_key = format!("push-key-{index}");
             dedup.mark_delivered_device(&key, "com.example.mobile", &push_key);
             let delivered_key = backend.delivered_key(&key, "com.example.mobile", &push_key);
-            assert_redis_ttl(&mut connection, &delivered_key, ttl)?;
+            assert_redis_ttl(&mut *connection, &delivered_key, ttl)?;
             keys.push(delivered_key);
         }
 
@@ -886,12 +886,13 @@ mod tests {
     }
 
     fn assert_redis_ttl(
-        connection: &mut redis::Connection,
+        connection: &mut dyn redis::ConnectionLike,
         key: &str,
         expected: Duration,
     ) -> Result<()> {
-        let actual = connection
-            .ttl::<_, i64>(key)
+        let actual = redis::cmd("TTL")
+            .arg(key)
+            .query::<i64>(connection)
             .with_context(|| format!("failed to query TTL for {key}"))?;
         let expected = ttl_seconds(expected);
         anyhow::ensure!(

@@ -58,11 +58,11 @@ impl RegistrationDirectory {
         let target = target.clone();
         let device = device.clone();
         let gateway = gateway.to_owned();
-        tokio::task::spawn_blocking(move || pool.with_client(|client| {
+        tokio::task::spawn_blocking(move || pool.with_client(async |client| {
             // The configured database is inside the Station's trusted deployment
             // boundary. This query never creates or repairs registrations.
-            let mut transaction = client.build_transaction().read_only(true).start()?;
-            let rows = transaction.query("SELECT payload::text FROM public.push_devices WHERE payload->'account_id'->>'station_id' = $1 AND device_id = $2 AND push_gateway = $3", &[&source.as_str(), &device.as_str(), &gateway])?;
+            let transaction = client.build_transaction().read_only(true).start().await?;
+            let rows = transaction.query("SELECT payload::text FROM public.push_devices WHERE payload->'account_id'->>'station_id' = $1 AND device_id = $2 AND push_gateway = $3", &[&source.as_str(), &device.as_str(), &gateway]).await?;
             let at = chrono::Utc::now();
             let mut selected = None;
             for row in rows {
@@ -74,7 +74,7 @@ impl RegistrationDirectory {
                 if !registration.accepts_target(&target, at) { continue; }
                 if selected.replace(registration).is_some() { bail!("ambiguous registration for push target/device"); }
             }
-            transaction.commit()?;
+            transaction.commit().await?;
             Ok(selected)
         })).await.context("registration lookup task failed")?
     }
@@ -139,7 +139,7 @@ mod tests {
             }))
             .unwrap();
             test_support::database(|| {
-                pool.with_client(|client| {
+                pool.with_client(async |client| {
                 client.execute(
 "INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET push_key=EXCLUDED.push_key,payload=EXCLUDED.payload",
 &[
@@ -152,7 +152,7 @@ mod tests {
 &payload,
 &authorization
 ],
-)?;
+).await?;
                 Ok(())
             })
 .unwrap()
@@ -211,11 +211,11 @@ mod tests {
         // A zero-length key violates the registered wire bound. Notify
         // carries no replacement token and cannot repair this registration.
         test_support::database(|| {
-            pool.with_client(|client| {
+            pool.with_client(async |client| {
                 client.execute(
                     "UPDATE public.push_devices SET payload=jsonb_set(payload,'{push_key}','\"\"'::jsonb) WHERE id=$1",
                     &[&record.registration_id.as_str()],
-                )?;
+                ).await?;
                 Ok(())
             }).unwrap()
         });
@@ -261,11 +261,13 @@ mod tests {
                 .is_none()
         );
         test_support::database(|| {
-            pool.with_client(|client| {
-                client.execute(
-                    "DELETE FROM public.push_devices WHERE id=$1",
-                    &[&record.registration_id.as_str()],
-                )?;
+            pool.with_client(async |client| {
+                client
+                    .execute(
+                        "DELETE FROM public.push_devices WHERE id=$1",
+                        &[&record.registration_id.as_str()],
+                    )
+                    .await?;
                 Ok(())
             })
             .unwrap()
@@ -342,7 +344,7 @@ pub(crate) mod test_support {
         let payload = serde_json::to_string(&record).unwrap();
         database(|| {
             PostgresPool::new(&database_url(), "push fixture registration").unwrap()
-.with_client(|client| {
+.with_client(async |client| {
             client.execute(
 "INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET actor_id=EXCLUDED.actor_id,device_id=EXCLUDED.device_id,push_gateway=EXCLUDED.push_gateway,push_key=EXCLUDED.push_key,app_id=EXCLUDED.app_id,payload=EXCLUDED.payload",
 &[
@@ -355,7 +357,7 @@ pub(crate) mod test_support {
 &payload,
 &authorization
 ],
-)?;
+).await?;
             Ok(())
         })
 .unwrap()

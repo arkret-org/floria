@@ -104,9 +104,10 @@ impl DeactivationQueueDrain for PostgresDeactivationQueueDrain {
                 clauses.join(" OR ")
             )
         };
-        self.pool.with_client(|client| {
+        self.pool.with_client(async |client| {
             client
                 .execute(&sql, &params)
+                .await
                 .with_context(|| {
                     format!(
                         "failed to drain deactivation queue table {}",

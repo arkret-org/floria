@@ -124,7 +124,7 @@ prometheus.workspace = true
 r2d2.workspace = true
 rand.workspace = true
 getrandom.workspace = true
-redis = { workspace = true, default-features = false }
+redis = { workspace = true, default-features = false, features = ["tokio-comp"] }
 reqwest = { workspace = true, default-features = false, features = ["form", "http2", "json", "rustls-no-provider"] }
 rustls.workspace = true
 salvo = { workspace = true, features = ["affix-state", "fix-http1-request-uri", "http1", "http2", "logging", "rfc9457", "server", "server-handle"] }
@@ -138,6 +138,7 @@ subtle.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-postgres-rustls.workspace = true
+tokio-postgres = "0.7"
 tracing.workspace = true
 tracing-opentelemetry = { workspace = true, default-features = false, features = ["tracing-log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json", "registry"] }

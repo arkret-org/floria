@@ -130,9 +130,10 @@ impl RegistrationHandoffStore {
             )",
             table = self.table.as_sql(),
         );
-        self.pool.with_client(|client| {
+        self.pool.with_client(async |client| {
             client
                 .batch_execute(&statement)
+                .await
                 .context("failed to initialize registration handoff table")
         })
     }
@@ -209,18 +210,18 @@ impl RegistrationHandoffStore {
         device: &arkret_wire::DeviceId,
         gateway_url: &str,
     ) -> Result<Option<PushRegistrationRecord>> {
-        self.pool.with_client(|client| {
+        self.pool.with_client(async |client| {
             let mut transaction = client
                 .build_transaction()
                 .isolation_level(postgres::IsolationLevel::Serializable)
-                .start()?;
+                .start().await?;
             let rows = transaction.query(
                 &format!(
                     "SELECT registration_id,route_ciphertext FROM {table} WHERE source_station_id=$1 AND state='active' AND push_target_id=$2 AND device_id=$3 AND successor_registration_id IS NULL FOR UPDATE",
                     table = self.table.as_sql(),
                 ),
                 &[&source.as_str(), &target.as_str(), &device.as_str()],
-            )?;
+            ).await?;
             let at = Utc::now();
             let mut selected = None;
             for row in rows {
@@ -238,7 +239,7 @@ impl RegistrationHandoffStore {
                         target,
                         device,
                         at,
-                    )?;
+                    ).await?;
                     continue;
                 }
                 let registration = PushRegistrationRecord {
@@ -264,7 +265,7 @@ impl RegistrationHandoffStore {
                     bail!("ambiguous active handoff for push target/device");
                 }
             }
-            transaction.commit()?;
+            transaction.commit().await?;
             Ok(selected)
         })
     }
@@ -276,11 +277,12 @@ impl RegistrationHandoffStore {
         target: &arkret_wire::PushTargetId,
         device: &arkret_wire::DeviceId,
     ) -> Result<()> {
-        self.pool.with_client(|client| {
+        self.pool.with_client(async |client| {
             let mut transaction = client
                 .build_transaction()
                 .isolation_level(postgres::IsolationLevel::Serializable)
-                .start()?;
+                .start()
+                .await?;
             tombstone_route(
                 &mut transaction,
                 self.table.as_sql(),
@@ -289,8 +291,9 @@ impl RegistrationHandoffStore {
                 target,
                 device,
                 Utc::now(),
-            )?;
-            transaction.commit()?;
+            )
+            .await?;
+            transaction.commit().await?;
             Ok(())
         })
     }
@@ -304,11 +307,11 @@ impl RegistrationHandoffStore {
             ApplyRegistrationError::Storage(anyhow::anyhow!("failed to digest handoff: {error}"))
         })?;
         self.pool
-            .with_client(|client| {
+            .with_client(async |client| {
                 let mut transaction = client
                     .build_transaction()
                     .isolation_level(postgres::IsolationLevel::Serializable)
-                    .start()?;
+                    .start().await?;
                 let route_lock_key = advisory_lock_key(
                     "route",
                     [
@@ -320,7 +323,7 @@ impl RegistrationHandoffStore {
                 transaction.query_one(
                     "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
                     &[&route_lock_key],
-                )?;
+                ).await?;
                 let mut lock_ids = vec![request.registration_id().as_str()];
                 if let PushRegistrationHandoffRequestBody::Active {
                     supersedes_registration_id: Some(predecessor_id),
@@ -338,21 +341,21 @@ impl RegistrationHandoffStore {
                     transaction.query_one(
                         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
                         &[&lock_key],
-                    )?;
+                    ).await?;
                 }
                 let existing = load_existing(
                     &mut transaction,
                     self.table.as_sql(),
                     source,
                     request.registration_id().as_str(),
-                )?;
+                ).await?;
                 if let Some(existing) = existing {
                     if existing.request_digest == request_digest.as_str()
                         && existing.state == request.state().as_str()
                     {
                         let receipt = serde_json::from_str(&existing.receipt_json)
                             .context("invalid durable registration receipt")?;
-                        transaction.commit()?;
+                        transaction.commit().await?;
                         return Ok(PushRegistrationHandoffOutcome { receipt });
                     }
                     if !matches!(request, PushRegistrationHandoffRequestBody::Revoked { .. })
@@ -378,8 +381,8 @@ impl RegistrationHandoffStore {
                             &receipt_json,
                             &arkret_canonical::format_timestamp_canonical(receipt.stored_at),
                         ],
-                    )?;
-                    transaction.commit()?;
+                    ).await?;
+                    transaction.commit().await?;
                     return Ok(PushRegistrationHandoffOutcome { receipt });
                 }
 
@@ -404,7 +407,7 @@ impl RegistrationHandoffStore {
                                     &request.push_target_id().as_str(),
                                     &request.device_id().as_str(),
                                 ],
-                            )?
+                            ).await?
                             .into_iter()
                             .map(|row| row.get::<_, String>(0))
                             .collect::<Vec<_>>();
@@ -419,7 +422,7 @@ impl RegistrationHandoffStore {
                                 self.table.as_sql(),
                                 source,
                                 predecessor_id.as_str(),
-                            )?
+                            ).await?
                             .ok_or(ConflictMarker)?;
                             if predecessor.state != PushRegistrationHandoffState::Active.as_str()
                                 || predecessor.device_id != request.device_id().as_str()
@@ -438,7 +441,7 @@ impl RegistrationHandoffStore {
                                     &predecessor_id.as_str(),
                                     &request.registration_id().as_str(),
                                 ],
-                            )?;
+                            ).await?;
                         } else if !active_registration_ids.is_empty() {
                             bail!(ConflictMarker);
                         }
@@ -471,8 +474,8 @@ impl RegistrationHandoffStore {
                         &receipt_json,
                         &arkret_canonical::format_timestamp_canonical(receipt.stored_at),
                     ],
-                )?;
-                transaction.commit()?;
+                ).await?;
+                transaction.commit().await?;
                 Ok(PushRegistrationHandoffOutcome { receipt })
             })
             .map_err(|error| {
@@ -608,8 +611,8 @@ fn advisory_lock_key<'a>(namespace: &str, parts: impl IntoIterator<Item = &'a st
     key
 }
 
-fn load_existing(
-    transaction: &mut postgres::Transaction<'_>,
+async fn load_existing(
+    transaction: &mut tokio_postgres::Transaction<'_>,
     table: &str,
     source: &DidCoreId,
     registration_id: &str,
@@ -620,7 +623,7 @@ fn load_existing(
                 "SELECT request_digest,state,push_target_id,device_id,receipt_json,successor_registration_id FROM {table} WHERE source_station_id=$1 AND registration_id=$2 FOR UPDATE"
             ),
             &[&source.as_str(), &registration_id],
-        )?
+        ).await?
         .map(|row| {
             Ok(ExistingRegistration {
                 request_digest: row.get(0),
@@ -634,8 +637,8 @@ fn load_existing(
         .transpose()
 }
 
-fn tombstone_route(
-    transaction: &mut postgres::Transaction<'_>,
+async fn tombstone_route(
+    transaction: &mut tokio_postgres::Transaction<'_>,
     table: &str,
     source: &DidCoreId,
     registration_id: &str,
@@ -654,7 +657,7 @@ fn tombstone_route(
             &device.as_str(),
             &arkret_canonical::format_timestamp_canonical(at),
         ],
-    )?;
+    ).await?;
     Ok(())
 }
 

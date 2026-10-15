@@ -759,7 +759,7 @@ fn test_registration_directory_for_device(
     std::thread::scope(|scope| {
         scope.spawn(|| {
     floria::postgres_support::PostgresPool::new(&database_url, "provider test registration").unwrap()
-.with_client(|client| {
+.with_client(async |client| {
         client.execute(
 "INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload",
 &[
@@ -772,7 +772,7 @@ fn test_registration_directory_for_device(
 &payload,
 &authorization
 ],
-)?;
+).await?;
         Ok(())
     })
 .unwrap();
