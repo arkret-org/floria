@@ -73,6 +73,8 @@ async fn describe_endpoint_advertises_gateway_profile() {
     // matrix (operation id, providers, plaintext class, auth modes) is
     // folded into `limits` under `x_floria_*` extension keys.
     assert_eq!(body["service_kind"], json!("push_gateway"));
+    assert!(body.get("privacy_derivation").is_none());
+    assert!(body["limits"].get("x_floria_privacy_derivation").is_none());
     assert_eq!(
         body["limits"]["x_floria_operation_id"],
         json!(ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1)

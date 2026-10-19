@@ -38,7 +38,7 @@ pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response)
                 path: "/_arkret/describe".to_owned(),
                 contract: ProfileId::PUSH_GATEWAY_V1.to_owned(),
                 stability: "active".to_owned(),
-                todo: "profiles are self-claimed only (no cotest verifier is wired in, so verified_profiles is always empty) and trust_domain / privacy_derivation still emit deployment placeholders.".to_owned(),
+                todo: "profiles are self-claimed only (no cotest verifier is wired in, so verified_profiles is always empty) and trust_domain still emits deployment placeholders.".to_owned(),
             },
             IntegrationSurfaceDescriptor {
                 name: "ready".to_owned(),

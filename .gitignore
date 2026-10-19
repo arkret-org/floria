@@ -5,3 +5,6 @@
 
 .claude/
 *.log
+
+# Local verification evidence and build metadata.
+/artifacts/

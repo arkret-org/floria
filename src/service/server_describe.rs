@@ -24,13 +24,6 @@ pub(super) const REGISTRATION_HANDOFF_BUNDLE_ID: &str =
 /// `limits`/`supported_features`/`auth_metadata` fields and `x_floria_*`
 /// extension keys — never as bespoke top-level fields. The product's
 /// private describe surface stays on `/_floria/*`.
-///
-/// DEFERRED (deployment-input gap): the SDK can express the canonical
-/// `privacy_derivation.push_target_id` block, but Floria does not yet own
-/// configured salt-epoch and rotation metadata. It is intentionally not
-/// fabricated here. The non-authoritative derivation profile hint remains
-/// mirrored under `limits.x_floria_privacy_derivation` until those inputs
-/// are available.
 fn floria_service_did(auth: &NotifyAuthConfig) -> arkret_wire::Result<Did> {
     let raw = auth.gateway_service_did.clone().ok_or_else(|| {
         arkret_wire::WireError::Protocol(
@@ -143,19 +136,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         "x_floria_rate_limit_scopes".to_owned(),
         json!(rate_limit_scopes),
     );
-    // DEFERRED mirror — see module doc: canonical epoch/rotation deployment
-    // inputs are not configured yet, so only the profile hint is surfaced
-    // under Floria's extension namespace.
-    limits.insert(
-        "x_floria_privacy_derivation".to_owned(),
-        json!({
-            "push_target_id": {
-                "derivation_profile": "ak.push_target_id.hmac_sha256.v1",
-                "secret_scope": "per_service"
-            }
-        }),
-    );
-
     // The floria-specific mode list rides in the `x_*`-only `extra` map.
     let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal();
     auth_metadata
