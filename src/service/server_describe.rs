@@ -225,7 +225,6 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
             extensions: limits.into_iter().collect(),
         },
         plaintext_visibility,
-        privacy_derivation: None,
         receive_policy_constraints: None,
         verified_profiles,
         interop_surfaces: vec![],
