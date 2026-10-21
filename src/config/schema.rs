@@ -28,7 +28,6 @@ pub fn config_json_schema() -> Value {
         "properties": {
             "http": http_schema(),
             "audit": audit_schema(),
-            "storage": storage_schema(),
             "log": log_schema(),
             "metrics": metrics_schema(),
             "proxy": {"type": ["string", "null"], "description": "Outbound proxy URL for APNs/FCM/WebPush. Falls back to HTTPS_PROXY env."},
@@ -36,25 +35,6 @@ pub fn config_json_schema() -> Value {
                 "type": "object",
                 "additionalProperties": app_config_schema(),
                 "description": "Map of app identifiers to provider configuration."
-            }
-        }
-    })
-}
-
-fn storage_schema() -> Value {
-    serde_json::json!({
-        "type": "object",
-        "additionalProperties": false,
-        "description": "Optional PostgreSQL storage for deactivation queue draining.",
-        "properties": {
-            "postgres_url": {
-                "type": ["string", "null"],
-                "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping is in-memory only."
-            },
-            "deactivation_queue_table": {
-                "type": "string",
-                "default": "floria_push_delivery_queue",
-                "description": "Table drained by account_deactivate_fanout. Must be `table` or `schema.table` with simple SQL identifiers."
             }
         }
     })

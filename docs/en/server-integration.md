@@ -104,10 +104,15 @@ receipts, and private provider errors never appear in this response. Transport
 or malformed-request errors use the standard `ok=false` envelope with
 `error.code`, `error.message`, and a request id when available.
 
-## Broadcast Endpoints
+## Account deactivation
 
-The internal endpoint `POST /_floria/internal/account_deactivate_fanout` is for
-coland's private broadcast path. Keep it on a private listener, service mesh,
-or reverse-proxy route. It is not a mobile or third-party server API. Contact,
-Direct Conversation, Agent participation, Sidecar and operation-control gates
-are evaluated before the caller constructs the push-notify request.
+Stations revoke each formal registration through the signed
+`POST /_arkret/edge/push/registrations:apply` operation with `state: revoked`.
+The closed SDK request contains an opaque registration id, pairwise push target
+and Device id. It never contains an AccountId or principal DID. The Gateway
+terminalizes the provider route and returns the durable signed installation
+receipt; the Station verifies that receipt before completing its deactivation
+leg. Exact retries preserve the original request and receipt.
+
+The former `/_floria/internal/account_deactivate_fanout` route is absent,
+including for callers holding an operator bearer token.

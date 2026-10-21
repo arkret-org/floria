@@ -827,25 +827,6 @@
         "string",
         "null"
       ]
-    },
-    "storage": {
-      "additionalProperties": false,
-      "description": "Optional PostgreSQL storage for deactivation queue draining.",
-      "properties": {
-        "deactivation_queue_table": {
-          "default": "floria_push_delivery_queue",
-          "description": "Table drained by account_deactivate_fanout. Must be `table` or `schema.table` with simple SQL identifiers.",
-          "type": "string"
-        },
-        "postgres_url": {
-          "description": "PostgreSQL connection URL. When unset, deactivation bookkeeping is in-memory only.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
     }
   },
   "title": "floria gateway configuration",

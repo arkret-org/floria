@@ -14,10 +14,6 @@ apps: {}
     assert_eq!(config.http.notify_dedup_ttl_seconds, 0);
     assert_eq!(config.http.notify_dedup.backend_kind(), "memory");
     assert_eq!(config.audit.backend_kind(), "disabled");
-    assert_eq!(
-        config.storage.deactivation_queue_table(),
-        "floria_push_delivery_queue"
-    );
     assert!(!config.http.notify_rate_limits.enabled());
     assert!(!config.http.internal_auth.enabled());
     assert!(!config.metrics.prometheus.enabled);
@@ -260,15 +256,6 @@ fn validate_requires_http_url_for_http_audit_backend() {
 
     let error = config.validate().unwrap_err().to_string();
     assert!(error.contains("audit.endpoint must use http or https"));
-}
-
-#[test]
-fn validate_rejects_unsafe_storage_table_names() {
-    let mut config = Config::default();
-    config.storage.deactivation_queue_table = "floria.queue;drop".to_owned();
-
-    let error = config.validate().unwrap_err().to_string();
-    assert!(error.contains("storage.deactivation_queue_table"));
 }
 
 #[test]

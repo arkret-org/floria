@@ -1,11 +1,4 @@
-//! Internal account-lifecycle broadcast endpoints.
-//!
-//! These routes are intended for the coland-broadcast channel (or an
-//! equivalent in-process message bus). They are exposed under
-//! `/_floria/internal/...` and intentionally do NOT share the public
-//! `/_arkret/edge/push/notify` request shape. They are protected by the
-//! `http.internal_auth` bearer/shared-secret profile and fail closed
-//! when no internal credential is configured.
+//! Authenticated operator status and dead-letter inspection.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -16,7 +9,6 @@ use salvo::prelude::*;
 use super::metrics::{finish_error, finish_json};
 use crate::AppState;
 use crate::auth::{BearerState, bearer_state};
-use crate::deactivation::AccountDeactivateFanoutBroadcast;
 
 #[handler]
 pub(super) async fn require_internal_auth(
@@ -254,117 +246,4 @@ pub(super) async fn push_dead_letters(req: &mut Request, depot: &mut Depot, res:
         }),
         started,
     );
-}
-
-#[handler]
-pub(super) async fn account_deactivate_fanout(
-    req: &mut Request,
-    depot: &mut Depot,
-    res: &mut Response,
-) {
-    let started = Instant::now();
-    let state = match depot.get_typed::<Arc<AppState>>() {
-        Ok(state) => state.clone(),
-        Err(_) => {
-            finish_error(
-                res,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                arkret_wire::error_codes::ErrorCode::INTERNAL_ERROR,
-                "application state missing",
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-
-    let body: AccountDeactivateFanoutBroadcast = match req.parse_json().await {
-        Ok(body) => body,
-        Err(error) => {
-            tracing::warn!(error = %error, "invalid account_deactivate_fanout body");
-            finish_error(
-                res,
-                StatusCode::BAD_REQUEST,
-                arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-                "invalid account_deactivate_fanout body",
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-
-    if body.fanout_id.trim().is_empty() {
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-            "fanout_id must not be empty",
-            None,
-            None,
-            started,
-        );
-        return;
-    }
-    if body.actor_id.trim().is_empty() {
-        finish_error(
-            res,
-            StatusCode::BAD_REQUEST,
-            arkret_wire::error_codes::ErrorCode::SCHEMA_VIOLATION,
-            "actor_id must not be empty",
-            None,
-            None,
-            started,
-        );
-        return;
-    }
-
-    let Some(bus) = state.broadcast_bus.as_ref() else {
-        // The endpoint exists even when the ledger isn't wired up so
-        // coland can detect misconfigurations early. We answer 503 so
-        // coland retries rather than reporting fanout_complete on a
-        // dropped broadcast.
-        finish_error(
-            res,
-            StatusCode::SERVICE_UNAVAILABLE,
-            arkret_wire::error_codes::ErrorCode::SERVICE_UNAVAILABLE,
-            "in-process broadcast bus is not configured on this push gateway",
-            None,
-            None,
-            started,
-        );
-        return;
-    };
-
-    let ack = match bus.account_deactivate_fanout_async(&body).await {
-        Ok(ack) => ack,
-        Err(error) => {
-            finish_error(
-                res,
-                StatusCode::SERVICE_UNAVAILABLE,
-                arkret_wire::error_codes::ErrorCode::SERVICE_UNAVAILABLE,
-                error.message(),
-                None,
-                None,
-                started,
-            );
-            return;
-        }
-    };
-
-    tracing::info!(
-        fanout_id = %ack.fanout_id,
-        outcome = %ack.outcome.as_str(),
-        actor_bindings_unbound = ack.actor_bindings_unbound,
-        device_bindings_unbound = ack.device_bindings_unbound,
-        messages_drained = ack.messages_drained,
-        "processed account_deactivate_fanout broadcast"
-    );
-
-    // Note: even when `outcome == PartiallyCompleted` we return 200 OK
-    // with an honest ack body — the partial signal is for coland's
-    // bookkeeping, not an HTTP transport error.
-    finish_json(res, StatusCode::OK, ack, started);
 }

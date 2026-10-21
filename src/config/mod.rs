@@ -35,7 +35,7 @@ mod schema;
 #[cfg(test)]
 mod tests;
 
-pub use audit_storage::{AuditConfig, StorageConfig};
+pub use audit_storage::AuditConfig;
 pub use http::{HttpConfig, InternalAuthConfig};
 #[cfg(test)]
 use kdl::parse_kdl_to_json;
@@ -56,7 +56,6 @@ pub use schema::config_json_schema;
 pub struct Config {
     pub http: HttpConfig,
     pub audit: AuditConfig,
-    pub storage: StorageConfig,
     pub log: LogConfig,
     pub metrics: MetricsConfig,
     pub proxy: Option<String>,
@@ -70,7 +69,6 @@ impl Default for Config {
         Self {
             http: HttpConfig::default(),
             audit: AuditConfig::default(),
-            storage: StorageConfig::default(),
             log: LogConfig::default(),
             metrics: MetricsConfig::default(),
             proxy: None,
@@ -122,7 +120,6 @@ impl Config {
         );
         self.http.emit_startup_warnings();
         self.audit.emit_startup_warnings();
-        self.storage.emit_startup_warnings();
         self.log.emit_startup_warnings();
         self.metrics.emit_startup_warnings();
     }
@@ -136,7 +133,6 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         self.http.validate()?;
         self.audit.validate()?;
-        self.storage.validate()?;
         self.metrics.opentracing.validate()?;
         self.metrics.sentry.validate()?;
         Ok(())

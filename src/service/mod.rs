@@ -46,12 +46,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             Router::with_path("_arkret/open/services/{service_id}/resolution")
                 .get(service_resolution::publish),
         )
-        // Internal account-lifecycle broadcast endpoint.
-        .push(
-            Router::with_path("_floria/internal/account_deactivate_fanout")
-                .hoop(internal::require_internal_auth)
-                .post(internal::account_deactivate_fanout),
-        )
         // Operator status lookup.
         .push(
             Router::with_path("_floria/admin/push/status/{idempotency_key}")

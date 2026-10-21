@@ -13,7 +13,8 @@ Review focus:
    and dedup collision handling.
 3. Multi-tenant isolation: provider app matching, plaintext metadata gates,
    blind payload sanitizer, and token redaction.
-4. The internal account-deactivation fanout path.
+4. Signed opaque registration revocation, exact receipt replay, terminal route
+   removal, and rejection of the retired identity-bearing deactivation route.
 5. Supply-chain controls: audit, deny, typos, Trivy, SBOM, and local provenance.
 
 Out of scope for this local readiness record:

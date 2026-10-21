@@ -12,7 +12,7 @@ ignored = ["md-5"]
 
 [workspace]
 resolver = "3"
-members = ["crates/floria-contracts"]
+members = []
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -35,7 +35,6 @@ arkret-retry = { path = "../arkret-rust-sdk/crates/retry", default-features = fa
 arkret-server = { path = "../arkret-rust-sdk/crates/server", default-features = false }
 arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire", default-features = false }
-floria-contracts = { version = "0.3.0", path = "crates/floria-contracts" }
 
 aes-gcm = "0.11.1"
 anyhow = "1.0.104"
@@ -97,7 +96,6 @@ arkret-retry.workspace = true
 arkret-server.workspace = true
 arkret-signatures = { workspace = true, default-features = false }
 arkret-wire = { workspace = true, default-features = false }
-floria-contracts.workspace = true
 
 aes-gcm.workspace = true
 anyhow.workspace = true

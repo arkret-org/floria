@@ -28,7 +28,12 @@ fn body() -> Value {
     })
 }
 
-fn sign_handoff_request(seed: [u8; 32], target_uri: &str, body: &[u8]) -> (String, String, String) {
+fn sign_handoff_request(
+    seed: [u8; 32],
+    target_uri: &str,
+    body: &[u8],
+    idempotency_key: &str,
+) -> (String, String, String) {
     let signing_key = SigningKey::from_bytes(&seed);
     let digest = format!(
         "sha-256=:{}:",
@@ -52,7 +57,7 @@ fn sign_handoff_request(seed: [u8; 32], target_uri: &str, body: &[u8]) -> (Strin
         "\"source-service-id\": ak:did_core:web:sync.example.com".to_owned(),
         "\"destination-service-id\": ak:did_core:web:push.example.com".to_owned(),
         "\"arkret-operation\": ak.edge.push.command.apply_registration.v1".to_owned(),
-        "\"idempotency-key\": handoff-fixture".to_owned(),
+        format!("\"idempotency-key\": {idempotency_key}"),
         format!("\"@signature-params\": {parameters}"),
     ]
     .join("\n");
@@ -67,7 +72,9 @@ fn sign_handoff_request(seed: [u8; 32], target_uri: &str, body: &[u8]) -> (Strin
     )
 }
 
-async fn configured_handoff_test_service(postgres_url: String) -> Service {
+async fn configured_handoff_test_service(
+    postgres_url: String,
+) -> (Service, Arc<RegistrationHandoffStore>) {
     let gateway_did = arkret_wire::Did::new("did:web:push.example.com").unwrap();
     let gateway_id = arkret_wire::project_did_to_core_id(&gateway_did).unwrap();
     let receipt_seed = [7_u8; 32];
@@ -106,7 +113,7 @@ async fn configured_handoff_test_service(postgres_url: String) -> Service {
         .map(Arc::new)
         .unwrap();
     state.registration_handoff = Some(store.clone());
-    Service::new(build_router(Arc::new(state)))
+    (Service::new(build_router(Arc::new(state))), store)
 }
 
 #[tokio::test]
@@ -114,7 +121,7 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
     let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
         return;
     };
-    let service = configured_handoff_test_service(postgres_url).await;
+    let (service, store) = configured_handoff_test_service(postgres_url).await;
     let mut request_body = body();
     request_body["registration_id"] =
         json!(format!("registration_{}", uuid::Uuid::new_v4().simple()));
@@ -131,7 +138,7 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
     let body_bytes = serde_json::to_vec(&request_body).unwrap();
     let target_uri = "http://127.0.0.1/_arkret/edge/push/registrations:apply";
     let (content_digest, signature_input, signature) =
-        sign_handoff_request([1_u8; 32], target_uri, &body_bytes);
+        sign_handoff_request([1_u8; 32], target_uri, &body_bytes, "handoff-fixture");
     let mut response = TestClient::post(target_uri)
         .add_header("Idempotency-Key", "handoff-fixture", true)
         .add_header(
@@ -163,6 +170,93 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
         json!("ak:did_core:web:sync.example.com")
     );
 
+    let active: arkret_models_integration::PushRegistrationHandoffRequestBody =
+        serde_json::from_value(request_body.clone()).unwrap();
+    let source = arkret_wire::DidCoreId::new("ak:did_core:web:sync.example.com").unwrap();
+    let gateway = arkret_wire::DidCoreId::new("ak:did_core:web:push.example.com").unwrap();
+    assert!(
+        store
+            .resolve(
+                &source,
+                active.push_target_id(),
+                active.device_id(),
+                "https://push.example.com/"
+            )
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let revoked = arkret_models_integration::PushRegistrationHandoffRequestBody::Revoked {
+        registration_id: active.registration_id().clone(),
+        push_target_id: active.push_target_id().clone(),
+        device_id: active.device_id().clone(),
+    };
+    let revoked_json = serde_json::to_value(&revoked).unwrap();
+    assert!(revoked_json.get("account_id").is_none());
+    assert!(revoked_json.get("actor_id").is_none());
+    let mut response = submit_signed_handoff(&service, &revoked_json, "handoff-revoke").await;
+    assert_eq!(response.status_code.unwrap(), StatusCode::OK);
+    let revoked_outcome: arkret_models_integration::PushRegistrationHandoffOutcome =
+        response.take_json().await.unwrap();
+    let receipt = &revoked_outcome.receipt;
+    receipt
+        .validate_for_handoff(&revoked, &source, &gateway)
+        .unwrap();
+    assert_eq!(
+        receipt.proof.verification_method.as_str(),
+        "did:web:push.example.com#receipt"
+    );
+    arkret_signatures::Ed25519DetachedJwsVerifier::new()
+        .verify_detached_jws(
+            &receipt.proof.jws,
+            &receipt.proof_binding_bytes().unwrap(),
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: SigningKey::from_bytes(&[7_u8; 32])
+                    .verifying_key()
+                    .to_bytes()
+                    .to_vec(),
+            },
+        )
+        .unwrap();
+    assert!(
+        store
+            .resolve(
+                &source,
+                active.push_target_id(),
+                active.device_id(),
+                "https://push.example.com/"
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // Refresh the transport signature using real time while preserving the
+    // exact opaque request and idempotency key of the lost-response retry.
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let mut replay = submit_signed_handoff(&service, &revoked_json, "handoff-revoke").await;
+    assert_eq!(replay.status_code.unwrap(), StatusCode::OK);
+    assert_eq!(
+        replay
+            .take_json::<arkret_models_integration::PushRegistrationHandoffOutcome>()
+            .await
+            .unwrap(),
+        revoked_outcome
+    );
+    let conflict = submit_signed_handoff(&service, &request_body, "handoff-fixture").await;
+    assert_eq!(conflict.status_code.unwrap(), StatusCode::CONFLICT);
+    assert!(
+        store
+            .resolve(
+                &source,
+                active.push_target_id(),
+                active.device_id(),
+                "https://push.example.com/"
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+
     let mut describe = TestClient::get("http://127.0.0.1/_arkret/describe")
         .add_header(
             "Arkret-Operation",
@@ -181,6 +275,41 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
                 super::super::server_describe::REGISTRATION_HANDOFF_BUNDLE_ID
             ))
     );
+}
+
+async fn submit_signed_handoff(
+    service: &Service,
+    body: &Value,
+    idempotency_key: &str,
+) -> salvo::Response {
+    let target = "http://127.0.0.1/_arkret/edge/push/registrations:apply";
+    let bytes = serde_json::to_vec(body).unwrap();
+    let (digest, input, signature) =
+        sign_handoff_request([1_u8; 32], target, &bytes, idempotency_key);
+    TestClient::post(target)
+        .add_header("Idempotency-Key", idempotency_key, true)
+        .add_header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::EDGE_PUSH_COMMAND_APPLY_REGISTRATION_V1,
+            true,
+        )
+        .add_header("host", "127.0.0.1", true)
+        .add_header("content-digest", digest, true)
+        .add_header("signature-input", input, true)
+        .add_header("signature", signature, true)
+        .add_header(
+            SOURCE_SERVICE_ID_HEADER,
+            "ak:did_core:web:sync.example.com",
+            true,
+        )
+        .add_header(
+            DESTINATION_SERVICE_ID_HEADER,
+            "ak:did_core:web:push.example.com",
+            true,
+        )
+        .json(body)
+        .send(service)
+        .await
 }
 
 #[tokio::test]

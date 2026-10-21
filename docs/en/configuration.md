@@ -61,7 +61,6 @@ directory.
 ```kdl
 log { ... }
 http { ... }
-storage { ... }
 metrics { ... }
 proxy "http://user:pass@proxy:8080"
 apps { ... }
@@ -226,28 +225,6 @@ In production, keep `/_arkret/edge/push/notify` behind service-to-service auth, 
 > be specified bare-hex or with a `sha256:` prefix.
 
 For mTLS-fronted deployments, the gateway expects the TLS-terminating reverse proxy to validate the client certificate against a pinned trust root chain and forward the four `X-Client-Certificate-*` headers above. See [docs/en/reverse-proxy.md](./reverse-proxy.md) for the runbook and `examples/reverse-proxy/` for nginx and Caddy reference configurations.
-
-### `storage`
-
-```kdl
-storage {
-  // Omit postgres_url for in-memory broadcast state.
-  // postgres_url "postgres://floria:secret@postgres.internal:5432/floria"
-  deactivation_queue_table "floria_push_delivery_queue"
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `postgres_url` | string | - | Optional PostgreSQL URL. Enables deactivation queue drain |
-| `deactivation_queue_table` | string | `"floria_push_delivery_queue"` | Queue table drained by `account_deactivate_fanout`; accepts `table` or `schema.table` |
-
-The deactivation queue table is expected to contain `actor_id`, `device_id`,
-and `push_key_hash` text columns. floria drains it with `DELETE` statements for
-the broadcast actor and, when present, the listed device ids / push-key hashes.
-
-When `postgres_url` is unset, the same broadcast bus runs with process-local
-state only.
 
 ### Secrets and operator workflow
 

@@ -1,63 +1,19 @@
-# Internal Endpoints
+# Operator Endpoints
 
-floria exposes a small set of routes under `/_floria/internal/*` that
-are intended for in-cluster service-to-service traffic only. They are
-NOT the public `/_arkret/edge/push/notify` surface and they have a
-different auth and rate-limit posture.
-
-## Routes
+The operator routes use `http.internal_auth` bearer tokens or token hashes.
+They are separate from the signed Arkret notify and registration handoff APIs.
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/_floria/internal/account_deactivate_fanout` | POST | coland-broadcast hook: drains the per-actor deactivation queue and emits provider unregister calls |
-| `/_floria/admin/push/status/{idempotency_key}` | GET | operator status lookup for an outstanding or recently completed `/notify` request (dedup-cache backed; 404 when unknown, 503 when the dedup cache is disabled) |
-| `/_floria/admin/push/dead-letters?limit=N` | GET | operator snapshot of the push retry dead-letter ring, newest first (`limit` defaults to 100, max 1000; 503 when `notify_retry_queue` is disabled). Envelopes are passed through the `sanitize.rs` strip-only egress list before rendering, so routing/audit fields such as `route_tokens` never appear in the response |
+| `/_floria/admin/push/status/{idempotency_key}` | GET | Dedup-cache status; 404 for an unknown request, 503 when the cache is disabled |
+| `/_floria/admin/push/dead-letters?limit=N` | GET | Newest-first retry dead-letter snapshot, stripped of provider egress secrets; defaults to 100, maximum 1000; 503 when the queue is disabled |
 
-The handlers live in `src/service/internal.rs` and are wired into
-the router in `src/service/mod.rs`. They share the same `AppState`
-as `/notify` but never touch the public dedup cache or rate limiter.
+No configured operator credential returns `503 service_unavailable`; missing
+or invalid credentials return `401 unauthenticated`. Prefer hashed tokens and
+rotate them independently of service HTTP-signature credentials. Network
+isolation and service-mesh mTLS provide additional deployment protection.
 
-## Auth posture
-
-floria enforces `http.internal_auth` bearer/shared-secret
-authentication on `/_floria/internal/*` and the operator-only
-`/_floria/admin/push/*` routes (`status`, `dead-letters`). If
-no internal bearer token or token hash is configured, these routes fail
-closed with `503 service_unavailable`; missing or invalid credentials
-return `401 unauthenticated`.
-
-Prefer `bearer_token_hashes` in production configs and rotate the
-shared secret independently from `/_arkret/edge/push/notify` caller
-credentials. Network isolation and service-mesh mTLS are still
-recommended defense-in-depth controls, but the handlers no longer rely
-on ingress topology for their only authorization boundary.
-
-Wire-level schema violations return `400 schema_violation`; missing
-application state returns `500 internal_error`; unknown / drained
-broadcast channels return `503 service_unavailable`.
-
-## Rate limit posture
-
-The internal endpoint is NOT subject to `notify_rate_limits`. The
-expectation is that the upstream broadcast bus (coland) backpressures
-on its own queue depth, and floria's role is to drain whatever shows
-up. If you need strand control, set it on the upstream bus rather than
-on floria.
-
-The internal endpoint DOES honor the `notify_retry_queue` configuration:
-if a provider call inside `account_deactivate_fanout` produces a
-transient error, the failed unregister is enqueued on the same retry
-queue and respects `max_attempts` / `default_backoff` like any other
-dispatch failure.
-
-## Observability
-
-| Metric | Endpoint |
-|--------|----------|
-| `floria_audit_divert_total{event_type, outcome}` | account deactivation fanout |
-| `floria_audit_rejected_devices_total{reason}` | account deactivation fanout |
-| `floria_notify_dead_letter_total{pushkin, reason}` | account deactivation fanout — when retries exhaust |
-
-Trace spans are emitted with `service.name=floria`,
-`http.target=/_floria/internal/<route>`, and the broadcast event id
-attached as a span attribute when present.
+The identity-bearing account-deactivation broadcast route and its DTOs are
+retired. Even a valid operator bearer cannot reach that route. Account teardown
+uses the existing signed, opaque registration revoke operation described in
+[server integration](server-integration.md#account-deactivation).

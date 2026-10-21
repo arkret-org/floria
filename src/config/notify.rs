@@ -211,8 +211,8 @@ pub struct NotifyRetryQueueConfig {
     #[serde(default)]
     pub deadletter_pg_url: Option<String>,
     /// Override the PG table the deadletter overlay writes into.
-    /// Defaults to `floria_retry_dead_letter`. Same shape rules as
-    /// `storage.deactivation_queue_table`.
+    /// Defaults to `floria_retry_dead_letter`. Accepts a simple table
+    /// identifier or a schema-qualified table identifier.
     #[serde(default = "default_deadletter_pg_table")]
     pub deadletter_pg_table: String,
     #[serde(flatten)]

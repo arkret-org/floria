@@ -1,9 +1,7 @@
 pub mod audit;
 pub mod auth;
-pub mod broadcast;
 pub mod circuit_breaker;
 pub mod config;
-pub mod deactivation;
 pub mod dedup;
 pub mod egress;
 pub mod error;
@@ -41,29 +39,14 @@ pub(crate) fn ensure_rustls_crypto_provider() {
 }
 
 use audit::AuditSink;
-use broadcast::InProcessBroadcastBus;
 use circuit_breaker::CircuitBreaker;
 use config::{InternalAuthConfig, NotifyAuthConfig};
-use deactivation::DeactivationLedger;
 use dedup::NotifyDeduplicator;
 use nonce_store::NonceStore;
 use pushkin::PushkinRegistry;
 use rate_limit::NotifyRateLimiter;
 use retry_queue::RetryQueue;
 
-// Account-deactivation broadcast state is independent from Contact,
-// Direct Conversation, participation, Sidecar and operation-control admission.
-// Those gates are evaluated by the upstream Sync / notification service before
-// it constructs the closed push-notify envelope.
-//
-// `deactivation_ledger` accepts `account_deactivate_fanout` events from coland,
-// performs per-actor + per-device unbinds, and tracks whether the fanout completed
-// fully or partially.
-//
-// It is optional so deployments that do not subscribe to the coland
-// broadcast bus can leave it unset; the endpoint then answers
-// `503 service_unavailable` so misconfigurations surface in operator dashboards
-// rather than silently swallowing broadcasts.
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<PushkinRegistry>,
@@ -81,8 +64,6 @@ pub struct AppState {
     pub notify_nonce_store: Option<Arc<NonceStore>>,
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
     pub circuit_breaker: Option<Arc<CircuitBreaker>>,
-    pub deactivation_ledger: Option<Arc<DeactivationLedger>>,
-    pub broadcast_bus: Option<Arc<InProcessBroadcastBus>>,
     /// AKP-0007 — when `true`, per-(provider, scope) metrics use the
     /// `circle_id` (cardinality up to the number of active Circles).
     /// Default `false` — labels key off the parent `realm_id`.
@@ -123,8 +104,6 @@ impl AppState {
             notify_nonce_store: None,
             notify_retry_queue: None,
             circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
-            deactivation_ledger: None,
-            broadcast_bus: None,
             metrics_detailed_circle_labels: false,
         }
     }
@@ -148,8 +127,6 @@ impl AppState {
             notify_nonce_store: None,
             notify_retry_queue: None,
             circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
-            deactivation_ledger: None,
-            broadcast_bus: None,
             metrics_detailed_circle_labels: false,
         }
     }

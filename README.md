@@ -53,12 +53,11 @@ three push-pipeline behaviours. See [`CHANGELOG.md`](CHANGELOG.md)
 Spec rounds 2+3 (2026-05-20) extended the blind-wakeup sanitizer's
 forbidden-field list (`attestation_evidence`,
 `audit_purpose`, `attestation_chain`, `audit_policy_version_digest`,
-`trust_domain`) and added the internal
-`POST /_floria/internal/account_deactivate_fanout` (T07) broadcast
-endpoint. That endpoint implements the push-gateway half of the
-deactivation fanout required by
-[`account-lifecycle.md` §7.1](../arkret-spec/spec/v1/zh/identity/account-lifecycle.md);
-no Station currently drives it. Contact/DM, Agent participation,
+`trust_domain`) and extended the gateway integration. The former identity-bearing
+account-deactivation broadcast has been retired. Stations revoke registrations
+through the formal signed `/_arkret/edge/push/registrations:apply` surface using
+opaque registration and pairwise target ids; only a verified durable Gateway
+receipt completes that leg. Contact/DM, Agent participation,
 Sidecar, and operation-control admission stay upstream of the push gateway. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`push-notifications.md`](../arkret-spec/spec/v1/zh/discovery/push-notifications.md)
@@ -76,7 +75,8 @@ and transaction-body field are gone, superseded by `SignalEnvelope` /
 - `kdl` for KDL config (default)
 - `serde-saphyr` for YAML config (also supported)
 
-PostgreSQL is optional and used only for deactivation queue draining.
+PostgreSQL stores formal opaque registration handoff state and can back
+configured registration sources and the retry dead-letter overlay.
 
 ## Supported features
 
@@ -128,7 +128,6 @@ Quick notes:
 - 1.0 deployments should use an external secret manager, sidecar, or init step to mount/render APNs, FCM, VAPID, custom push, and service-auth secrets before floria starts
 - `metrics.prometheus` starts a separate listener, defaulting to `127.0.0.1:8000`
 - import `docs/en/grafana-dashboard.json` for the recommended Prometheus dashboard
-- `storage.postgres_url` enables durable deactivation queue drain state
 - unknown config sections / fields emit startup warnings
 - the `memory` dedup backend is single-instance only; use Redis-backed dedup for HA deployments
 - `push_hint` is a body-free wakeup hint and must not contain plaintext message content
@@ -247,10 +246,14 @@ mismatched registrations never reach a provider. Retries resolve registrations
 again and do not retain provider tokens. Registration opt-in changes apply to
 subsequent dispatches.
 
-A gateway with a separate registration database has no standard registration
-transfer operation in the current protocol. Notify cannot create or repair an
-unknown registration. Such a deployment requires a future specified registration
-transport and is not interoperable through notify alone.
+Registration state has two supported sources: shared authoritative storage
+inside the same operational, logging, audit and trust boundary as the Station,
+or the signed opaque registration handoff in `push-notifications.md` §3.4.
+An independently stored Gateway uses
+`POST /_arkret/edge/push/registrations:apply`; the Station verifies and durably
+saves the Gateway receipt before considering that registration available.
+Account and principal identities remain inside the Station boundary. Notify
+cannot create or repair an unknown registration.
 
 The `postgres_registration_identity_rotation_and_removal` regression requires
 `FLORIA_REGISTRATION_TEST_DATABASE_URL` naming an isolated database initialized

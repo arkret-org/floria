@@ -1,5 +1,11 @@
 # Authority-Commit Capability Migration
 
+> 2026-10-22 current surface correction: the identity-bearing account-deactivation
+> broadcast, `floria-contracts`, its local ledger/queue drain, and `storage`
+> configuration are retired. Signed opaque registration handoff is the current
+> teardown path. The historical capability inventory and execution counts below
+> describe the earlier migration input; they do not grant current runtime credit.
+
 floria is the `push_gateway` role: it accepts `ak.edge.push.command.notify.v1`
 from an authenticated Station, resolves the durable device registration, and
 dispatches a blind or visible wakeup to APNs / FCM / WebPush / the domestic

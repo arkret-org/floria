@@ -4,9 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use floria::audit::{AuditSink, HttpAuditSink, JsonlAuditSink};
 use floria::auth::redact_url_credentials;
-use floria::broadcast::InProcessBroadcastBus;
 use floria::config::{Config, resolve_path};
-use floria::deactivation::{DeactivationLedger, PostgresDeactivationQueueDrain};
 use floria::dedup::NotifyDeduplicator;
 use floria::nonce_store::{NonceStore, RedisFailurePolicy};
 use floria::observability::{self, TelemetryGuard};
@@ -77,11 +75,6 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
         AppState::new(registry)
     };
     state.audit_sink = build_audit_sink(&config, path.parent().unwrap_or_else(|| Path::new(".")))?;
-    let deactivation_ledger = build_broadcast_components(&config)?;
-    state.deactivation_ledger = Some(deactivation_ledger.clone());
-    state.broadcast_bus = Some(Arc::new(InProcessBroadcastBus::new(Some(
-        deactivation_ledger,
-    ))));
     state.notify_auth = config.http.notify_auth.clone();
     state.gateway_service_resolution = config
         .http
@@ -347,23 +340,5 @@ fn build_audit_sink(config: &Config, config_dir: &Path) -> Result<Option<Arc<dyn
             ))))
         }
         backend => bail!("unsupported audit backend `{backend}`"),
-    }
-}
-
-fn build_broadcast_components(config: &Config) -> Result<Arc<DeactivationLedger>> {
-    if let Some(postgres_url) = config.storage.postgres_url() {
-        tracing::info!(
-            postgres = %redact_url_credentials(postgres_url),
-            deactivation_queue_table = config.storage.deactivation_queue_table(),
-            "enabling PostgreSQL-backed broadcast state"
-        );
-        let drain = Arc::new(PostgresDeactivationQueueDrain::new(
-            postgres_url.to_owned(),
-            config.storage.deactivation_queue_table(),
-        )?);
-        Ok(Arc::new(DeactivationLedger::with_queue_drain(drain)))
-    } else {
-        tracing::info!("enabling in-memory broadcast state");
-        Ok(Arc::new(DeactivationLedger::new()))
     }
 }
