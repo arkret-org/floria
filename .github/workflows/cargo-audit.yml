@@ -18,6 +18,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Checkout Arkret Rust SDK
+        env:
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 

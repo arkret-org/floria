@@ -130,6 +130,34 @@ impl PostgresPool {
             })?;
         client.run(op, Duration::from_secs(30))
     }
+
+    /// Retry the complete Serializable transaction within the existing operation deadline.
+    pub fn with_serializable_client<T>(
+        &self,
+        mut op: impl AsyncFnMut(&mut tokio_postgres::Client) -> Result<T>,
+    ) -> Result<T> {
+        self.with_client(async |client| {
+            let mut retries = 0_u32;
+            loop {
+                let result = op(client).await;
+                let retryable = result.as_ref().err().is_some_and(|error| {
+                    error.chain().any(|cause| {
+                        cause.downcast_ref::<tokio_postgres::Error>().is_some_and(|error| {
+                            error.code().is_some_and(|code| {
+                                code == &tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE
+                                    || code == &tokio_postgres::error::SqlState::T_R_DEADLOCK_DETECTED
+                            })
+                        })
+                    })
+                });
+                if !retryable || retries == 4 {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(2_u64 << retries)).await;
+                retries += 1;
+            }
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -305,6 +333,48 @@ impl Drop for BoundedPostgresClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transaction_retry_replays_only_retryable_failures() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("isolated test database required");
+        let pool = PostgresPool::new(&url, "transaction retry regression").unwrap();
+        let attempts = AtomicUsize::new(0);
+        let value: i32 = pool
+            .with_serializable_client(async |client| {
+                let transaction = client.transaction().await?;
+                if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                    transaction
+                        .batch_execute("DO $$ BEGIN RAISE EXCEPTION 'retry fixture' USING ERRCODE='40001'; END $$")
+                        .await?;
+                }
+                let row = transaction.query_one("SELECT 42::int", &[]).await?;
+                transaction.commit().await?;
+                Ok(row.get(0))
+            })
+            .unwrap();
+        assert_eq!(value, 42);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+
+        for (code, expected_attempts) in [("23505", 1), ("40P01", 5)] {
+            let attempts = AtomicUsize::new(0);
+            let result: Result<()> = pool.with_serializable_client(async |client| {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                let transaction = client.transaction().await?;
+                transaction
+                    .batch_execute(&format!(
+                        "DO $$ BEGIN RAISE EXCEPTION 'retry fixture' USING ERRCODE='{code}'; END $$"
+                    ))
+                    .await?;
+                transaction.commit().await?;
+                Ok(())
+            });
+            assert!(result.is_err());
+            assert_eq!(attempts.load(Ordering::SeqCst), expected_attempts);
+        }
+    }
 
     #[test]
     fn query_deadline_discards_the_session_and_cancels_the_backend() {

@@ -54,6 +54,15 @@ jobs:
     timeout-minutes: 30
 
     services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: postgres:16
         env:
@@ -70,6 +79,8 @@ jobs:
 
     env:
       FLORIA_REGISTRATION_TEST_DATABASE_URL: postgres://floria:floria@localhost:5432/floria_registrations
+      FLORIA_HANDOFF_TEST_DATABASE_URL: postgres://floria:floria@localhost:5432/floria_registrations
+      FLORIA_REDIS_TEST_URL: redis://localhost:6379/0
 
     steps:
       - name: Check out repository

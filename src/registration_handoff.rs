@@ -131,10 +131,21 @@ impl RegistrationHandoffStore {
             table = self.table.as_sql(),
         );
         self.pool.with_client(async |client| {
-            client
+            let transaction = client.transaction().await?;
+            // IF NOT EXISTS does not serialize concurrent catalog insertion.
+            let schema_lock = format!("floria.registration_handoff.schema:{}", self.table.as_sql());
+            transaction
+                .query_one(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    &[&schema_lock],
+                )
+                .await?;
+            transaction
                 .batch_execute(&statement)
                 .await
-                .context("failed to initialize registration handoff table")
+                .context("failed to initialize registration handoff table")?;
+            transaction.commit().await?;
+            Ok(())
         })
     }
 
@@ -210,7 +221,7 @@ impl RegistrationHandoffStore {
         device: &arkret_wire::DeviceId,
         gateway_url: &str,
     ) -> Result<Option<PushRegistrationRecord>> {
-        self.pool.with_client(async |client| {
+        self.pool.with_serializable_client(async |client| {
             let mut transaction = client
                 .build_transaction()
                 .isolation_level(postgres::IsolationLevel::Serializable)
@@ -277,7 +288,7 @@ impl RegistrationHandoffStore {
         target: &arkret_wire::PushTargetId,
         device: &arkret_wire::DeviceId,
     ) -> Result<()> {
-        self.pool.with_client(async |client| {
+        self.pool.with_serializable_client(async |client| {
             let mut transaction = client
                 .build_transaction()
                 .isolation_level(postgres::IsolationLevel::Serializable)
@@ -307,7 +318,7 @@ impl RegistrationHandoffStore {
             ApplyRegistrationError::Storage(anyhow::anyhow!("failed to digest handoff: {error}"))
         })?;
         self.pool
-            .with_client(async |client| {
+            .with_serializable_client(async |client| {
                 let mut transaction = client
                     .build_transaction()
                     .isolation_level(postgres::IsolationLevel::Serializable)

@@ -3,8 +3,8 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — Cargo dependency cache.
 #
-# Root manifests and the local contracts crate move into this stage so Cargo
-# can resolve every workspace member while warming the dependency cache.
+# Root manifests move into this stage so Cargo can resolve dependencies
+# while warming the dependency cache.
 # ---------------------------------------------------------------------------
 FROM rust:1.98-trixie AS deps
 
@@ -12,7 +12,6 @@ WORKDIR /app
 
 COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
 
 RUN mkdir -p src \
     && echo "fn main() {}" > src/main.rs \
@@ -38,7 +37,6 @@ COPY --from=deps /usr/local/cargo /usr/local/cargo
 COPY --from=arkret-rust-sdk . /arkret-rust-sdk
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-COPY crates ./crates
 COPY tools/docker-healthcheck.rs ./tools/docker-healthcheck.rs
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

@@ -336,6 +336,8 @@ pub(super) fn device(app_id: &str, push_key: &str) -> Value {
     use std::hash::{DefaultHasher, Hash, Hasher};
 
     let mut hasher = DefaultHasher::new();
+    // Each Tokio test owns its calling thread and its registration identity.
+    std::thread::current().id().hash(&mut hasher);
     (app_id, push_key).hash(&mut hasher);
     let suffix = hasher.finish() & 0x0000_ffff_ffff_ffff;
     crate::registrations::test_support::device(
