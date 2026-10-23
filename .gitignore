@@ -8,3 +8,4 @@
 
 # Local verification evidence and build metadata.
 /artifacts/
+/release-assets/
