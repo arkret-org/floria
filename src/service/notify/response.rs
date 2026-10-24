@@ -10,7 +10,7 @@ use super::helpers::{
 };
 use super::push_target_id;
 use crate::auth::AuthenticatedNotifyCaller;
-use crate::models::{DeliveryReceipt, NotifyDispatchResult, RejectedDevice};
+use crate::models::{DeliveryReceipt, PushNotifyHttpResponse, RejectedDevice};
 use crate::{AppState, metrics as app_metrics};
 
 pub(super) struct DispatchSummary {
@@ -120,7 +120,7 @@ pub(super) async fn finish_dispatch(
         );
     }
 
-    let response = NotifyDispatchResult::new(
+    let response = PushNotifyHttpResponse::new(
         request_id.to_owned(),
         push_target_id(notification),
         outcomes,

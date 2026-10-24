@@ -36,7 +36,7 @@ use lru::LruCache;
 use redis::Commands;
 
 use crate::auth::redact_url_credentials;
-use crate::models::NotifyDispatchResult;
+use crate::models::PushNotifyHttpResponse;
 use crate::redis_support::{RedisConnection, RedisPool};
 
 /// Lightweight status snapshot for the `GET /_floria/admin/push/status/{key}`
@@ -54,15 +54,15 @@ pub struct NotifyStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedNotifyDispatchResult {
-    pub response: NotifyDispatchResult,
+pub struct CachedPushNotifyHttpResponse {
+    pub response: PushNotifyHttpResponse,
 }
 
 #[derive(Debug)]
 struct CacheEntry {
     expires_at: Instant,
     request_fingerprint: String,
-    response: CachedNotifyDispatchResult,
+    response: CachedPushNotifyHttpResponse,
 }
 
 /// Upper bound on distinct in-memory dedup slots (request cache +
@@ -158,7 +158,7 @@ impl NotifyDeduplicator {
         &self,
         key: &str,
         request_fingerprint: &str,
-    ) -> Option<CachedNotifyDispatchResult> {
+    ) -> Option<CachedPushNotifyHttpResponse> {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
             NotifyDedupBackend::Redis(backend) => backend.lookup(key, request_fingerprint),
@@ -171,7 +171,7 @@ impl NotifyDeduplicator {
         self: &Arc<Self>,
         key: &str,
         request_fingerprint: &str,
-    ) -> Option<CachedNotifyDispatchResult> {
+    ) -> Option<CachedPushNotifyHttpResponse> {
         match &self.backend {
             NotifyDedupBackend::Memory(backend) => backend.lookup(key, request_fingerprint),
             NotifyDedupBackend::Redis(_) => {
@@ -215,7 +215,7 @@ impl NotifyDeduplicator {
         &self,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyDispatchResult,
+        response: PushNotifyHttpResponse,
     ) {
         if self.ttl.is_zero() {
             return;
@@ -235,7 +235,7 @@ impl NotifyDeduplicator {
         self: &Arc<Self>,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyDispatchResult,
+        response: PushNotifyHttpResponse,
     ) {
         match &self.backend {
             NotifyDedupBackend::Memory(_) => {
@@ -360,7 +360,7 @@ impl NotifyDeduplicator {
             NotifyDedupBackend::Redis(backend) => backend.cached_response(key)?,
         };
         let attempts = response
-            .wire_outcome
+            .body
             .outcomes
             .iter()
             .filter(|outcome| {
@@ -376,7 +376,7 @@ impl NotifyDeduplicator {
             .saturating_add(1) as u32;
         let accepted = response.accepted();
         let rejected = response
-            .wire_outcome
+            .body
             .outcomes
             .iter()
             .filter(|outcome| {
@@ -394,7 +394,7 @@ impl NotifyDeduplicator {
             "unknown"
         };
         let last_error = response
-            .wire_outcome
+            .body
             .outcomes
             .iter()
             .find_map(|outcome| outcome.reason_code.map(|reason| reason.as_str().to_owned()));
@@ -422,7 +422,7 @@ impl NotifyDeduplicator {
 }
 
 impl MemoryNotifyDeduplicator {
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyDispatchResult> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyHttpResponse> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -458,7 +458,7 @@ impl MemoryNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyDispatchResult,
+        response: PushNotifyHttpResponse,
     ) {
         let now = Instant::now();
         let mut entries = self
@@ -472,7 +472,7 @@ impl MemoryNotifyDeduplicator {
             CacheEntry {
                 expires_at: now + ttl,
                 request_fingerprint: request_fingerprint.to_owned(),
-                response: CachedNotifyDispatchResult { response },
+                response: CachedPushNotifyHttpResponse { response },
             },
         );
     }
@@ -515,7 +515,7 @@ impl MemoryNotifyDeduplicator {
         entries.put(key, now + ttl);
     }
 
-    fn cached_response(&self, key: &str) -> Option<NotifyDispatchResult> {
+    fn cached_response(&self, key: &str) -> Option<PushNotifyHttpResponse> {
         let now = Instant::now();
         let mut entries = self
             .entries
@@ -545,7 +545,7 @@ impl RedisNotifyDeduplicator {
         self.pool.ready()
     }
 
-    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedNotifyDispatchResult> {
+    fn lookup(&self, key: &str, request_fingerprint: &str) -> Option<CachedPushNotifyHttpResponse> {
         let mut connection = match self.connection() {
             Ok(connection) => connection,
             Err(error) => {
@@ -574,8 +574,8 @@ impl RedisNotifyDeduplicator {
                 return None;
             }
         }?;
-        match serde_json::from_str::<NotifyDispatchResult>(&response_json) {
-            Ok(response) => Some(CachedNotifyDispatchResult { response }),
+        match serde_json::from_str::<PushNotifyHttpResponse>(&response_json) {
+            Ok(response) => Some(CachedPushNotifyHttpResponse { response }),
             Err(error) => {
                 tracing::warn!(error = %error, backend = %self.target_label, redis_key = %response_key, "failed to deserialize cached Redis notify response");
                 None
@@ -607,7 +607,7 @@ impl RedisNotifyDeduplicator {
         ttl: Duration,
         key: &str,
         request_fingerprint: &str,
-        response: NotifyDispatchResult,
+        response: PushNotifyHttpResponse,
     ) {
         let ttl_seconds = ttl_seconds(ttl);
         let response_key = self.response_key(key);
@@ -686,7 +686,7 @@ impl RedisNotifyDeduplicator {
         self.pool.connection()
     }
 
-    fn cached_response(&self, key: &str) -> Option<NotifyDispatchResult> {
+    fn cached_response(&self, key: &str) -> Option<PushNotifyHttpResponse> {
         let mut connection = self.connection().ok()?;
         let response_key = self.response_key(key);
         let response_json: Option<String> = connection
@@ -694,7 +694,7 @@ impl RedisNotifyDeduplicator {
             .ok()
             .flatten();
         let response_json = response_json?;
-        serde_json::from_str::<NotifyDispatchResult>(&response_json).ok()
+        serde_json::from_str::<PushNotifyHttpResponse>(&response_json).ok()
     }
 
     /// Wrap the dynamic component of the key in Redis cluster hash
@@ -743,7 +743,7 @@ mod tests {
     #[test]
     fn returns_inserted_response_before_expiry() {
         let dedup = NotifyDeduplicator::new(Duration::from_secs(5));
-        let response = NotifyDispatchResult::new(
+        let response = PushNotifyHttpResponse::new(
             "request-1",
             arkret_wire::PushTargetId::new(
                 "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
@@ -768,7 +768,7 @@ mod tests {
         dedup.insert_success(
             &key,
             &key,
-            NotifyDispatchResult::new(
+            PushNotifyHttpResponse::new(
                 "request-1",
                 arkret_wire::PushTargetId::new(
                     "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
@@ -802,7 +802,7 @@ mod tests {
         dedup.insert_success(
             &key,
             &first_fingerprint,
-            NotifyDispatchResult::new(
+            PushNotifyHttpResponse::new(
                 "request-1",
                 arkret_wire::PushTargetId::new(
                     "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
@@ -874,8 +874,8 @@ mod tests {
         Ok(())
     }
 
-    fn sample_response(index: usize) -> NotifyDispatchResult {
-        NotifyDispatchResult::new(
+    fn sample_response(index: usize) -> PushNotifyHttpResponse {
+        PushNotifyHttpResponse::new(
             format!("request-{index}"),
             arkret_wire::PushTargetId::new(
                 "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",

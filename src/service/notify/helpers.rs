@@ -12,7 +12,7 @@ use crate::audit::AuditEvent;
 use crate::auth::AuthenticatedNotifyCaller;
 use crate::dedup::request_hash;
 use crate::models::{
-    DeliveryReceipt, DeviceExt, NotificationExt, NotifyDispatchResult, RejectedDevice,
+    DeliveryReceipt, DeviceExt, NotificationExt, PushNotifyHttpResponse, RejectedDevice,
     redact_push_token,
 };
 use crate::rate_limit::NotifyRateLimitCheck;
@@ -242,23 +242,23 @@ pub(super) async fn record_rejected_devices_audit_or_finish(
 pub(super) fn finish_standard_notify_json(
     res: &mut Response,
     status: StatusCode,
-    response: &NotifyDispatchResult,
+    response: &PushNotifyHttpResponse,
     started: Instant,
 ) {
     finish_json(res, status, standard_notify_outcome(response), started);
 }
 
 fn standard_notify_outcome(
-    response: &NotifyDispatchResult,
+    response: &PushNotifyHttpResponse,
 ) -> arkret_models_integration::PushNotifyResponseBody {
-    response.wire_outcome.clone()
+    response.body.clone()
 }
 
 pub(super) async fn cache_success_response(
     state: &Arc<AppState>,
     key: &str,
     request_fingerprint: &str,
-    response: &NotifyDispatchResult,
+    response: &PushNotifyHttpResponse,
 ) {
     if let Some(deduplicator) = state.notify_deduplicator.as_ref() {
         deduplicator

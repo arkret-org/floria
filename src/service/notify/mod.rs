@@ -14,7 +14,7 @@ use super::MAX_REQUEST_SIZE;
 use super::metrics::finish_error;
 use crate::audit::AuditEvent;
 use crate::auth::authenticate_notify_request;
-use crate::models::{DeviceExt, NotificationContext, NotificationExt, NotifyDispatchResult};
+use crate::models::{DeviceExt, NotificationContext, NotificationExt, PushNotifyHttpResponse};
 use crate::{AppState, metrics as app_metrics};
 
 mod dispatch;
@@ -103,9 +103,9 @@ fn duration_millis(duration: Duration) -> u64 {
 fn no_fanout_response(
     request_id: &str,
     notification: &PushNotificationEnvelope,
-) -> NotifyDispatchResult {
+) -> PushNotifyHttpResponse {
     let outcomes = no_fanout_outcomes(notification);
-    NotifyDispatchResult::new(request_id, push_target_id(notification), outcomes)
+    PushNotifyHttpResponse::new(request_id, push_target_id(notification), outcomes)
 }
 
 fn circuit_breaker_key(
@@ -624,7 +624,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                     )
                 })
                 .collect();
-            let response = NotifyDispatchResult::new(
+            let response = PushNotifyHttpResponse::new(
                 request_id.clone(),
                 push_target_id(&notification),
                 outcomes,

@@ -205,7 +205,7 @@ pub(super) fn test_service_with_auth(
 pub(super) fn test_gateway_service_resolution()
 -> arkret_models_identity::AuthenticatedServiceResolution {
     use arkret_models_identity::{
-        DidDocument, ResolutionDidBindingEvidenceKind, ResolutionDidBindingEvidenceReceipt,
+        DidBindingEvidenceKind, DidBindingEvidenceReceipt, DidDocument,
         ResolutionMethodEvidenceBoundary, ResolutionMethodHistoryEvidence,
     };
 
@@ -244,8 +244,8 @@ pub(super) fn test_gateway_service_resolution()
                 to_method_history_head: digest.to_string(),
                 to_version_id: version,
             },
-            evidence: ResolutionDidBindingEvidenceReceipt {
-                kind: ResolutionDidBindingEvidenceKind::AkDidBindingEvidenceV1,
+            evidence: DidBindingEvidenceReceipt {
+                kind: DidBindingEvidenceKind::AkDidBindingEvidenceV1,
                 method: "web".to_owned(),
                 document_digest: digest,
                 method_proofs: Vec::new(),

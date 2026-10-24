@@ -9,12 +9,12 @@ use blake2::digest::Digest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NotifyDispatchResult {
+pub struct PushNotifyHttpResponse {
     pub request_id: String,
-    pub wire_outcome: PushNotifyResponseBody,
+    pub body: PushNotifyResponseBody,
 }
 
-impl NotifyDispatchResult {
+impl PushNotifyHttpResponse {
     pub fn new(
         request_id: impl Into<String>,
         push_target_id: arkret_wire::PushTargetId,
@@ -22,7 +22,7 @@ impl NotifyDispatchResult {
     ) -> Self {
         Self {
             request_id: request_id.into(),
-            wire_outcome: PushNotifyResponseBody {
+            body: PushNotifyResponseBody {
                 push_target_id,
                 outcomes,
             },
@@ -36,7 +36,7 @@ impl NotifyDispatchResult {
     }
 
     pub fn accepted(&self) -> usize {
-        self.wire_outcome
+        self.body
             .outcomes
             .iter()
             .filter(|outcome| {
@@ -232,7 +232,7 @@ mod tests {
     use arkret_models_integration::{PushCounts, PushNotificationEnvelope};
     use serde_json::json;
 
-    use super::{NotificationExt, NotifyDispatchResult};
+    use super::{NotificationExt, PushNotifyHttpResponse};
 
     #[test]
     fn notification_uses_priority_wire_field() {
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn notify_response_carries_no_provider_identifiers() {
-        let response = NotifyDispatchResult::new(
+        let response = PushNotifyHttpResponse::new(
             "ak:request:0196419b-0000-7000-8000-000000000010",
             arkret_wire::PushTargetId::new(
                 "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
@@ -369,7 +369,7 @@ mod tests {
             ],
         );
 
-        let encoded = serde_json::to_string(&response.wire_outcome).unwrap();
+        let encoded = serde_json::to_string(&response.body).unwrap();
         for forbidden in [
             "push_key",
             "app_id",
