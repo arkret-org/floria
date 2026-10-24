@@ -178,7 +178,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
     if config.http.notify_retry_queue.enabled() {
         let queue_config = config.http.notify_retry_queue.clone();
         let retry_config = RetryQueueConfig {
-            max_attempts: queue_config.max_attempts,
+            max_attempt_count: queue_config.max_attempt_count,
             default_backoff: std::time::Duration::from_secs(queue_config.default_backoff_seconds),
             max_backoff: std::time::Duration::from_secs(queue_config.max_backoff_seconds),
             dead_letter_capacity: queue_config.dead_letter_capacity as usize,
@@ -200,7 +200,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
                     backend = "redis",
                     redis = %redact_url_credentials(&redis_url),
                     key_prefix = queue_config.key_prefix(),
-                    max_attempts = queue_config.max_attempts,
+                    max_attempt_count = queue_config.max_attempt_count,
                     aead_enabled = cipher.is_some(),
                     deadletter_pg = queue_config.deadletter_pg_url().is_some(),
                     "enabling /notify retry queue"
@@ -215,7 +215,7 @@ async fn run((config, path): (Config, std::path::PathBuf)) -> Result<()> {
             _ => {
                 tracing::info!(
                     backend = "memory",
-                    max_attempts = queue_config.max_attempts,
+                    max_attempt_count = queue_config.max_attempt_count,
                     deadletter_pg = queue_config.deadletter_pg_url().is_some(),
                     "enabling /notify retry queue"
                 );

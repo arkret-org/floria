@@ -484,7 +484,7 @@ async fn notify_response_uses_standard_outcome_without_plaintext_tokens() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(body.outcomes.len(), 1);
@@ -537,7 +537,7 @@ async fn notify_response_conserves_every_requested_device_id() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     let outcome_device_ids = body

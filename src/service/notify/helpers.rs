@@ -250,7 +250,7 @@ pub(super) fn finish_standard_notify_json(
 
 fn standard_notify_outcome(
     response: &NotifyDispatchResult,
-) -> arkret_models_integration::PushNotifyOutcome {
+) -> arkret_models_integration::PushNotifyResponseBody {
     response.wire_outcome.clone()
 }
 

@@ -21,7 +21,7 @@ pub(super) const REGISTRATION_HANDOFF_BUNDLE_ID: &str =
 /// defined by `service-describe.schema.json`, not a push-gateway-private
 /// shape. The push-private matrix (provider list, auth modes, dedup,
 /// rate-limit scopes, operation id) lives under the canonical
-/// `limits`/`supported_features`/`auth_metadata` fields and `x_floria_*`
+/// `limits`/`supported_features`/`authentication_metadata` fields and `x_floria_*`
 /// extension keys — never as bespoke top-level fields. The product's
 /// private describe surface stays on `/_floria/*`.
 fn floria_service_did(auth: &NotifyAuthConfig) -> arkret_wire::Result<Did> {
@@ -137,8 +137,8 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         json!(rate_limit_scopes),
     );
     // The floria-specific mode list rides in the `x_*`-only `extra` map.
-    let mut auth_metadata = arkret_models_discovery::AuthMetadata::minimal();
-    auth_metadata
+    let mut authentication_metadata = arkret_models_discovery::AuthenticationMetadata::minimal();
+    authentication_metadata
         .extra
         .insert("x_floria_auth_modes".to_owned(), json!(auth_modes))
         .expect("x_floria_auth_modes is a valid extension key");
@@ -200,7 +200,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
         // executable TZDB release set. `service-describe.schema.json` requires
         // this field only for a service that claims one.
         calendar_tzdb_versions: Vec::new(),
-        auth_metadata,
+        authentication_metadata,
         limits: arkret_models_discovery::ServerLimits {
             extensions: limits.into_iter().collect(),
         },

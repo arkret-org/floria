@@ -135,7 +135,7 @@ fn http_schema() -> Value {
                     "backend": {"type": "string", "enum": ["memory", "redis"], "default": "memory"},
                     "redis_url": {"type": ["string", "null"]},
                     "key_prefix": {"type": "string", "default": "floria"},
-                    "max_attempts": {"type": "integer", "minimum": 1, "default": 5},
+                    "max_attempt_count": {"type": "integer", "minimum": 1, "default": 5},
                     "default_backoff_seconds": {"type": "integer", "minimum": 1, "default": 30},
                     "max_backoff_seconds": {"type": "integer", "minimum": 1, "default": 900},
                     "dead_letter_capacity": {"type": "integer", "minimum": 1, "default": 1024},

@@ -196,7 +196,7 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
     assert!(revoked_json.get("actor_id").is_none());
     let mut response = submit_signed_handoff(&service, &revoked_json, "handoff-revoke").await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
-    let revoked_outcome: arkret_models_integration::PushRegistrationHandoffOutcome =
+    let revoked_outcome: arkret_models_integration::PushRegistrationHandoffResponseBody =
         response.take_json().await.unwrap();
     let receipt = &revoked_outcome.receipt;
     receipt
@@ -237,7 +237,7 @@ async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle
     assert_eq!(replay.status_code.unwrap(), StatusCode::OK);
     assert_eq!(
         replay
-            .take_json::<arkret_models_integration::PushRegistrationHandoffOutcome>()
+            .take_json::<arkret_models_integration::PushRegistrationHandoffResponseBody>()
             .await
             .unwrap(),
         revoked_outcome

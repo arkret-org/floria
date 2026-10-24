@@ -244,7 +244,7 @@ impl RetryEnvelope {
 
 #[derive(Debug, Clone)]
 pub struct RetryQueueConfig {
-    pub max_attempts: u32,
+    pub max_attempt_count: u32,
     pub default_backoff: Duration,
     pub max_backoff: Duration,
     pub dead_letter_capacity: usize,
@@ -253,7 +253,7 @@ pub struct RetryQueueConfig {
 impl Default for RetryQueueConfig {
     fn default() -> Self {
         Self {
-            max_attempts: 5,
+            max_attempt_count: 5,
             default_backoff: Duration::from_secs(30),
             max_backoff: Duration::from_secs(15 * 60),
             dead_letter_capacity: 1024,
@@ -384,7 +384,7 @@ impl RetryQueue {
     /// Enqueue a fresh failure (attempts already incremented to 1)
     /// or a re-enqueue after a worker decides to keep retrying.
     pub fn enqueue(&self, envelope: RetryEnvelope) {
-        if envelope.attempts >= self.config.max_attempts {
+        if envelope.attempts >= self.config.max_attempt_count {
             self.dead_letter(envelope);
             return;
         }
@@ -760,7 +760,7 @@ async fn dead_letter_for_worker(queue: &std::sync::Arc<RetryQueue>, envelope: Re
 
 /// Background-worker entry point. Drains due envelopes, re-dispatches
 /// each through the registry, and either re-enqueues (with
-/// exponential backoff) or dead-letters when `max_attempts` is hit.
+/// exponential backoff) or dead-letters when `max_attempt_count` is hit.
 ///
 /// The worker exits cleanly when `shutdown.recv().is_err()` (sender
 /// dropped) or after observing a single shutdown notification.
@@ -918,8 +918,8 @@ pub async fn run_worker(
                 }
                 Err(DispatchError::Temporary { retry_after, .. }) => {
                     let next_attempt = envelope.attempts.saturating_add(1);
-                    if next_attempt >= queue.config().max_attempts {
-                        crate::metrics::notify_dead_letter(&envelope.pushkin, "max_attempts");
+                    if next_attempt >= queue.config().max_attempt_count {
+                        crate::metrics::notify_dead_letter(&envelope.pushkin, "max_attempt_count");
                         crate::metrics::notify_retry_replayed(&envelope.pushkin, "dead_letter");
                         dead_letter_for_worker(&queue, envelope.with_attempt(next_attempt)).await;
                     } else {
@@ -1466,7 +1466,7 @@ mod tests {
     #[test]
     fn dead_letters_after_max_attempts() {
         let queue = RetryQueue::memory(RetryQueueConfig {
-            max_attempts: 2,
+            max_attempt_count: 2,
             ..RetryQueueConfig::default()
         });
         queue.enqueue(
@@ -1493,7 +1493,7 @@ mod tests {
         );
 
         // First entry is still pending, second one short-circuits to
-        // the dead-letter ring because attempts >= max_attempts.
+        // the dead-letter ring because attempts >= max_attempt_count.
         thread::sleep(Duration::from_millis(5));
         let due = queue.dequeue_due(10);
         assert_eq!(due.len(), 1);

@@ -61,7 +61,7 @@ see `docs/en/internal-endpoints.md`).
 - If the queue is stuck behind a permanently-broken provider, use
   `GET /_floria/admin/push/dead-letters?limit=N` (internal-auth
   bearer) to extract envelopes for manual replay; the retry worker
-  eventually dead-letters them after `max_attempts`.
+  eventually dead-letters them after `max_attempt_count`.
 - Increase `batch_item_count` on the retry worker (it polls every
   `poll_interval_ms`) if the backlog is caused by burstiness rather
   than provider failure.

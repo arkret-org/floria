@@ -26,7 +26,7 @@ pub(super) async fn dispatch_notification_devices(
 
     for (requested, registration) in notification.devices.iter().zip(registrations) {
         let Some(device) = registration.as_ref() else {
-            outcomes.push(PushNotifyDeviceOutcome::rejected(
+            outcomes.push(PushGatewaySubmissionOutcome::rejected(
                 requested.device_id.clone(),
                 PushNotifyReasonCode::PushTargetUnknown,
                 None,
@@ -43,7 +43,7 @@ pub(super) async fn dispatch_notification_devices(
                 "rejecting device with empty app_id or push_key"
             );
             rejected.push(rejected_device(device, device.push_key()));
-            outcomes.push(PushNotifyDeviceOutcome::rejected(
+            outcomes.push(PushGatewaySubmissionOutcome::rejected(
                 device.device_id.clone(),
                 PushNotifyReasonCode::PushTokenInvalid,
                 None,
@@ -64,7 +64,7 @@ pub(super) async fn dispatch_notification_devices(
             [] => {
                 tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "unknown app id");
                 rejected.push(rejected_device(device, device.push_key()));
-                outcomes.push(PushNotifyDeviceOutcome::rejected(
+                outcomes.push(PushGatewaySubmissionOutcome::rejected(
                     device.device_id.clone(),
                     PushNotifyReasonCode::UnsupportedProfile,
                     None,
@@ -92,7 +92,9 @@ pub(super) async fn dispatch_notification_devices(
                 };
                 if delivered_before {
                     skipped_delivered += 1;
-                    outcomes.push(PushNotifyDeviceOutcome::duplicate(device.device_id.clone()));
+                    outcomes.push(PushGatewaySubmissionOutcome::duplicate(
+                        device.device_id.clone(),
+                    ));
                     app_metrics::notify_device_skip_hit(1);
                     app_metrics::notify_device_skip_by_pushkin(pushkin.name(), 1);
                     delivery_receipts.push(delivery_receipt(
@@ -148,7 +150,7 @@ pub(super) async fn dispatch_notification_devices(
                             Some(CIRCUIT_BREAKER_RETRY_AFTER),
                         )
                     });
-                    outcomes.push(PushNotifyDeviceOutcome::rejected(
+                    outcomes.push(PushGatewaySubmissionOutcome::rejected(
                         device.device_id.clone(),
                         PushNotifyReasonCode::PushGatewayUnreachable,
                         Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
@@ -176,7 +178,7 @@ pub(super) async fn dispatch_notification_devices(
                             && current.visible_notification_opt_in
                                 == device.visible_notification_opt_in => {}
                     Ok(_) => {
-                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                        outcomes.push(PushGatewaySubmissionOutcome::rejected(
                             device.device_id.clone(),
                             PushNotifyReasonCode::PushTargetUnknown,
                             None,
@@ -185,7 +187,7 @@ pub(super) async fn dispatch_notification_devices(
                     }
                     Err(error) => {
                         tracing::warn!(%error, "registration recheck failed before dispatch");
-                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                        outcomes.push(PushGatewaySubmissionOutcome::rejected(
                             device.device_id.clone(),
                             PushNotifyReasonCode::PushGatewayUnreachable,
                             Some(1000),
@@ -263,7 +265,7 @@ pub(super) async fn dispatch_notification_devices(
                             first_internal_error.get_or_insert_with(|| {
                                 "failed to persist provider registration invalidation".to_owned()
                             });
-                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            outcomes.push(PushGatewaySubmissionOutcome::rejected(
                                 device.device_id.clone(),
                                 PushNotifyReasonCode::PushGatewayUnreachable,
                                 Some(1000),
@@ -276,14 +278,15 @@ pub(super) async fn dispatch_notification_devices(
                             .cloned()
                             .collect::<Vec<_>>();
                         if delivered_targets.is_empty() && !pushkin_rejected.is_empty() {
-                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            outcomes.push(PushGatewaySubmissionOutcome::rejected(
                                 device.device_id.clone(),
                                 PushNotifyReasonCode::PushTokenUnknown,
                                 None,
                             ));
                         } else {
-                            outcomes
-                                .push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
+                            outcomes.push(PushGatewaySubmissionOutcome::accepted(
+                                device.device_id.clone(),
+                            ));
                         }
                         if !delivered_targets.is_empty() {
                             delivered_now += delivered_targets.len();
@@ -343,10 +346,11 @@ pub(super) async fn dispatch_notification_devices(
                             .await;
                         }
                         if state.notify_retry_queue.is_some() {
-                            outcomes
-                                .push(PushNotifyDeviceOutcome::accepted(device.device_id.clone()));
+                            outcomes.push(PushGatewaySubmissionOutcome::accepted(
+                                device.device_id.clone(),
+                            ));
                         } else {
-                            outcomes.push(PushNotifyDeviceOutcome::rejected(
+                            outcomes.push(PushGatewaySubmissionOutcome::rejected(
                                 device.device_id.clone(),
                                 PushNotifyReasonCode::PushGatewayUnreachable,
                                 Some(duration_millis(
@@ -358,7 +362,7 @@ pub(super) async fn dispatch_notification_devices(
                             .get_or_insert_with(|| (error.safe_summary().to_owned(), retry_after));
                     }
                     Err(error) if error.is_remote() => {
-                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                        outcomes.push(PushGatewaySubmissionOutcome::rejected(
                             device.device_id.clone(),
                             PushNotifyReasonCode::PushGatewayUnreachable,
                             Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
@@ -382,7 +386,7 @@ pub(super) async fn dispatch_notification_devices(
                         first_remote_error.get_or_insert_with(|| error.safe_summary().to_owned());
                     }
                     Err(error) => {
-                        outcomes.push(PushNotifyDeviceOutcome::rejected(
+                        outcomes.push(PushGatewaySubmissionOutcome::rejected(
                             device.device_id.clone(),
                             PushNotifyReasonCode::PushGatewayUnreachable,
                             Some(duration_millis(CIRCUIT_BREAKER_RETRY_AFTER)),
@@ -410,7 +414,7 @@ pub(super) async fn dispatch_notification_devices(
             _ => {
                 tracing::warn!(request_id = %context.request_id, app_id, push_key_hash = %device.redacted_push_key(), "ambiguous app id");
                 rejected.push(rejected_device(device, device.push_key()));
-                outcomes.push(PushNotifyDeviceOutcome::rejected(
+                outcomes.push(PushGatewaySubmissionOutcome::rejected(
                     device.device_id.clone(),
                     PushNotifyReasonCode::UnsupportedProfile,
                     None,

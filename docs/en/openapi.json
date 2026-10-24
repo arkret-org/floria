@@ -152,7 +152,7 @@
         "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyRequestBody"
       },
       "NotifyResponse": {
-        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyOutcome"
+        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyResponseBody"
       },
       "IntegrationDescribeResponse": {
         "type": "object",

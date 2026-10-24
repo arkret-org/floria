@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use arkret_models_integration::{
-    PushRegistrationHandoffOutcome, PushRegistrationHandoffRequestBody,
+    PushRegistrationHandoffRequestBody, PushRegistrationHandoffResponseBody,
     PushRegistrationHandoffState, PushRegistrationInstallationReceipt, PushRegistrationRecord,
 };
 use arkret_wire::{Audience, DidCoreId, DidUrl, Hash, PayloadProof, proof_kind};
@@ -154,7 +154,7 @@ impl RegistrationHandoffStore {
         source: DidCoreId,
         destination: DidCoreId,
         request: PushRegistrationHandoffRequestBody,
-    ) -> Result<PushRegistrationHandoffOutcome, ApplyRegistrationError> {
+    ) -> Result<PushRegistrationHandoffResponseBody, ApplyRegistrationError> {
         if destination != self.gateway_id {
             return Err(ApplyRegistrationError::Conflict);
         }
@@ -313,7 +313,7 @@ impl RegistrationHandoffStore {
         &self,
         source: &DidCoreId,
         request: &PushRegistrationHandoffRequestBody,
-    ) -> Result<PushRegistrationHandoffOutcome, ApplyRegistrationError> {
+    ) -> Result<PushRegistrationHandoffResponseBody, ApplyRegistrationError> {
         let request_digest = request.request_digest().map_err(|error| {
             ApplyRegistrationError::Storage(anyhow::anyhow!("failed to digest handoff: {error}"))
         })?;
@@ -367,7 +367,7 @@ impl RegistrationHandoffStore {
                         let receipt = serde_json::from_str(&existing.receipt_json)
                             .context("invalid durable registration receipt")?;
                         transaction.commit().await?;
-                        return Ok(PushRegistrationHandoffOutcome { receipt });
+                        return Ok(PushRegistrationHandoffResponseBody { receipt });
                     }
                     if !matches!(request, PushRegistrationHandoffRequestBody::Revoked { .. })
                         || (existing.state != PushRegistrationHandoffState::Active.as_str()
@@ -394,7 +394,7 @@ impl RegistrationHandoffStore {
                         ],
                     ).await?;
                     transaction.commit().await?;
-                    return Ok(PushRegistrationHandoffOutcome { receipt });
+                    return Ok(PushRegistrationHandoffResponseBody { receipt });
                 }
 
                 let route_ciphertext = match request {
@@ -487,7 +487,7 @@ impl RegistrationHandoffStore {
                     ],
                 ).await?;
                 transaction.commit().await?;
-                Ok(PushRegistrationHandoffOutcome { receipt })
+                Ok(PushRegistrationHandoffResponseBody { receipt })
             })
             .map_err(|error| {
                 if error.downcast_ref::<ConflictMarker>().is_some() {

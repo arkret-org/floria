@@ -566,7 +566,7 @@
               "default": "floria",
               "type": "string"
             },
-            "max_attempts": {
+            "max_attempt_count": {
               "default": 5,
               "minimum": 1,
               "type": "integer"

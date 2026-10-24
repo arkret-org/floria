@@ -82,7 +82,7 @@ async fn remote_provider_errors_are_not_reported_as_accepted() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(
@@ -145,7 +145,7 @@ async fn temporary_errors_without_durable_retry_return_per_device_backoff() {
 
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(
@@ -286,7 +286,7 @@ async fn unknown_device_registration_is_rejected_without_dispatch() {
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(body.outcomes.len(), 1);
@@ -416,7 +416,7 @@ async fn registered_blank_provider_app_is_rejected_without_dispatch() {
         .await;
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(

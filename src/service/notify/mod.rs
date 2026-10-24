@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arkret_models_integration::{
-    AgentEventRouting, PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyReasonCode,
-    classify_agent_event_kind, validate_push_notify_contract_shape,
+    AgentEventRouting, PushGatewaySubmissionOutcome, PushNotificationEnvelope,
+    PushNotifyReasonCode, classify_agent_event_kind, validate_push_notify_contract_shape,
 };
 use salvo::http::header::{HeaderName, HeaderValue};
 use salvo::http::{ParseError, StatusCode};
@@ -86,11 +86,13 @@ fn push_target_id(notification: &PushNotificationEnvelope) -> arkret_wire::PushT
         .expect("validated notify request has a push_target_id")
 }
 
-fn no_fanout_outcomes(notification: &PushNotificationEnvelope) -> Vec<PushNotifyDeviceOutcome> {
+fn no_fanout_outcomes(
+    notification: &PushNotificationEnvelope,
+) -> Vec<PushGatewaySubmissionOutcome> {
     notification
         .devices
         .iter()
-        .map(|device| PushNotifyDeviceOutcome::duplicate(device.device_id.clone()))
+        .map(|device| PushGatewaySubmissionOutcome::duplicate(device.device_id.clone()))
         .collect()
 }
 
@@ -615,7 +617,7 @@ pub(super) async fn notify(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 .devices
                 .iter()
                 .map(|device| {
-                    PushNotifyDeviceOutcome::rejected(
+                    PushGatewaySubmissionOutcome::rejected(
                         device.device_id.clone(),
                         PushNotifyReasonCode::RateLimited,
                         Some(duration_millis(rejection.retry_after)),

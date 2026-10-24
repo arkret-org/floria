@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use arkret_models_integration::{
-    PushNotificationEnvelope, PushNotifyDeviceOutcome, PushNotifyOutcome, PushRegistrationRecord,
+    PushGatewaySubmissionOutcome, PushNotificationEnvelope, PushNotifyResponseBody,
+    PushRegistrationRecord,
 };
 use blake2::Blake2s256;
 use blake2::digest::Digest;
@@ -10,18 +11,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotifyDispatchResult {
     pub request_id: String,
-    pub wire_outcome: PushNotifyOutcome,
+    pub wire_outcome: PushNotifyResponseBody,
 }
 
 impl NotifyDispatchResult {
     pub fn new(
         request_id: impl Into<String>,
         push_target_id: arkret_wire::PushTargetId,
-        outcomes: Vec<PushNotifyDeviceOutcome>,
+        outcomes: Vec<PushGatewaySubmissionOutcome>,
     ) -> Self {
         Self {
             request_id: request_id.into(),
-            wire_outcome: PushNotifyOutcome {
+            wire_outcome: PushNotifyResponseBody {
                 push_target_id,
                 outcomes,
             },
@@ -361,7 +362,7 @@ mod tests {
             )
             .unwrap(),
             vec![
-                arkret_models_integration::PushNotifyDeviceOutcome::accepted(
+                arkret_models_integration::PushGatewaySubmissionOutcome::accepted(
                     arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000004")
                         .unwrap(),
                 ),

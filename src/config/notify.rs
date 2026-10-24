@@ -182,7 +182,7 @@ pub struct NotifyRetryQueueConfig {
     pub backend: String,
     pub redis_url: Option<String>,
     pub key_prefix: String,
-    pub max_attempts: u32,
+    pub max_attempt_count: u32,
     pub default_backoff_seconds: u64,
     pub max_backoff_seconds: u64,
     pub dead_letter_capacity: u32,
@@ -230,7 +230,7 @@ impl Default for NotifyRetryQueueConfig {
             backend: "memory".to_owned(),
             redis_url: None,
             key_prefix: "floria".to_owned(),
-            max_attempts: 5,
+            max_attempt_count: 5,
             default_backoff_seconds: 30,
             max_backoff_seconds: 15 * 60,
             dead_letter_capacity: 1024,
@@ -310,8 +310,8 @@ impl NotifyRetryQueueConfig {
         if !self.enabled {
             return Ok(());
         }
-        if self.max_attempts == 0 {
-            bail!("http.notify_retry_queue.max_attempts must be >= 1");
+        if self.max_attempt_count == 0 {
+            bail!("http.notify_retry_queue.max_attempt_count must be >= 1");
         }
         if self.default_backoff_seconds == 0 {
             bail!("http.notify_retry_queue.default_backoff_seconds must be >= 1");

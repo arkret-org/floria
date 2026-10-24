@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use arkret_models_integration::{PushNotificationEnvelope, PushNotifyDeviceOutcome};
+use arkret_models_integration::{PushGatewaySubmissionOutcome, PushNotificationEnvelope};
 use salvo::http::StatusCode;
 use salvo::prelude::Response;
 
@@ -15,7 +15,7 @@ use crate::{AppState, metrics as app_metrics};
 
 pub(super) struct DispatchSummary {
     pub(super) rejected: Vec<RejectedDevice>,
-    pub(super) outcomes: Vec<PushNotifyDeviceOutcome>,
+    pub(super) outcomes: Vec<PushGatewaySubmissionOutcome>,
     pub(super) delivered_now: usize,
     pub(super) skipped_delivered: usize,
     pub(super) delivery_receipts: Vec<DeliveryReceipt>,

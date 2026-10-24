@@ -1,10 +1,10 @@
-use arkret_models_integration::{IntegrationDescribeOutcome, IntegrationSurfaceDescriptor};
+use arkret_models_integration::{IntegrationManifest, IntegrationSurfaceDescriptor};
 use arkret_wire::{ProfileId, ServiceContractId, ServiceOperationId};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 
 /// `GET /_floria/integration/describe` emits the shared SDK integration
-/// manifest (`arkret_models_integration::IntegrationDescribeOutcome`).
+/// manifest (`arkret_models_integration::IntegrationManifest`).
 ///
 /// The shape MUST come from the SDK: chime deserializes this exact route with
 /// the SDK type (`floria_integration_describe`), so a product-local mirror
@@ -13,7 +13,7 @@ use salvo::prelude::*;
 #[handler]
 pub(super) async fn integration_describe(_depot: &mut Depot, res: &mut Response) {
     res.status_code(StatusCode::OK);
-    res.render(Json(IntegrationDescribeOutcome {
+    res.render(Json(IntegrationManifest {
         // Canonical manifest contract id per the SDK
         // (`models-integration/src/integration.rs`).
         contract: ServiceContractId::INTEGRATION_MANIFEST_V1.to_owned(),

@@ -432,7 +432,10 @@ impl ServiceAccountSigner {
         let token: AccessTokenResponse = client
             .post(&self.token_uri)
             .form(&[
-                ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
+                (
+                    "grant_type",
+                    "urn:ietf:parameters:oauth:grant-type:jwt-bearer",
+                ),
                 ("assertion", jwt.as_str()),
             ])
             .send()

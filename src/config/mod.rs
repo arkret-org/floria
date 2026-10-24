@@ -272,10 +272,10 @@ where
         }
         fn visit_seq<A: serde::de::SeqAccess<'de>>(
             self,
-            mut seq: A,
+            mut sequence: A,
         ) -> Result<Self::Value, A::Error> {
             let mut vec = Vec::new();
-            while let Some(value) = seq.next_element()? {
+            while let Some(value) = sequence.next_element()? {
                 vec.push(value);
             }
             Ok(vec)

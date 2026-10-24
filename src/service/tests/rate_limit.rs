@@ -10,7 +10,7 @@ async fn assert_rate_limited(response: &mut salvo::Response, expected_devices: u
     assert_eq!(response.status_code.unwrap(), StatusCode::OK);
     assert!(response.headers().get("retry-after").is_none());
     let body = response
-        .take_json::<arkret_models_integration::PushNotifyOutcome>()
+        .take_json::<arkret_models_integration::PushNotifyResponseBody>()
         .await
         .unwrap();
     assert_eq!(body.outcomes.len(), expected_devices);
