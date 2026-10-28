@@ -2,8 +2,7 @@
 //!
 //! `floria::config::config_json_schema` is the single source of truth;
 //! `floria.config.schema.json` at the repository root is generated from
-//! it. These tests fail the build if the artifact drifts, or if the
-//! schema version is written in more than one place.
+//! it. The test fails the build if the artifact drifts.
 
 use serde_json::Value;
 
@@ -26,27 +25,5 @@ fn committed_config_schema_matches_generator() {
     assert_eq!(
         committed, generated,
         "floria.config.schema.json drifted; run `cargo run --example emit_schema > floria.config.schema.json`"
-    );
-}
-
-/// The schema version appears twice in the document (`$id` and
-/// `x-floria-schema-version`). Both derive from `Config::SCHEMA_VERSION`,
-/// so a bump can never update one and leave the other behind.
-#[test]
-fn schema_version_is_single_sourced() {
-    let schema = generated();
-    let version = schema
-        .get("x-floria-schema-version")
-        .and_then(Value::as_str)
-        .expect("schema must carry x-floria-schema-version");
-    let id = schema
-        .get("$id")
-        .and_then(Value::as_str)
-        .expect("schema must carry $id");
-
-    assert_eq!(
-        id,
-        format!("https://arkret.dev/schema/floria/{version}/floria.config.schema.json"),
-        "$id must embed x-floria-schema-version"
     );
 }

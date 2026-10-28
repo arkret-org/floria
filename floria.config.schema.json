@@ -1,5 +1,5 @@
 {
-  "$id": "https://arkret.dev/schema/floria/2026-08-27.1/floria.config.schema.json",
+  "$id": "https://arkret.dev/schema/floria/v1/floria.config.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Schema for floria.kdl / floria.yaml; KDL is parsed to JSON via the same shape before deserialization.",
@@ -830,6 +830,5 @@
     }
   },
   "title": "floria gateway configuration",
-  "type": "object",
-  "x-floria-schema-version": "2026-08-27.1"
+  "type": "object"
 }

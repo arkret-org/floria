@@ -238,9 +238,6 @@ impl ConfigLoadOptions {
 }
 
 impl Config {
-    /// Bumped whenever the schema artifact emitted by [`config_json_schema`] changes.
-    pub const SCHEMA_VERSION: &'static str = "2026-08-27.1";
-
     /// Parse a KDL config body into the intermediate JSON shape used by
     /// [`Config::load_from_args`]. Exposed for parity tests and ops tooling so
     /// callers can compare KDL ↔ YAML samples without re-rolling the
