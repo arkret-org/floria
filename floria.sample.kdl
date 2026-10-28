@@ -90,7 +90,7 @@ http {
     backend "memory"
     // // backend "redis"
     // // redis_url "redis://127.0.0.1:6379/4"
-    max_attempts 5
+    max_attempt_count 5
     default_backoff_seconds 30
     max_backoff_seconds 900
     dead_letter_capacity 1024

@@ -9,6 +9,13 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: floria
+
 jobs:
   audit:
     name: Cargo Audit
@@ -17,17 +24,23 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          path: floria
 
       - name: Checkout Arkret Rust SDK
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: floria -> target
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.22.0 --locked
