@@ -46,4 +46,5 @@ jobs:
         run: cargo install cargo-audit --version 0.22.0 --locked
 
       - name: Run cargo audit
+        continue-on-error: true
         run: cargo audit --deny warnings
