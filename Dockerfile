@@ -6,7 +6,7 @@
 # Root manifests move into this stage so Cargo can resolve dependencies
 # while warming the dependency cache.
 # ---------------------------------------------------------------------------
-FROM rust:1.98-trixie AS deps
+FROM rust:1.99-trixie AS deps
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # crate. The `target/` directory is mounted as a cache so dirty rebuilds stay
 # incremental between Docker invocations.
 # ---------------------------------------------------------------------------
-FROM rust:1.98-trixie AS builder
+FROM rust:1.99-trixie AS builder
 
 WORKDIR /app
 
