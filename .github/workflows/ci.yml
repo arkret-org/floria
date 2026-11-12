@@ -31,6 +31,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          ref: fac9f552d1b7f64e9933b8785b0da207e289587b
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -93,6 +94,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          ref: fac9f552d1b7f64e9933b8785b0da207e289587b
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -110,6 +112,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
+          ref: 122bfa71e24c5c46f7f2587e2308617777dd153a
           path: coland
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -146,6 +149,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          ref: fac9f552d1b7f64e9933b8785b0da207e289587b
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
