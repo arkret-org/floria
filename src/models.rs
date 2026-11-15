@@ -262,6 +262,15 @@ mod tests {
             ))
         );
         assert_eq!(counts.unread_increment_count, Some(2));
+        let wire = serde_json::to_value(&counts).unwrap();
+        assert_eq!(wire["unread_increment_count"], 2);
+        assert!(wire.get("unread_increment").is_none());
+        assert!(
+            serde_json::from_value::<PushCounts>(json!({
+                "unread_increment": 2
+            }))
+            .is_err()
+        );
         assert_eq!(
             counts.missed_call,
             Some(arkret_models_integration::PushCountIndicator::Present(
