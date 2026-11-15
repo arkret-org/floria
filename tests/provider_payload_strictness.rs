@@ -154,7 +154,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
         "push_hint": "new_message",
-        "counts": { "unread_increment": 3 },
+        "counts": { "unread_increment_count": 3 },
     }))
     .unwrap();
 
@@ -319,7 +319,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
         },
-        "counts": { "unread_increment": 3 },
+        "counts": { "unread_increment_count": 3 },
     }))
     .unwrap();
 
@@ -334,6 +334,21 @@ fn build_blind_provider_data_never_emits_route_tokens() {
     assert_eq!(data.get("wakeup_kind"), Some(&json!("message")));
     // The privacy profile coarsens counts 2..=5 into the representative 5.
     assert_eq!(data.get("unread_count"), Some(&json!(5)));
+}
+
+#[test]
+fn notification_rejects_obsolete_or_dual_unread_count_names() {
+    for counts in [
+        json!({"unread_increment": 3}),
+        json!({"unread_increment": 3, "unread_increment_count": 3}),
+    ] {
+        assert!(
+            serde_json::from_value::<PushNotificationEnvelope>(json!({
+                "counts": counts,
+            }))
+            .is_err()
+        );
+    }
 }
 
 #[test]
@@ -760,7 +775,14 @@ fn test_registration_directory_for_device(
         scope.spawn(|| {
     floria::postgres_support::PostgresPool::new(&database_url, "provider test registration").unwrap()
 .with_client(async |client| {
-        client.execute(
+        // Concurrent tests seed the same registration identity. Serialize only
+        // fixture writes before PostgreSQL checks its two unique indexes.
+        let transaction = client.transaction().await?;
+        transaction.query_one(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            &[&record.registration_id.as_str()],
+        ).await?;
+        transaction.execute(
 "INSERT INTO public.push_devices(id,actor_id,device_id,push_gateway,push_key,app_id,payload,device_authorization) VALUES($1,$2,$3,$4,$5,$6,$7::text::jsonb,$8::text::jsonb) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload",
 &[
 &record.registration_id.as_str(),
@@ -773,6 +795,7 @@ fn test_registration_directory_for_device(
 &authorization
 ],
 ).await?;
+        transaction.commit().await?;
         Ok(())
     })
 .unwrap();

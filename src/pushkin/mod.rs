@@ -375,10 +375,10 @@ pub fn build_blind_provider_data(
 ) -> Map<String, serde_json::Value> {
     let mut data = build_blind_routing_data(notification);
 
-    if let Some(unread_increment) = notification_unread_increment(notification) {
+    if let Some(unread_increment_count) = notification_unread_increment_count(notification) {
         data.insert(
             "unread_count".to_owned(),
-            serde_json::Value::Number(unread_increment.into()),
+            serde_json::Value::Number(unread_increment_count.into()),
         );
     }
     if let Some(badge) = notification_badge_count(notification) {
@@ -387,11 +387,11 @@ pub fn build_blind_provider_data(
     data
 }
 
-pub fn notification_unread_increment(notification: &PushNotificationEnvelope) -> Option<u64> {
+pub fn notification_unread_increment_count(notification: &PushNotificationEnvelope) -> Option<u64> {
     notification
         .counts
         .as_ref()
-        .and_then(|counts| counts.unread_increment)
+        .and_then(|counts| counts.unread_increment_count)
         .map(crate::sanitize::bucket_count)
 }
 
@@ -596,7 +596,7 @@ mod sanitize_tests {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
-                unread_increment: Some(2),
+                unread_increment_count: Some(2),
                 missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
@@ -630,7 +630,7 @@ mod sanitize_tests {
             let notification = PushNotificationEnvelope {
                 counts: Some(PushCounts {
                     badge,
-                    unread_increment: None,
+                    unread_increment_count: None,
                     missed_call,
                 }),
                 ..Default::default()

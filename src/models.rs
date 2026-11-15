@@ -250,7 +250,7 @@ mod tests {
     fn counts_accept_active_fields() {
         let counts: PushCounts = serde_json::from_value(json!({
             "badge": "2-5",
-            "unread_increment": 2,
+            "unread_increment_count": 2,
             "missed_call": false
         }))
         .unwrap();
@@ -261,7 +261,7 @@ mod tests {
                 "2-5".to_owned()
             ))
         );
-        assert_eq!(counts.unread_increment, Some(2));
+        assert_eq!(counts.unread_increment_count, Some(2));
         assert_eq!(
             counts.missed_call,
             Some(arkret_models_integration::PushCountIndicator::Present(

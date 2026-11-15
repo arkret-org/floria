@@ -224,7 +224,7 @@ pub(super) fn test_gateway_service_resolution()
         "service": [{
             "id": "did:web:push.example.com#gateway",
             "type": "ArkretService",
-            "serviceKind": "push_gateway",
+            "service_kind": "push_gateway",
             "serviceEndpoint": "https://push.example.com/"
         }]
     }))
