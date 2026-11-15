@@ -818,7 +818,7 @@ mod tests {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
-                unread_increment: Some(2),
+                unread_increment_count: Some(2),
                 missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
@@ -900,7 +900,7 @@ mod tests {
             }],
             counts: Some(PushCounts {
                 badge: None,
-                unread_increment: None,
+                unread_increment_count: None,
                 missed_call: None,
             }),
             ..Default::default()

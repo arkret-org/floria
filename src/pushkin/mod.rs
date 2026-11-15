@@ -391,7 +391,7 @@ pub fn notification_unread_increment(notification: &PushNotificationEnvelope) ->
     notification
         .counts
         .as_ref()
-        .and_then(|counts| counts.unread_increment)
+        .and_then(|counts| counts.unread_increment_count)
         .map(crate::sanitize::bucket_count)
 }
 
@@ -596,7 +596,7 @@ mod sanitize_tests {
                 badge: Some(arkret_models_integration::PushCountIndicator::Bucket(
                     "2-5".to_owned(),
                 )),
-                unread_increment: Some(2),
+                unread_increment_count: Some(2),
                 missed_call: Some(arkret_models_integration::PushCountIndicator::Present(true)),
             }),
             ..Default::default()
@@ -630,7 +630,7 @@ mod sanitize_tests {
             let notification = PushNotificationEnvelope {
                 counts: Some(PushCounts {
                     badge,
-                    unread_increment: None,
+                    unread_increment_count: None,
                     missed_call,
                 }),
                 ..Default::default()

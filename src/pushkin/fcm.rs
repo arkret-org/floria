@@ -655,7 +655,7 @@ mod tests {
             }],
             counts: Some(PushCounts {
                 badge: None,
-                unread_increment: None,
+                unread_increment_count: None,
                 missed_call: None,
             }),
             ..Default::default()

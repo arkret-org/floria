@@ -154,7 +154,7 @@ fn build_blind_provider_data_emits_only_allowed_fields() {
         "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
         "wakeup_kind": "message",
         "push_hint": "new_message",
-        "counts": { "unread_increment": 3 },
+        "counts": { "unread_increment_count": 3 },
     }))
     .unwrap();
 
@@ -319,7 +319,7 @@ fn build_blind_provider_data_never_emits_route_tokens() {
             "realm_route_token": "realm_route_token_000000001",
             "scope_route_token": "scope_route_token_000000001",
         },
-        "counts": { "unread_increment": 3 },
+        "counts": { "unread_increment_count": 3 },
     }))
     .unwrap();
 
