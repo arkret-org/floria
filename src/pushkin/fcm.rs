@@ -19,7 +19,7 @@ use tokio::time::sleep;
 use super::reqwest_support::{ExpiringTokenCache, header_value, parse_retry_after};
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
-    max_connections, notification_badge_count, notification_unread_increment,
+    max_connections, notification_badge_count, notification_unread_increment_count,
     sanitized_provider_payload,
 };
 use crate::auth::redact_url_credentials;
@@ -329,12 +329,12 @@ impl FcmPushkin {
 
         let mut emitted_count = false;
         if self.send_badge_counts {
-            if let Some(unread_increment) = notification_unread_increment(notification)
-                && unread_increment > 0
+            if let Some(unread_increment_count) = notification_unread_increment_count(notification)
+                && unread_increment_count > 0
             {
                 data.insert(
                     "unread_count".to_owned(),
-                    Value::String(unread_increment.to_string()),
+                    Value::String(unread_increment_count.to_string()),
                 );
                 emitted_count = true;
             }
@@ -572,7 +572,7 @@ mod tests {
             payload.get("priority"),
             Some(&Value::String("normal".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge is reduced
+        // unread_increment_count travels as a bounded delta; badge is reduced
         // to a boolean unread indicator.
         assert_eq!(
             payload.get("unread_count"),

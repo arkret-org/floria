@@ -29,7 +29,7 @@ use tokio::sync::Semaphore;
 
 use super::{
     AppMatcher, ConcurrencyGate, Pushkin, build_blind_routing_data, inflight_limit,
-    max_connections, notification_badge_count, notification_unread_increment,
+    max_connections, notification_badge_count, notification_unread_increment_count,
     sanitized_provider_payload,
 };
 use crate::config::{AppConfig, Config};
@@ -327,10 +327,10 @@ impl WebpushPushkin {
         let mut payload = Map::new();
 
         payload.extend(build_blind_routing_data(notification));
-        if let Some(unread_increment) = notification_unread_increment(notification) {
+        if let Some(unread_increment_count) = notification_unread_increment_count(notification) {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(unread_increment.into()),
+                Value::Number(unread_increment_count.into()),
             );
         }
         if let Some(badge) = notification_badge_count(notification) {
@@ -925,7 +925,7 @@ mod tests {
             payload.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // unread_increment travels as a bounded delta; badge is reduced
+        // unread_increment_count travels as a bounded delta; badge is reduced
         // to a boolean unread indicator.
         assert_eq!(payload.get("unread_count"), Some(&Value::Number(5.into())));
         assert_eq!(payload.get("badge"), Some(&Value::Number(1.into())));
