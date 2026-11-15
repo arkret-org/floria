@@ -59,10 +59,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
 
     /// Property 1 — injecting any forbidden key at the top level
-    /// results in it being stripped from the sanitizer output. We
-    /// allow either of:
-    ///   * Sanitizer returns Ok and the output has no forbidden key.
-    ///   * Sanitizer rejects (e.g. the value embedded a `did:` literal).
+    /// results in successful sanitization with the forbidden key removed.
     #[test]
     fn forbidden_top_level_keys_are_stripped(
         forbidden in arb_forbidden_key(),
@@ -72,8 +69,8 @@ proptest! {
         payload.insert("client".into(), json!("android"));
         payload.insert("wakeup_kind".into(), json!("message"));
         payload.insert(forbidden.to_string(), leaf);
-        let outcome = sanitized_provider_payload(payload);
-        if let Ok(out) = outcome {
+        let out = sanitized_provider_payload(payload).expect("non-sensitive payload must sanitize");
+        {
             // forbidden name must not survive
             prop_assert!(
                 !contains_forbidden_key(&Value::Object(out.clone())),
@@ -85,7 +82,7 @@ proptest! {
     }
 
     /// Property 2 — injecting a forbidden key inside a nested object
-    /// also gets stripped (or rejected) — recursive sweep.
+    /// also gets stripped successfully by the recursive sweep.
     #[test]
     fn forbidden_nested_keys_are_stripped(
         forbidden in arb_forbidden_key(),
@@ -98,8 +95,8 @@ proptest! {
             "nested".into(),
             json!({ "deep": { forbidden: leaf, "ok_key": "value" } }),
         );
-        let outcome = sanitized_provider_payload(payload);
-        if let Ok(out) = outcome {
+        let out = sanitized_provider_payload(payload).expect("non-sensitive payload must sanitize");
+        {
             prop_assert!(
                 !contains_forbidden_key(&Value::Object(out.clone())),
                 "forbidden key `{forbidden}` survived nested sweep: {out:?}"

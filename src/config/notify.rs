@@ -7,6 +7,7 @@ use serde_json::{Map, Value};
 
 use super::warn_unknown_fields;
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyDedupConfig {
@@ -73,6 +74,7 @@ impl NotifyDedupConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyRateLimitConfig {
@@ -175,6 +177,7 @@ impl NotifyRateLimitConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyRetryQueueConfig {

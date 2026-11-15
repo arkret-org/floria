@@ -11,6 +11,7 @@ use super::{
     normalize_listen_addr, string_or_vec, validate_bearer_token_hashes, warn_unknown_fields,
 };
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct HttpConfig {
@@ -147,6 +148,7 @@ impl HttpConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct InternalAuthConfig {

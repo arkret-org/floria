@@ -31,14 +31,14 @@ http {
     // trusted_service_ids "ak:did_core:web:sync.example.com"
     // plaintext_metadata_service_ids "ak:did_core:web:sync.example.com"
     // gateway_service_did "did:webvh:zQ3shGatewayScid:push.example.com"
-    // gateway_service_method_history_head "sha256:<verified-log-head-digest>"
-    // gateway_service_version_id "1-<verified-version-id>"
     //
-    // Stronger production profile:
+    // Stronger production profile requires a complete gateway_service_resolution
+    // block with method-native evidence matching gateway_service_did.
     // production_mode #true
     // require_message_signatures #true
     // service_principals {
     //   "ak:did_core:web:sync.example.com" {
+    //     service_kind "station"
     //     allow_plaintext_metadata #true
     //     // bearer_tokens is non-production only; production_mode rejects it.
     //     bearer_token_hashes "sha256:<hex-digest>"
@@ -119,8 +119,6 @@ metrics {
     service_name "floria"
     sample_rate 1.0
     timeout_seconds 10
-    // Reserved; currently OTLP/gRPC is the only supported back-end.
-    // implementation "jaeger"
   }
   sentry {
     // Sentry error capture via the tracing subscriber.

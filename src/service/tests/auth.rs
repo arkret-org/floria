@@ -737,9 +737,9 @@ async fn principal_plaintext_policy_requires_eligible_service_kind() {
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.bearer_tokens = vec!["principal-token".to_owned()];
     principal.allow_plaintext_metadata = true;
-    // `push` is a delegated push service (so the request is accepted)
+    // `push_gateway` is a delegated push service (so the request is accepted)
     // but is NOT plaintext-eligible (so plaintext metadata is rejected).
-    principal.service_kind = Some("push".to_owned());
+    principal.service_kind = Some("push_gateway".to_owned());
     config
         .service_principals
         .insert("ak:did_core:web:sync.example.com".to_owned(), principal);

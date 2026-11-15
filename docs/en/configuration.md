@@ -153,6 +153,7 @@ http {
 | `notify_auth.trusted_service_ids` | string/string[] | — | Allowlisted origin service core IDs for `/notify` |
 | `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | Service core IDs allowed to send plaintext metadata fields such as `sender_actor_display_name` and `space_name` |
 | `notify_auth.gateway_service_did` | string | — | Resolvable gateway DID; transport headers carry its core projection |
+| `notify_auth.gateway_service_resolution` | object | — | Complete authenticated method-native Service resolution; required in production and must match the gateway DID and public URL |
 | `notify_auth.require_message_signatures` | bool | `false` | Require HTTP Message Signature verification for configured service principals |
 | `notify_auth.production_mode` | bool | `false` | Reject anonymous/bearer-only `/notify`, require configured signed or mTLS service principals, and reject plaintext notify bearer tokens |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | Allowed clock skew when verifying signature `created` / `expires` |
@@ -187,12 +188,12 @@ http {
   }
   notify_auth {
     gateway_service_did "did:web:push.example.com"
-    gateway_service_method_history_head "sha256:<verified-log-head-digest>"
-    gateway_service_version_id "1-<verified-version-id>"
+    // Add the complete authenticated gateway_service_resolution evidence block.
     production_mode true
     require_message_signatures true
     service_principals {
       "ak:did_core:web:sync.example.com" {
+        service_kind "station"
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_verification_method "did:web:sync.example.com#push"

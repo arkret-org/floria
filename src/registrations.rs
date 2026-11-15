@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::postgres_support::PostgresPool;
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RegistrationSourceConfig {

@@ -33,6 +33,8 @@ mod registration_handoff;
 mod schema;
 
 #[cfg(test)]
+mod sample_tests;
+#[cfg(test)]
 mod tests;
 
 pub use audit_storage::AuditConfig;
@@ -51,6 +53,7 @@ pub use observability::{
 pub use registration_handoff::RegistrationHandoffConfig;
 pub use schema::config_json_schema;
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -297,6 +300,7 @@ pub(crate) fn validate_bearer_token_hashes(scope: &str, hashes: &[String]) -> Re
     Ok(())
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(rename = "type")]

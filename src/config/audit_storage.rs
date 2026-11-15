@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use super::warn_unknown_fields;
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct AuditConfig {

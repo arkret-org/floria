@@ -118,9 +118,8 @@ async fn configured_handoff_test_service(
 
 #[tokio::test]
 async fn configured_handoff_accepts_signed_apply_and_advertises_generated_bundle() {
-    let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-        return;
-    };
+    let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+        .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
     let (service, store) = configured_handoff_test_service(postgres_url).await;
     let mut request_body = body();
     request_body["registration_id"] =

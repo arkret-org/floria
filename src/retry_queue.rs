@@ -1160,9 +1160,8 @@ mod tests {
 
     #[tokio::test]
     async fn handoff_retry_uses_exact_source_and_honors_revocation() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let gateway = arkret_wire::project_did_to_core_id(
             &arkret_wire::Did::new("did:web:gateway.example").unwrap(),
         )
@@ -1238,9 +1237,8 @@ mod tests {
 
     #[tokio::test]
     async fn provider_rejection_durably_tombstones_handoff_before_dead_letter() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let (store, gateway, _) = isolated_handoff_store(&postgres_url).await;
         let source = arkret_wire::DidCoreId::new(format!(
             "ak:did_core:web:retry-reject-{}.example",
@@ -1304,9 +1302,8 @@ mod tests {
 
     #[tokio::test]
     async fn stale_retry_rejection_cannot_tombstone_a_successor_registration() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let (store, gateway, _) = isolated_handoff_store(&postgres_url).await;
         let source = arkret_wire::DidCoreId::new(format!(
             "ak:did_core:web:retry-stale-{}.example",
@@ -1390,9 +1387,8 @@ mod tests {
 
     #[tokio::test]
     async fn tombstone_storage_failure_requeues_instead_of_dead_lettering() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let (store, gateway, table) = isolated_handoff_store(&postgres_url).await;
         let source = arkret_wire::DidCoreId::new(format!(
             "ak:did_core:web:retry-storage-{}.example",
