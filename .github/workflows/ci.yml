@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          ref: 3dc8b1d1505bd87df5aba806fc317d7a01dfdf89
+          ref: e84ab4be3f1004ef5f48ea2250cd403787c4e706
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          ref: 3dc8b1d1505bd87df5aba806fc317d7a01dfdf89
+          ref: e84ab4be3f1004ef5f48ea2250cd403787c4e706
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
@@ -149,7 +149,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          ref: 3dc8b1d1505bd87df5aba806fc317d7a01dfdf89
+          ref: e84ab4be3f1004ef5f48ea2250cd403787c4e706
           path: arkret-rust-sdk
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
