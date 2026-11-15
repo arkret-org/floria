@@ -2,7 +2,7 @@ use arkret_models_integration::PushNotificationEnvelope;
 use serde_json::{Map, Value};
 
 use super::{
-    build_blind_routing_data, notification_badge_count, notification_unread_increment,
+    build_blind_routing_data, notification_badge_count, notification_unread_increment_count,
     sanitized_provider_payload, truncate_str,
 };
 use crate::models::NotificationExt;
@@ -90,10 +90,10 @@ fn merge_notification_data(
     );
 
     if send_badge_counts {
-        if let Some(unread_increment) = notification_unread_increment(notification) {
+        if let Some(unread_increment_count) = notification_unread_increment_count(notification) {
             payload.insert(
                 "unread_count".to_owned(),
-                Value::Number(unread_increment.into()),
+                Value::Number(unread_increment_count.into()),
             );
         }
         if let Some(badge) = notification_badge_count(notification) {
@@ -154,14 +154,16 @@ fn message_summary(notification: &PushNotificationEnvelope, sender: &str) -> Str
 }
 
 fn fallback_summary(notification: &PushNotificationEnvelope, sender: &str) -> String {
-    match notification_unread_increment(notification) {
-        Some(unread_increment) if unread_increment >= crate::sanitize::BUCKET_TWENTY_ONE_PLUS => {
+    match notification_unread_increment_count(notification) {
+        Some(unread_increment_count)
+            if unread_increment_count >= crate::sanitize::BUCKET_TWENTY_ONE_PLUS =>
+        {
             "You have 21+ unread messages".to_owned()
         }
-        Some(unread_increment) if unread_increment >= 6 => {
+        Some(unread_increment_count) if unread_increment_count >= 6 => {
             "You have 6-20 unread messages".to_owned()
         }
-        Some(unread_increment) if unread_increment > 1 => {
+        Some(unread_increment_count) if unread_increment_count > 1 => {
             "You have several unread messages".to_owned()
         }
         Some(1) => "You have a new message".to_owned(),
@@ -279,7 +281,7 @@ mod tests {
             payload.data.get("wakeup_kind"),
             Some(&Value::String("message".to_owned()))
         );
-        // unread_increment travels as a bucketed count; badge is reduced
+        // unread_increment_count travels as a bucketed count; badge is reduced
         // to a boolean unread indicator.
         assert_eq!(
             payload.data.get("unread_count"),

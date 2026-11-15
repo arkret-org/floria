@@ -55,7 +55,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: 3dc8b1d1505bd87df5aba806fc317d7a01dfdf89
+          ref: 5a2d1665e1831ff6e6cefe8a0b09a4d37989b611
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v6
         with:
