@@ -68,14 +68,6 @@ impl RejectedDevice {
             reason_code: None,
         }
     }
-
-    pub fn with_reason_code(mut self, reason_code: Option<&str>) -> Self {
-        self.reason_code = reason_code
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
-        self
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

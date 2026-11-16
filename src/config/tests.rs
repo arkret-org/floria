@@ -529,57 +529,7 @@ apps {
     let kdl_json = parse_kdl_to_json(kdl).unwrap();
     let kdl_config: Config = serde_json::from_value(kdl_json).unwrap();
 
-    // Compare via the public-shaped projection — both must produce
-    // the same observable configuration.
-    assert_eq!(yaml_config.http.port, kdl_config.http.port);
-    assert_eq!(
-        yaml_config.http.bind_addresses,
-        kdl_config.http.bind_addresses
-    );
-    assert_eq!(
-        yaml_config.http.notify_dedup_ttl_seconds,
-        kdl_config.http.notify_dedup_ttl_seconds
-    );
-    assert_eq!(
-        yaml_config.http.notify_dedup.backend_kind(),
-        kdl_config.http.notify_dedup.backend_kind()
-    );
-    assert_eq!(
-        yaml_config.http.notify_rate_limits.window_seconds,
-        kdl_config.http.notify_rate_limits.window_seconds
-    );
-    assert_eq!(
-        yaml_config.http.notify_rate_limits.per_origin_service,
-        kdl_config.http.notify_rate_limits.per_origin_service
-    );
-    assert_eq!(
-        yaml_config.http.notify_rate_limits.per_app_id,
-        kdl_config.http.notify_rate_limits.per_app_id
-    );
-    assert_eq!(
-        yaml_config.metrics.prometheus.enabled,
-        kdl_config.metrics.prometheus.enabled
-    );
-    assert_eq!(
-        yaml_config.metrics.prometheus.port,
-        kdl_config.metrics.prometheus.port
-    );
-    assert_eq!(
-        yaml_config.log.access.x_forwarded_for,
-        kdl_config.log.access.x_forwarded_for
-    );
-    assert_eq!(yaml_config.apps.len(), kdl_config.apps.len());
-    let yaml_app = yaml_config.apps.get("com.example.test").unwrap();
-    let kdl_app = kdl_config.apps.get("com.example.test").unwrap();
-    assert_eq!(yaml_app.kind, kdl_app.kind);
-    assert_eq!(
-        yaml_app.get_string("keyfile").unwrap(),
-        kdl_app.get_string("keyfile").unwrap()
-    );
-    assert_eq!(
-        yaml_app.get_u64("inflight_request_limit").unwrap(),
-        kdl_app.get_u64("inflight_request_limit").unwrap()
-    );
+    assert_eq!(yaml_config, kdl_config);
 }
 
 #[test]

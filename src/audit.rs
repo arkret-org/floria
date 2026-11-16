@@ -158,11 +158,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::current_dir()
-            .unwrap()
-            .join("target")
-            .join("audit-tests")
-            .join(format!("jsonl-{unique}.jsonl"));
+        let path = std::env::temp_dir().join(format!(
+            "floria-audit-{}-{unique}.jsonl",
+            std::process::id()
+        ));
         let sink = JsonlAuditSink::new(&path);
         let event = AuditEvent::PolicyAccess {
             request_id: "req-1".to_owned(),
@@ -180,6 +179,6 @@ mod tests {
         assert_eq!(lines.len(), 1);
         let parsed: AuditEvent = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(parsed, event);
-        let _ = fs::remove_file(&path);
+        fs::remove_file(&path).expect("remove audit test file");
     }
 }
