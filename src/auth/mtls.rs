@@ -22,10 +22,7 @@ pub(super) fn verify_principal_service_kind(
         return Ok(());
     };
 
-    if matches!(
-        service_kind.to_ascii_lowercase().as_str(),
-        "push" | "push_service" | "principal" | "principal_service" | "sync" | "sync_service"
-    ) {
+    if matches!(service_kind, "push_gateway" | "station") {
         return Ok(());
     }
 
@@ -214,4 +211,34 @@ fn normalize_dn(value: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod service_kind_tests {
+    use super::*;
+
+    #[test]
+    fn notify_accepts_registered_roles_and_rejects_retired_aliases() {
+        let source = DidCoreId::new("ak:did_core:web:station.example").unwrap();
+        for (kind, allowed) in [
+            ("station", true),
+            ("push_gateway", true),
+            ("sync", false),
+            ("sync_service", false),
+            ("principal", false),
+            ("principal_service", false),
+            ("push", false),
+            ("push_service", false),
+            ("directory_service", false),
+        ] {
+            let principal: NotifyServicePrincipalConfig =
+                serde_json::from_value(serde_json::json!({ "service_kind": kind }))
+                    .expect("service principal config must deserialize");
+            assert_eq!(
+                verify_principal_service_kind(&principal, &source, "test").is_ok(),
+                allowed,
+                "{kind}"
+            );
+        }
+    }
 }

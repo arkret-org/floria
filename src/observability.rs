@@ -124,6 +124,10 @@ pub fn init_telemetry(config: &ObservabilityConfig) -> Result<TelemetryGuard> {
 /// in config, the `RUST_LOG` env var, and finally the configured
 /// `level`.
 pub fn build_env_filter(config: &LogSetupConfig) -> EnvFilter {
+    build_env_filter_with_environment(config, std::env::var("RUST_LOG").ok().as_deref())
+}
+
+fn build_env_filter_with_environment(config: &LogSetupConfig, rust_log: Option<&str>) -> EnvFilter {
     if let Some(filter) = config
         .filter
         .as_deref()
@@ -133,8 +137,9 @@ pub fn build_env_filter(config: &LogSetupConfig) -> EnvFilter {
         return EnvFilter::try_new(filter)
             .unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()));
     }
-    EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(config.level.as_directive()))
+    rust_log
+        .and_then(|value| EnvFilter::try_new(value).ok())
+        .unwrap_or_else(|| EnvFilter::new(config.level.as_directive()))
 }
 
 type OpenTelemetryLayer =
@@ -241,20 +246,16 @@ mod tests {
             filter: Some("floria=trace,info".to_owned()),
             ..Default::default()
         };
-        let filter = build_env_filter(&config);
-        // EnvFilter doesn't expose its directives; use Display.
+        let filter = build_env_filter_with_environment(&config, Some("error"));
+        // EnvFilter renders the exact effective directives.
         let rendered = format!("{filter}");
         assert!(
-            rendered.contains("floria=trace") || rendered.contains("floria"),
+            rendered.contains("floria=trace"),
             "rendered filter: {rendered}"
         );
     }
 
     #[test]
-    #[allow(
-        unsafe_code,
-        reason = "the test mutates RUST_LOG before constructing the filter"
-    )]
     fn build_env_filter_falls_back_to_level() {
         let config = LogSetupConfig {
             level: TracingLevel::Warn,
@@ -262,15 +263,8 @@ mod tests {
             filter: None,
             extra: serde_json::Map::new(),
         };
-        // Ensure RUST_LOG isn't poisoning the test.
-        // Safe: tests are single-threaded for this property by virtue of
-        // `cargo test` running each binary serially per process.
-        // SAFETY: env mutation happens on the test thread only.
-        unsafe {
-            std::env::remove_var("RUST_LOG");
-        }
-        let filter = build_env_filter(&config);
-        assert!(format!("{filter}").contains("warn"));
+        let filter = build_env_filter_with_environment(&config, None);
+        assert_eq!(format!("{filter}"), "warn");
     }
 
     fn err_message<T, E: std::fmt::Display>(result: Result<T, E>) -> String {

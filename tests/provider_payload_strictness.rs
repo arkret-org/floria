@@ -38,86 +38,44 @@ use serde_json::{Value, json};
 // ---------------------------------------------------------------------------
 
 #[test]
-fn sanitizer_strips_apns_correlation_identifiers() {
-    let payload = json!({
-        "client": "ios",
-        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-        "space_id": "ak:space:AVpLL6IaVQSSJDqHs-Xz-LJqiqTSvYP1a0bCvh15YNC8",
-        "strand_id":  "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
-        "message_id": "ak:message:AevYtAp_mjd9pPNtsNoiquL8rnoJUC0S0gYtV6_SwmD1",
-        "sender": "@alice:example.com",
-        "sender_actor_display_name": "Alice",
-        "strand_name": "Project Apollo",
-        "space_name": "Mission Control",
-        "wakeup_kind": "message",
-    })
-    .as_object()
-    .unwrap()
-    .clone();
-    let sanitized = sanitized_provider_payload(payload).unwrap();
-    for forbidden in [
-        "event_id",
-        "space_id",
-        "strand_id",
-        "message_id",
-        "sender",
-        "sender_actor_display_name",
-        "strand_name",
-        "space_name",
+fn sanitizer_strips_correlation_fields_for_each_provider_profile() {
+    let push_target_id = arkret_wire::PushTargetId::new(
+        "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+    )
+    .expect("valid pairwise push target");
+    for (client, fields) in [
+        (
+            "ios",
+            vec![
+                "event_id",
+                "space_id",
+                "strand_id",
+                "message_id",
+                "sender",
+                "sender_actor_display_name",
+                "strand_name",
+                "space_name",
+            ],
+        ),
+        ("android", vec!["event_id", "device_id"]),
+        ("web", vec!["strand_id", "space_id", "event_id", "content"]),
     ] {
-        assert!(
-            sanitized.get(forbidden).is_none(),
-            "forbidden field `{forbidden}` survived the sanitizer"
-        );
-    }
-    // Non-forbidden static config keys are preserved.
-    assert_eq!(sanitized.get("client"), Some(&json!("ios")));
-    assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));
-}
-
-#[test]
-fn sanitizer_strips_fcm_data_only_forbidden_fields() {
-    // FCM v1 used to carry `content_*` keys with the m.text body.
-    // None of them are allowed any more.
-    let payload = json!({
-        "client": "android",
-        "content_body": "I'm floating in a most peculiar way.",
-        "content_msgtype": "m.text",
-        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-        "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-        "wakeup_kind": "message",
-    })
-    .as_object()
-    .unwrap()
-    .clone();
-    let sanitized = sanitized_provider_payload(payload).unwrap();
-    assert!(sanitized.get("event_id").is_none());
-    // content_body / content_msgtype are not in the forbidden allow-list
-    // *by name*, but they carry the same plaintext-correlation risk —
-    // the gateway should not be emitting them in the first place. This
-    // test pins that they survive a sanitizer call but the BUILDERS
-    // never produce them. (See `notify_blind_profile_rejects_plaintext_content`.)
-    assert_eq!(sanitized.get("client"), Some(&json!("android")));
-}
-
-#[test]
-fn sanitizer_strips_webpush_correlation_identifiers() {
-    let payload = json!({
-        "client": "web",
-        "strand_id": "ak:strand:AZfy3leHQNK3ezr_x4HPHq09HrnS3Eb6wM-IwyFH8fQD",
-        "space_id": "ak:space:AVpLL6IaVQSSJDqHs-Xz-LJqiqTSvYP1a0bCvh15YNC8",
-        "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-        "content": {"body": "secret message"},
-        "wakeup_kind": "message",
-    })
-    .as_object()
-    .unwrap()
-    .clone();
-    let sanitized = sanitized_provider_payload(payload).unwrap();
-    for forbidden in ["strand_id", "space_id", "event_id", "content"] {
-        assert!(
-            sanitized.get(forbidden).is_none(),
-            "webpush forbidden field `{forbidden}` survived the sanitizer"
+        let mut payload = serde_json::Map::new();
+        payload.insert("client".into(), json!(client));
+        payload.insert("wakeup_kind".into(), json!("message"));
+        payload.insert("push_target_id".into(), json!(push_target_id.as_str()));
+        for field in &fields {
+            payload.insert((*field).into(), json!("private-value"));
+        }
+        let sanitized = sanitized_provider_payload(payload).expect("strip forbidden field names");
+        for field in fields {
+            assert!(!sanitized.contains_key(field), "{client}: {field} survived");
+        }
+        assert_eq!(sanitized.get("client"), Some(&json!(client)));
+        assert_eq!(sanitized.get("wakeup_kind"), Some(&json!("message")));
+        assert_eq!(
+            sanitized.get("push_target_id"),
+            Some(&json!(push_target_id.as_str()))
         );
     }
 }
@@ -403,7 +361,7 @@ fn blind_profile_service() -> salvo::Service {
     let mut auth = NotifyAuthConfig::default();
     auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.service_kind = Some("push".to_owned());
+    principal.service_kind = Some("push_gateway".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true; // operator flipped it on
     auth.service_principals
@@ -425,13 +383,13 @@ fn visible_profile_service() -> salvo::Service {
 
 fn visible_profile_service_for_device(opt_in: bool) -> salvo::Service {
     // Authenticated principal scoped to the VISIBLE profile: explicitly
-    // a plaintext-eligible service_kind (`sync`) AND
+    // a plaintext-eligible service_kind (`station`) AND
     // allow_plaintext_metadata is set, so the visible-notification
     // profile is in effect.
     let mut auth = NotifyAuthConfig::default();
     auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
     let mut principal = NotifyServicePrincipalConfig::default();
-    principal.service_kind = Some("sync".to_owned());
+    principal.service_kind = Some("station".to_owned());
     principal.bearer_tokens = vec!["secret-token".to_owned()];
     principal.allow_plaintext_metadata = true;
     auth.service_principals

@@ -31,10 +31,9 @@ http:
     # plaintext_metadata_service_ids:
     #   - ak:did_core:web:sync.example.com
     # gateway_service_did: did:webvh:zQ3shGatewayScid:push.example.com
-    # gateway_service_method_history_head: sha256:<verified-log-head-digest>
-    # gateway_service_version_id: 1-<verified-version-id>
 
-    # Stronger production profile:
+    # Stronger production profile requires complete gateway_service_resolution
+    # method-native evidence matching gateway_service_did.
     # production_mode: true
     # require_message_signatures: true
     # service_principals:
@@ -64,7 +63,7 @@ http:
     #   key_prefix: floria
     #   # backend: redis
     #   # redis_url: redis://127.0.0.1:6379/2
-  internal_auth:
+  internal_auth: {}
     # Internal/operator routes (`/_floria/internal/*`,
     # `/_floria/admin/push/status/*`, `/_floria/admin/push/device/unregister`) fail
     # closed unless one of these credentials is configured.
@@ -114,10 +113,6 @@ metrics:
     service_name: floria
     sample_rate: 1.0
     timeout_seconds: 10
-    # Reserved for future tracer back-ends; currently OTLP/gRPC is the
-    # only supported implementation. Existing values like `jaeger` are
-    # accepted but ignored.
-    # implementation: jaeger
   sentry:
     # Sentry error capture via the tracing subscriber. When enabled,
     # `dsn` must be set; tracing::error! events will be forwarded.

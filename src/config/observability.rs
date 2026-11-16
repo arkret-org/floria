@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use super::{normalize_listen_addr, warn_unknown_fields};
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct LogConfig {
@@ -38,6 +39,7 @@ impl LogConfig {
 
 /// Tracing-subscriber setup. Drives the global subscriber installed at
 /// startup by [`crate::observability::init_telemetry`].
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct LogSetupConfig {
@@ -102,6 +104,7 @@ pub enum TracingFormat {
     Json,
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct AccessLogConfig {
@@ -128,6 +131,7 @@ impl AccessLogConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct MetricsConfig {
@@ -165,6 +169,7 @@ impl MetricsConfig {
 /// `metrics.opentracing` for parity with the rest of the metrics
 /// section. Disabled by default; when enabled an OTLP endpoint must be
 /// configured.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct OpentracingConfig {
@@ -173,11 +178,6 @@ pub struct OpentracingConfig {
     pub service_name: String,
     pub sample_rate: f64,
     pub timeout_seconds: u64,
-    /// Reserved for future tracer back-ends. Currently OTLP / gRPC is
-    /// the only supported implementation; the field is preserved so
-    /// existing samples that set `implementation "jaeger"` keep working
-    /// (the value is ignored).
-    pub implementation: Option<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -190,7 +190,6 @@ impl Default for OpentracingConfig {
             service_name: "floria".to_owned(),
             sample_rate: 1.0,
             timeout_seconds: 10,
-            implementation: None,
             extra: Map::new(),
         }
     }
@@ -228,6 +227,7 @@ impl OpentracingConfig {
 
 /// Sentry error-capture configuration. Hooks into the tracing
 /// subscriber so any `tracing::error!` (and panics) are forwarded.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct SentryConfig {
@@ -312,6 +312,7 @@ impl SentryConfig {
 /// — keeping the underlying config sections separate keeps user-visible
 /// YAML/KDL grouped by domain (logging vs metrics) while still letting
 /// the telemetry initialiser take a single argument.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Default)]
 pub struct ObservabilityConfig {
     pub tracing: LogSetupConfig,
@@ -339,6 +340,7 @@ impl ObservabilityConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct PrometheusConfig {

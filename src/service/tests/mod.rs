@@ -16,6 +16,7 @@ use crate::error::DispatchError;
 use crate::models::{DeviceExt, NotificationContext, RejectedDevice};
 use crate::pushkin::{AppMatcher, ConcurrencyGate, Pushkin, PushkinRegistry};
 use crate::rate_limit::NotifyRateLimiter;
+use crate::test_fixtures::test_gateway_service_resolution;
 
 mod agent_routing;
 mod auth;
@@ -189,10 +190,6 @@ pub(super) fn test_service_with_auth(
     let mut state = AppState::new(Arc::new(registry));
     if notify_auth.gateway_service_did.as_deref() == Some("did:web:push.example.com") {
         let resolution = test_gateway_service_resolution();
-        let boundary = resolution.method_history_evidence.boundary();
-        notify_auth.gateway_service_method_history_head =
-            Some(boundary.to_method_history_head.clone());
-        notify_auth.gateway_service_version_id = Some(boundary.to_version_id.clone());
         notify_auth.gateway_service_resolution = Some(resolution.clone());
         state.public_base_url = "https://push.example.com/".to_owned();
         state.gateway_service_resolution = Some(Arc::new(resolution));
@@ -200,59 +197,6 @@ pub(super) fn test_service_with_auth(
     state.notify_auth = notify_auth;
     state.registrations = Arc::new(crate::registrations::test_support::directory());
     Service::new(build_router(Arc::new(state)))
-}
-
-pub(super) fn test_gateway_service_resolution()
--> arkret_models_identity::AuthenticatedServiceResolution {
-    use arkret_models_identity::{
-        DidBindingEvidenceKind, DidBindingEvidenceReceipt, DidDocument,
-        ResolutionMethodEvidenceBoundary, ResolutionMethodHistoryEvidence,
-    };
-
-    let did = arkret_wire::Did::new("did:web:push.example.com").unwrap();
-    let document: DidDocument = serde_json::from_value(json!({
-        "@context": ["https://www.w3.org/ns/did/v1"],
-        "id": did,
-        "verificationMethod": [{
-            "id": "did:web:push.example.com#receipt",
-            "controller": "did:web:push.example.com",
-            "type": "Multikey",
-            "publicKeyMultibase": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
-        }],
-        "authentication": ["did:web:push.example.com#receipt"],
-        "assertionMethod": ["did:web:push.example.com#receipt"],
-        "service": [{
-            "id": "did:web:push.example.com#gateway",
-            "type": "ArkretService",
-            "service_kind": "push_gateway",
-            "serviceEndpoint": "https://push.example.com/"
-        }]
-    }))
-    .unwrap();
-    let digest = arkret_models_identity::normalized_did_document_digest(&document).unwrap();
-    let version = format!(
-        "synthetic-jcs-sha256:{}",
-        digest.as_str().trim_start_matches("sha256:")
-    );
-    arkret_models_identity::AuthenticatedServiceResolution {
-        service_id: arkret_wire::project_did_to_core_id(&did).unwrap(),
-        service_kind: arkret_wire::ServiceKind::PushGateway.as_str().to_owned(),
-        method_history_evidence: ResolutionMethodHistoryEvidence::DidWebDocument {
-            boundary: ResolutionMethodEvidenceBoundary {
-                from_method_history_head: digest.to_string(),
-                from_version_id: version.clone(),
-                to_method_history_head: digest.to_string(),
-                to_version_id: version,
-            },
-            evidence: DidBindingEvidenceReceipt {
-                kind: DidBindingEvidenceKind::AkDidBindingEvidenceV1,
-                method: "web".to_owned(),
-                document_digest: digest,
-                method_proofs: Vec::new(),
-            },
-        },
-        normalized_did_document: document,
-    }
 }
 
 pub(super) fn describe_test_service(pushkins: Vec<(&str, Arc<dyn Pushkin>)>) -> Service {
@@ -280,13 +224,12 @@ pub(super) fn production_notify_auth_config() -> NotifyAuthConfig {
     use crate::config::NotifyServicePrincipalConfig;
     let mut config = NotifyAuthConfig::default();
     config.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.gateway_service_resolution = Some(test_gateway_service_resolution());
     config.production_mode = true;
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_verification_method = Some("did:web:sync.example.com#push".to_owned());
     principal.signature_public_key_hex = Some("deadbeef".repeat(8));
-    principal.service_kind = Some("sync".to_owned());
+    principal.service_kind = Some("station".to_owned());
     config
         .service_principals
         .insert("ak:did_core:web:sync.example.com".to_owned(), principal);

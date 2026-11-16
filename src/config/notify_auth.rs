@@ -7,6 +7,7 @@ use serde_json::{Map, Value};
 
 use super::{string_or_vec, validate_bearer_token_hashes, warn_unknown_fields};
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyAuthConfig {
@@ -21,14 +22,7 @@ pub struct NotifyAuthConfig {
     /// Resolvable DID for this gateway. Transport headers continue to
     /// carry the derived service core id.
     pub gateway_service_did: Option<String>,
-    /// Exact method-history head verified when the gateway DID was
-    /// registered. Required together with `gateway_service_version_id` in
-    /// production mode so Describe never invents resolution state.
-    pub gateway_service_method_history_head: Option<String>,
-    pub gateway_service_version_id: Option<String>,
-    /// Complete method-native evidence published by the open service-resolution
-    /// endpoint.  The commitment fields above are retained for compatibility,
-    /// but when this value is present they must name its exact terminal state.
+    /// Complete method-native evidence for the gateway Service identity.
     pub gateway_service_resolution: Option<arkret_models_identity::AuthenticatedServiceResolution>,
     pub require_message_signatures: bool,
     pub signature_max_skew_seconds: u64,
@@ -76,14 +70,6 @@ impl fmt::Debug for NotifyAuthConfig {
                 &self.plaintext_metadata_service_ids,
             )
             .field("gateway_service_did", &self.gateway_service_did)
-            .field(
-                "gateway_service_method_history_head",
-                &self.gateway_service_method_history_head,
-            )
-            .field(
-                "gateway_service_version_id",
-                &self.gateway_service_version_id,
-            )
             .field(
                 "gateway_service_resolution",
                 &self
@@ -208,21 +194,6 @@ impl NotifyAuthConfig {
                 })?;
             }
         }
-        let history_head = self
-            .gateway_service_method_history_head
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let version_id = self
-            .gateway_service_version_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if history_head.is_some() != version_id.is_some() {
-            bail!(
-                "http.notify_auth.gateway_service_method_history_head and gateway_service_version_id must be configured together"
-            );
-        }
         if let Some(resolution) = &self.gateway_service_resolution {
             let gateway_service_id = self.gateway_service_core_id()?.ok_or_else(|| {
                 anyhow::anyhow!(
@@ -242,14 +213,6 @@ impl NotifyAuthConfig {
             {
                 bail!(
                     "http.notify_auth.gateway_service_resolution DID must equal gateway_service_did"
-                );
-            }
-            let boundary = resolution.method_history_evidence.boundary();
-            if history_head != Some(boundary.to_method_history_head.as_str())
-                || version_id != Some(boundary.to_version_id.as_str())
-            {
-                bail!(
-                    "gateway service commitment must equal gateway_service_resolution terminal coordinates"
                 );
             }
         }
@@ -293,12 +256,8 @@ impl NotifyAuthConfig {
         if self.gateway_service_did.is_none() {
             bail!("http.notify_auth.production_mode requires http.notify_auth.gateway_service_did");
         }
-        if self.gateway_service_method_history_head.is_none()
-            || self.gateway_service_version_id.is_none()
-        {
-            bail!(
-                "http.notify_auth.production_mode requires gateway_service_method_history_head and gateway_service_version_id"
-            );
+        if self.gateway_service_resolution.is_none() {
+            bail!("http.notify_auth.production_mode requires gateway_service_resolution");
         }
         if self.service_principals.is_empty() {
             bail!(
@@ -352,10 +311,7 @@ impl NotifyAuthConfig {
 /// the principal services. New kinds must be reviewed for whether they
 /// can legitimately read/forward plaintext bound to a user identity.
 pub fn is_plaintext_eligible_service_kind(kind: &str) -> bool {
-    matches!(
-        kind.trim().to_ascii_lowercase().as_str(),
-        "sync" | "sync_service" | "principal" | "principal_service"
-    )
+    matches!(kind.trim().to_ascii_lowercase().as_str(), "station")
 }
 
 impl Default for NotifyAuthConfig {
@@ -366,8 +322,6 @@ impl Default for NotifyAuthConfig {
             trusted_service_ids: Vec::new(),
             plaintext_metadata_service_ids: Vec::new(),
             gateway_service_did: None,
-            gateway_service_method_history_head: None,
-            gateway_service_version_id: None,
             gateway_service_resolution: None,
             require_message_signatures: false,
             signature_max_skew_seconds: 300,
@@ -385,6 +339,7 @@ impl Default for NotifyAuthConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyNonceStoreConfig {
@@ -470,6 +425,7 @@ impl NotifyNonceStoreConfig {
     }
 }
 
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct NotifyServicePrincipalConfig {

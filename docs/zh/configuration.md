@@ -134,6 +134,7 @@ http {
 | `notify_auth.trusted_service_ids` | string/string[] | — | `/notify` 允许调用的 origin service core ID 列表 |
 | `notify_auth.plaintext_metadata_service_ids` | string/string[] | — | 允许发送 `sender_actor_display_name`、`space_name` 等明文元数据的 service core ID 列表 |
 | `notify_auth.gateway_service_did` | string | — | gateway 的可解析 DID；传输 header 使用其 core 投影 |
+| `notify_auth.gateway_service_resolution` | object | — | 完整认证的原生 DID 方法 Service resolution；生产必填，并须匹配 gateway DID 与公开 URL |
 | `notify_auth.require_message_signatures` | bool | `false` | 是否对已配置的 service principal 强制要求 HTTP Message Signature |
 | `notify_auth.production_mode` | bool | `false` | 拒绝匿名 / bearer-only `/notify`，要求配置签名或 mTLS service principal，并拒绝明文 notify bearer token |
 | `notify_auth.signature_max_skew_seconds` | u64 | `300` | 校验签名 `created` / `expires` 时允许的时钟偏差 |
@@ -168,12 +169,12 @@ http {
   }
   notify_auth {
     gateway_service_did "did:web:push.example.com"
-    gateway_service_method_history_head "sha256:<verified-log-head-digest>"
-    gateway_service_version_id "1-<verified-version-id>"
+    // Add the complete authenticated gateway_service_resolution evidence block.
     production_mode true
     require_message_signatures true
     service_principals {
       "ak:did_core:web:sync.example.com" {
+        service_kind "station"
         allow_plaintext_metadata true
         bearer_token_hashes "sha256:<rotated-service-secret-sha256>"
         signature_verification_method "did:web:sync.example.com#push"

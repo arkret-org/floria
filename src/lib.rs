@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test_fixtures;
+
 pub mod audit;
 pub mod auth;
 pub mod circuit_breaker;
@@ -112,23 +115,9 @@ impl AppState {
         registry: Arc<PushkinRegistry>,
         notify_deduplicator: Arc<NotifyDeduplicator>,
     ) -> Self {
-        Self {
-            registry,
-            public_base_url: "http://127.0.0.1:5000/".to_owned(),
-            audit_sink: None,
-            notify_deduplicator: Some(notify_deduplicator),
-            notify_auth: NotifyAuthConfig::default(),
-            gateway_service_resolution: None,
-            registrations: Arc::new(registrations::RegistrationDirectory::default()),
-            registration_handoff: None,
-            provider_timing_bucket: std::time::Duration::ZERO,
-            internal_auth: InternalAuthConfig::default(),
-            notify_rate_limiter: None,
-            notify_nonce_store: None,
-            notify_retry_queue: None,
-            circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
-            metrics_detailed_circle_labels: false,
-        }
+        let mut state = Self::new(registry);
+        state.notify_deduplicator = Some(notify_deduplicator);
+        state
     }
 }
 

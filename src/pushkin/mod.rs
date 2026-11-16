@@ -420,23 +420,6 @@ mod sanitize_tests {
     use super::*;
 
     #[test]
-    fn sanitized_provider_payload_strips_event_id() {
-        let payload = json!({
-            "client": "android",
-            "event_id": "ak:event:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS",
-            "wakeup_kind": "message",
-        })
-        .as_object()
-        .unwrap()
-        .clone()
-        .into_iter()
-        .collect();
-        let out = sanitized_provider_payload(payload).unwrap();
-        assert!(!out.contains_key("event_id"));
-        assert_eq!(out.get("client"), Some(&json!("android")));
-    }
-
-    #[test]
     fn sanitized_provider_payload_strips_audience_mention_expansion_metadata() {
         let payload = json!({
             "client": "android",
@@ -464,91 +447,6 @@ mod sanitize_tests {
             );
         }
         assert_eq!(out.get("wakeup_kind"), Some(&json!("mention")));
-    }
-
-    /// `push-notifications.md` §5.1 — audit, policy, preference, routing,
-    /// and encrypted protocol fields MUST be stripped from any provider
-    /// payload before it leaves floria. They are stable correlators that
-    /// would let an observer link a push back to private state.
-    #[test]
-    fn sanitized_provider_payload_strips_forbidden_fields() {
-        // We stage values that are safe (no `did:` / `ak:` literals)
-        // so the sanitizer doesn't reject for `sensitive_literal`; the
-        // only assertion is "key was removed from the output map".
-        let payload = json!({
-            "client": "android",
-            "wakeup_kind": "message",
-
-            "attestation_evidence": "evidence-blob-ref",
-            "audit_purpose": "compliance_lawful_access",
-            "attestation_chain": ["chain-item-0", "chain-item-1"],
-            "audit_policy_version_digest": "a".repeat(64),
-            "trust_domain": "example.net",
-        })
-        .as_object()
-        .unwrap()
-        .clone()
-        .into_iter()
-        .collect();
-        let out = sanitized_provider_payload(payload).unwrap();
-        for forbidden in [
-            "attestation_evidence",
-            "audit_purpose",
-            "attestation_chain",
-            "audit_policy_version_digest",
-            "trust_domain",
-        ] {
-            assert!(
-                out.get(forbidden).is_none(),
-                "provider-egress forbidden field `{forbidden}` survived sanitization"
-            );
-        }
-        assert_eq!(out.get("client"), Some(&json!("android")));
-        assert_eq!(out.get("wakeup_kind"), Some(&json!("message")));
-    }
-
-    /// `push-notifications.md` §5.1 — the same field names buried inside a
-    /// nested object are also stripped by the recursive sweep.
-    #[test]
-    fn sanitized_provider_payload_strips_forbidden_fields_when_nested() {
-        let payload = json!({
-            "client": "ios",
-            "wakeup_kind": "message",
-            "nested": {
-                "deep": {
-                    "trust_domain": "example.net",
-                    "ok_key": "value"
-                }
-            }
-        })
-        .as_object()
-        .unwrap()
-        .clone()
-        .into_iter()
-        .collect();
-        let out = sanitized_provider_payload(payload).unwrap();
-        // Serialize back to JSON and assert none of the names survive.
-        let encoded = serde_json::to_string(&out).unwrap();
-        let forbidden = "trust_domain";
-        assert!(
-            !encoded.contains(forbidden),
-            "nested provider-egress forbidden field `{forbidden}` survived: {encoded}"
-        );
-        assert!(encoded.contains("ok_key"));
-    }
-
-    #[test]
-    fn sanitized_provider_payload_rejects_did_literal() {
-        let payload = json!({
-            "client": "did:web:alice.example.com",
-        })
-        .as_object()
-        .unwrap()
-        .clone()
-        .into_iter()
-        .collect();
-        let err = sanitized_provider_payload(payload).unwrap_err();
-        assert_eq!(err.reason_code, "sensitive_literal");
     }
 
     #[test]

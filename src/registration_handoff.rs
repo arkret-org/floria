@@ -794,9 +794,8 @@ mod tests {
 
     #[tokio::test]
     async fn postgres_handoff_is_exactly_replayable_and_terminal() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let gateway = source("did:web:gateway.example");
         let mut config = RegistrationHandoffConfig::default();
         config.postgres_url = Some(postgres_url);
@@ -968,9 +967,8 @@ mod tests {
 
     #[tokio::test]
     async fn postgres_handoff_supersede_and_tenant_isolation() {
-        let Ok(postgres_url) = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL") else {
-            return;
-        };
+        let postgres_url = std::env::var("FLORIA_HANDOFF_TEST_DATABASE_URL")
+            .expect("FLORIA_HANDOFF_TEST_DATABASE_URL is required for this PostgreSQL test");
         let gateway = source("did:web:gateway.example");
         let mut config = RegistrationHandoffConfig::default();
         config.postgres_url = Some(postgres_url);

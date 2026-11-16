@@ -331,8 +331,8 @@ fn production_mode_requires_signed_or_mtls_principal() {
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.http.notify_auth.gateway_service_resolution =
+        Some(crate::test_fixtures::test_gateway_service_resolution());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         ..Default::default()
@@ -356,8 +356,8 @@ fn production_mode_rejects_gateway_wide_bearer_tokens() {
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.http.notify_auth.gateway_service_resolution =
+        Some(crate::test_fixtures::test_gateway_service_resolution());
     config.http.notify_auth.bearer_tokens = vec!["gateway-token".to_owned()];
     let principal = NotifyServicePrincipalConfig {
         signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
@@ -383,8 +383,8 @@ fn production_mode_rejects_plaintext_service_principal_bearer_tokens() {
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.http.notify_auth.gateway_service_resolution =
+        Some(crate::test_fixtures::test_gateway_service_resolution());
     let principal = NotifyServicePrincipalConfig {
         bearer_tokens: vec!["principal-token".to_owned()],
         signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
@@ -412,8 +412,8 @@ fn production_mode_rejects_plaintext_for_non_eligible_kind() {
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.http.notify_auth.gateway_service_resolution =
+        Some(crate::test_fixtures::test_gateway_service_resolution());
     let principal = NotifyServicePrincipalConfig {
         signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("b".repeat(64)),
@@ -440,13 +440,13 @@ fn production_mode_accepts_signed_eligible_principal() {
     config.http.public_base_url = "https://push.example.com/".to_owned();
     config.http.notify_auth.production_mode = true;
     config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
-    config.http.notify_auth.gateway_service_method_history_head = Some("fixture-head".to_owned());
-    config.http.notify_auth.gateway_service_version_id = Some("fixture-v1".to_owned());
+    config.http.notify_auth.gateway_service_resolution =
+        Some(crate::test_fixtures::test_gateway_service_resolution());
     let principal = NotifyServicePrincipalConfig {
         signature_verification_method: Some("did:web:sync.example.com#push".to_owned()),
         signature_public_key_hex: Some("c".repeat(64)),
         allow_plaintext_metadata: true,
-        service_kind: Some("sync".to_owned()),
+        service_kind: Some("station".to_owned()),
         ..Default::default()
     };
     config
@@ -624,4 +624,31 @@ apps {
             .and_then(Value::as_str),
         Some("first_ospush"),
     );
+}
+
+#[test]
+fn production_mode_requires_complete_gateway_resolution() {
+    let mut config = Config::default();
+    config.http.public_base_url = "https://push.example.com/".to_owned();
+    config.http.notify_auth.gateway_service_did = Some("did:web:push.example.com".to_owned());
+    config.http.notify_auth.production_mode = true;
+    let error = config.validate().unwrap_err().to_string();
+    assert!(
+        error.contains("requires gateway_service_resolution"),
+        "{error}"
+    );
+}
+
+#[test]
+fn plaintext_metadata_is_limited_to_the_registered_station_role() {
+    for (kind, allowed) in [
+        ("station", true),
+        ("push_gateway", false),
+        ("sync", false),
+        ("sync_service", false),
+        ("principal", false),
+        ("principal_service", false),
+    ] {
+        assert_eq!(is_plaintext_eligible_service_kind(kind), allowed, "{kind}");
+    }
 }

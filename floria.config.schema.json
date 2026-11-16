@@ -181,24 +181,10 @@
                 "null"
               ]
             },
-            "gateway_service_method_history_head": {
-              "minLength": 1,
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "gateway_service_resolution": {
               "description": "Complete authenticated method evidence served by ak.open.service.read.resolution.v1. Its DID, service kind, terminal coordinates and ArkretService endpoint must match this Gateway configuration.",
               "type": [
                 "object",
-                "null"
-              ]
-            },
-            "gateway_service_version_id": {
-              "minLength": 1,
-              "type": [
-                "string",
                 "null"
               ]
             },
@@ -726,13 +712,6 @@
             },
             "endpoint": {
               "description": "OTLP gRPC endpoint (e.g. http://otel-collector:4317). Required when enabled.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "implementation": {
-              "description": "Reserved for future tracer back-ends; currently OTLP/gRPC is the only supported implementation. Existing values like `jaeger` are accepted but ignored.",
               "type": [
                 "string",
                 "null"

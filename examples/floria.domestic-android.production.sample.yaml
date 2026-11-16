@@ -80,7 +80,7 @@ apps:
   # Huawei / HarmonyOS direct.
   com.example.android.huawei:
     type: huawei
-    app_id: 1234567890123456789
+    app_id: "1234567890123456789"
     app_secret: your-huawei-app-secret
     max_connections: 20
     inflight_request_limit: 512
@@ -98,7 +98,7 @@ apps:
   # HONOR direct.
   com.example.android.honor:
     type: honor
-    app_id: 1234567890123456789
+    app_id: "1234567890123456789"
     app_secret: your-honor-app-secret
     # Optional overrides when your HONOR account region requires custom endpoints.
     # token_url: https://hnoauth-login.cloud.honor.com/oauth2/v3/token

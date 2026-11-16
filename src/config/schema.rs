@@ -207,8 +207,6 @@ fn notify_auth_schema() -> Value {
                 "type": ["string", "null"],
                 "description": "Resolvable DID for this gateway; its stable core is derived for service_id and transport headers."
             },
-            "gateway_service_method_history_head": {"type": ["string", "null"], "minLength": 1},
-            "gateway_service_version_id": {"type": ["string", "null"], "minLength": 1},
             "gateway_service_resolution": {
                 "type": ["object", "null"],
                 "description": "Complete authenticated method evidence served by ak.open.service.read.resolution.v1. Its DID, service kind, terminal coordinates and ArkretService endpoint must match this Gateway configuration."
@@ -338,11 +336,7 @@ fn metrics_schema() -> Value {
                     },
                     "service_name": {"type": "string", "default": "floria"},
                     "sample_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 1.0},
-                    "timeout_seconds": {"type": "integer", "minimum": 1, "default": 10},
-                    "implementation": {
-                        "type": ["string", "null"],
-                        "description": "Reserved for future tracer back-ends; currently OTLP/gRPC is the only supported implementation. Existing values like `jaeger` are accepted but ignored."
-                    }
+                    "timeout_seconds": {"type": "integer", "minimum": 1, "default": 10}
                 }
             },
             "sentry": {
