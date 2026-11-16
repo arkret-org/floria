@@ -321,6 +321,7 @@ impl Pushkin for CustomPushkin {
 }
 
 fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Result<Client> {
+    crate::ensure_rustls_crypto_provider();
     let mut builder = Client::builder()
         .https_only(true)
         .user_agent("floria")
@@ -341,7 +342,8 @@ fn build_http_client(proxy: Option<&str>, identity_path: Option<&Path>) -> Resul
         let identity = Identity::from_pem(&pem).context("invalid client certificate bundle")?;
         builder = builder.identity(identity);
     }
-    builder
+    arkret_egress_reqwest::apply_explicit_tls_roots(builder)
+        .map_err(anyhow::Error::msg)?
         .build()
         .context("failed to build custom HTTP client")
 }

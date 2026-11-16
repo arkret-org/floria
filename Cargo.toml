@@ -86,7 +86,7 @@ x509-parser = "0.18.1"
 # Push and service wire models come from the edge leaf; HTTP signatures use
 # the transport-only signatures feature so the gateway does not compile core.
 arkret-canonical.workspace = true
-arkret-egress-reqwest.workspace = true
+arkret-egress-reqwest = { workspace = true, features = ["tls-rustls"] }
 arkret-models-discovery = { workspace = true, default-features = false }
 arkret-models-identity = { workspace = true, default-features = false }
 arkret-models-integration = { workspace = true, default-features = false }
