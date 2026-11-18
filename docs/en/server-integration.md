@@ -14,8 +14,8 @@ Use these unauthenticated discovery endpoints during rollout:
 | `GET /ready` | Lightweight process readiness |
 | `GET /readyz` | Strict readiness, including provider registry and reachable Redis-backed dependencies |
 
-The OpenAPI artifact is committed at
-[`docs/en/openapi.json`](./openapi.json).
+The [Floria OpenAPI document](./openapi.json) references the Arkret v1
+contract for each mounted standard route and describes local integration discovery.
 
 ## Authentication
 
@@ -28,6 +28,7 @@ The caller should set:
 
 | Header | Required | Notes |
 |--------|----------|-------|
+| `Arkret-Operation` | Yes for every `/_arkret/` route | Use the exact versioned selector, such as `ak.edge.push.command.notify.v1` for notify |
 | `Content-Type: application/json` | Yes | Request body must be JSON |
 | `Idempotency-Key` | Recommended | Stable key for retry-safe `/notify` calls |
 | `Authorization: Bearer ...` | Conditional | Only when bearer fallback is configured |
@@ -100,9 +101,8 @@ or token metadata:
 Every requested `device_id` appears exactly once. A target-level failure is
 expanded into one same-reason rejected outcome for every requested device.
 Raw tokens, token hashes, app ids, provider ids, provider retries, delivery
-receipts, and private provider errors never appear in this response. Transport
-or malformed-request errors use the standard `ok=false` envelope with
-`error.code`, `error.message`, and a request id when available.
+receipts, and private provider errors never appear in this response. HTTP
+errors use the Arkret Problem response described in the [OpenAPI document](./openapi.json).
 
 ## Account deactivation
 

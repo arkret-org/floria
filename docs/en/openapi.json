@@ -1,9 +1,9 @@
 {
-  "openapi": "3.1.0",
+  "openapi": "3.2.0",
   "info": {
     "title": "floria push gateway API",
     "version": "1.0.0-local",
-    "description": "Local OpenAPI artifact for the public floria notify and discovery endpoints."
+    "description": "Arkret v1 operations mounted by Floria and its local integration discovery endpoint."
   },
   "servers": [
     {
@@ -11,79 +11,17 @@
     }
   ],
   "paths": {
+    "/_arkret/describe": {
+      "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/paths/~1_arkret~1describe"
+    },
     "/_arkret/edge/push/notify": {
-      "post": {
-        "operationId": "ak.edge.push.command.notify.v1",
-        "summary": "Submit a minimized push wakeup request",
-        "security": [
-          {
-            "bearerAuth": [],
-            "sourceServiceId": [],
-            "destinationServiceId": []
-          },
-          {
-            "httpMessageSignature": [],
-            "sourceServiceId": [],
-            "destinationServiceId": [],
-            "contentDigest": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotifyRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Request accepted or deduplicated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotifyResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
+      "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/paths/~1_arkret~1edge~1push~1notify"
+    },
+    "/_arkret/edge/push/registrations:apply": {
+      "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/paths/~1_arkret~1edge~1push~1registrations:apply"
+    },
+    "/_arkret/open/services/{service_id}/resolution": {
+      "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/paths/~1_arkret~1open~1services~1%7Bservice_id%7D~1resolution"
     },
     "/_floria/integration/describe": {
       "get": {
@@ -106,54 +44,20 @@
   },
   "components": {
     "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer"
+      "HttpMessageSignature": {
+        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/securitySchemes/HttpMessageSignature"
       },
-      "httpMessageSignature": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "Signature-Input",
-        "description": "RFC 9421 HTTP Message Signature headers are validated with configured service principals."
+      "SourceServiceId": {
+        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/securitySchemes/SourceServiceId"
       },
-      "sourceServiceId": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "Source-Service-ID",
-        "description": "Required HTTP Message Signature companion identifying the originating service DID."
+      "DestinationServiceId": {
+        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/securitySchemes/DestinationServiceId"
       },
-      "destinationServiceId": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "Destination-Service-ID",
-        "description": "Required HTTP Message Signature companion identifying this gateway DID."
-      },
-      "contentDigest": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "Content-Digest",
-        "description": "Required RFC 9530 body digest covered by the HTTP Message Signature transcript."
-      }
-    },
-    "responses": {
-      "Error": {
-        "description": "Standard error envelope",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorEnvelope"
-            }
-          }
-        }
+      "ContentDigest": {
+        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/466602de28106a7d4a3c6aa7f3bf665e7a2aba3a/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/securitySchemes/ContentDigest"
       }
     },
     "schemas": {
-      "NotifyRequest": {
-        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyRequestBody"
-      },
-      "NotifyResponse": {
-        "$ref": "https://raw.githubusercontent.com/arkret-org/arkret-spec/1936d1c0578e03e11e731a14419f86212a7901ab/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml#/components/schemas/PushNotifyResponseBody"
-      },
       "IntegrationDescribeResponse": {
         "type": "object",
         "additionalProperties": true,
@@ -165,36 +69,6 @@
             "type": "array",
             "items": {
               "type": "object"
-            }
-          }
-        }
-      },
-      "ErrorEnvelope": {
-        "type": "object",
-        "required": [
-          "ok",
-          "error"
-        ],
-        "properties": {
-          "ok": {
-            "const": false
-          },
-          "request_id": {
-            "type": "string"
-          },
-          "error": {
-            "type": "object",
-            "required": [
-              "code",
-              "message"
-            ],
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
             }
           }
         }

@@ -9,12 +9,12 @@ const DEFAULT_POSTGRES_POOL_SIZE: u32 = 16;
 const POSTGRES_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SqlTableName {
+pub(crate) struct SqlTableName {
     sql: String,
 }
 
 impl SqlTableName {
-    pub fn parse(raw: &str, field: &str) -> Result<Self> {
+    pub(crate) fn parse(raw: &str, field: &str) -> Result<Self> {
         let value = raw.trim();
         if value.is_empty() {
             bail!("{field} must not be empty");
@@ -35,12 +35,12 @@ impl SqlTableName {
         })
     }
 
-    pub fn as_sql(&self) -> &str {
+    pub(crate) fn as_sql(&self) -> &str {
         &self.sql
     }
 }
 
-pub fn validate_identifier(raw: &str, field: &str) -> Result<()> {
+fn validate_identifier(raw: &str, field: &str) -> Result<()> {
     let mut chars = raw.chars();
     let Some(first) = chars.next() else {
         bail!("{field} contains an empty identifier");

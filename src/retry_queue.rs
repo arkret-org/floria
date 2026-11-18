@@ -136,9 +136,9 @@ pub struct DeadLetterPgOverlay {
 }
 
 impl DeadLetterPgOverlay {
-    /// Build an overlay. The table is validated via [`SqlTableName`] —
-    /// the raw name is rejected if it contains anything other than
-    /// `[A-Za-z0-9_]` plus an optional schema-qualifier dot.
+    /// Build an overlay for a table name with an optional schema qualifier.
+    /// Each identifier must start with an ASCII letter or underscore and
+    /// contain only ASCII letters, digits, and underscores.
     pub fn new(url: &str, table: &str) -> Result<Self> {
         let table = SqlTableName::parse(table, "notify_retry_queue.deadletter_pg_table")?;
         let target_label = redact_url_credentials(url);
