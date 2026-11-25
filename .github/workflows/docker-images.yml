@@ -20,7 +20,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: 5a2d1665e1831ff6e6cefe8a0b09a4d37989b611
+          ref: 5b95a6c57605e601a699a11068d30b9c528561bb
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - name: Set up Docker Buildx
