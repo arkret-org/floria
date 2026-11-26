@@ -5,6 +5,12 @@ use salvo::prelude::*;
 
 use crate::AppState;
 
+pub(super) const OPERATION_BINDING: arkret_wire::OperationBindingPair =
+    arkret_wire::OperationBindingPair {
+        operation_id: arkret_wire::ServiceOperationId::OpenServiceReadResolutionV1,
+        binding_kind: arkret_wire::BindingKind::HttpJson,
+    };
+
 /// Publish the exact method-native evidence validated at startup.  This route
 /// is only a transport locator: consumers still verify the evidence against
 /// the current DID method state before accepting its service endpoint.

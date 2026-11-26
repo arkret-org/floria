@@ -157,8 +157,9 @@ impl CircuitBreaker {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let entry = guard.get_or_insert_mut(key.clone(), BreakerState::default);
-        entry.consecutive_failures = 0;
+        if let Some(entry) = guard.get_mut(key) {
+            entry.consecutive_failures = 0;
+        }
     }
 
     /// Record a failed dispatch. Returns `true` when this failure
@@ -216,6 +217,21 @@ mod tests {
         assert!(!guard.contains(&k1));
         assert!(guard.contains(&k2));
         assert!(guard.contains(&k3));
+    }
+
+    #[test]
+    fn healthy_traffic_preserves_an_open_breaker_at_capacity() {
+        let breaker = CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: 1,
+            max_breaker_states: 1,
+            open_for: Duration::from_secs(60),
+            ..cfg()
+        });
+        let failing = BreakerKey::new("fcm", Some("realm"), Some("failing"));
+        let healthy = BreakerKey::new("fcm", Some("realm"), Some("healthy"));
+        assert!(breaker.record_failure(&failing));
+        breaker.record_success(&healthy);
+        assert!(breaker.is_open(&failing));
     }
 
     #[test]

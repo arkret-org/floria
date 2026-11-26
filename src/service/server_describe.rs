@@ -16,6 +16,11 @@ use crate::config::NotifyAuthConfig;
 pub(super) const REGISTRATION_HANDOFF_BUNDLE_ID: &str =
     arkret_wire::OperationBundleDescriptor::PUSH_GATEWAY_REGISTRATION_HANDOFF_V1;
 
+const HANDOFF_BINDINGS: [OperationBindingPair; 2] = [
+    super::registration_handoff::OPERATION_BINDING,
+    super::service_resolution::OPERATION_BINDING,
+];
+
 /// FLORIA-01 — `GET /_arkret/describe` MUST emit the canonical
 /// `ServiceDescribe` (`arkret_models_discovery::ServiceDescribe` = `ServiceDescribe`)
 /// defined by `service-describe.schema.json`, not a push-gateway-private
@@ -173,7 +178,7 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
     ];
     if let Some(bundle) = registration_handoff_bundle_if_ready(
         state.registration_handoff.is_some() && state.gateway_service_resolution.is_some(),
-        &[super::registration_handoff::OPERATION_BINDING],
+        &HANDOFF_BINDINGS,
     ) {
         supported_operation_bundles.push(bundle.to_owned());
     }
@@ -229,10 +234,10 @@ pub(super) async fn describe(depot: &mut Depot, res: &mut Response) {
 }
 
 fn registration_handoff_bundle_if_ready(
-    handoff_store_ready: bool,
+    resources_ready: bool,
     installed_handler_bindings: &[OperationBindingPair],
 ) -> Option<&'static str> {
-    if !handoff_store_ready {
+    if !resources_ready {
         return None;
     }
     let bundle = operation_bundle_descriptor(REGISTRATION_HANDOFF_BUNDLE_ID)?;
@@ -342,18 +347,15 @@ mod capability_tests {
 
     #[test]
     fn registration_handoff_advertisement_requires_store_and_all_generated_members() {
-        let handler = super::super::registration_handoff::OPERATION_BINDING;
-        let descriptor = operation_bundle_descriptor(REGISTRATION_HANDOFF_BUNDLE_ID)
-            .expect("generated registration handoff bundle");
-        assert_eq!(descriptor.members, &[handler]);
-
         assert_eq!(
-            registration_handoff_bundle_if_ready(true, &[handler]),
+            registration_handoff_bundle_if_ready(true, &HANDOFF_BINDINGS),
             Some(REGISTRATION_HANDOFF_BUNDLE_ID)
         );
-        assert_eq!(registration_handoff_bundle_if_ready(true, &[]), None);
+        for binding in HANDOFF_BINDINGS {
+            assert_eq!(registration_handoff_bundle_if_ready(true, &[binding]), None);
+        }
         assert_eq!(
-            registration_handoff_bundle_if_ready(false, &[handler]),
+            registration_handoff_bundle_if_ready(false, &HANDOFF_BINDINGS),
             None
         );
     }
