@@ -799,10 +799,7 @@ pub async fn run_worker(
         // per-provider counts; Redis backend returns an empty map
         // (and the labelled metric simply stops getting updated for
         // that interval — operators read the aggregate gauge instead).
-        // Scope label is always `realm` here because retry envelopes
-        // do not currently carry circle_id; circle-keyed breakdown is
-        // gated behind a future enhancement once that field strands
-        // through the envelope.
+        // Provider totals aggregate Realm deliveries across destinations.
         for (provider, depth) in queue.pending_breakdown_by_provider() {
             crate::metrics::set_notify_retry_queue_depth_labelled(
                 &provider,

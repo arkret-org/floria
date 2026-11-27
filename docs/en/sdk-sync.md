@@ -10,7 +10,7 @@ The local sweep is implemented in `src/sanitize.rs` as
 `is_forbidden_egress_key` and runs recursively through
 `pushkin::sanitized_provider_payload`. Provider-specific tests in the
 Android, FCM, and WebPush adapters also assert that renamed
-Realm/Space/Circle identifiers stay off the provider wire.
+Realm and Space identifiers stay off the provider wire.
 
 ### Governance / correlation identifiers
 
@@ -31,18 +31,11 @@ The match is case-insensitive and applies recursively through nested
 provider-defined wrappers (e.g. `aps.alert`, `android.notification`,
 `data.payload`).
 
-### Circle identifiers are structurally impossible, not stripped
+### Provider routing metadata
 
-`circle_id`, `effective_scope` and `scope_circle_id` are **not** on the
-sweep list and must not be added back. The v1 push wire model has no
-Circle identifier and no scope field at all: `push-notifications.md` §5.1
-keeps raw Realm ids, Circle ids and `effective_scope` off
-`/_arkret/edge/push/notify`, and `PushNotificationEnvelope` is
-`serde(deny_unknown_fields)`, so such a name cannot even deserialize into
-floria's typed model. The security scope of an Event lives in its
-producer-signed `scope_ref` and never reaches a gateway. The negative
-assertions in the Android / FCM / WebPush adapters stay as regression
-guards on the allow-list builder.
+Blind wakeups use opaque route tokens. The closed `PushNotificationEnvelope`
+rejects raw Realm IDs and scope fields. The Android, FCM and WebPush adapter
+tests also check the final provider payload.
 
 ## Mention Reference Fields N/A
 

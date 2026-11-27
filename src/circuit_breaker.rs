@@ -1,26 +1,4 @@
-//! AKP-0007 Circle primitive — per-(provider, realm, circle) circuit
-//! breaker. Lightweight in-process breaker that opens a window when
-//! consecutive failures cross a threshold and stays open for a
-//! configurable cool-down. Designed so a single misbehaving Circle
-//! does NOT trip a realm-wide or provider-wide outage.
-//!
-//! ## Scope
-//!
-//! Floria's existing rate limiter (`rate_limit::NotifyRateLimiter`)
-//! handles *steady-state* shedding. The breaker is a *fault-isolation*
-//! mechanism — when a provider's API to a specific Circle keeps
-//! returning permanent errors, the breaker opens so subsequent
-//! dispatches short-circuit immediately rather than burning quota or
-//! hammering the upstream. The Realm-level and Circle-level state are
-//! tracked independently so a Circle-scoped outage doesn't bleed up.
-//!
-//! ## Knobs
-//!
-//! The breaker is intentionally cheap and self-tuning: per-scope state
-//! is just `(consecutive_failures, opened_at)`. There is no probabilistic
-//! tripping, no half-open trickle — operators get a binary signal that
-//! can be observed on `floria_circuit_breaker_state` and acted on by
-//! ops dashboards.
+//! Isolate upstream provider failures by Realm route and optional opaque scope route.
 
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -29,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use lru::LruCache;
 
-/// Per-Circle (or per-Realm, when no circle is set) breaker config.
+/// Per-route breaker config.
 #[derive(Debug, Clone)]
 pub struct CircuitBreakerConfig {
     /// Number of consecutive failures before the breaker opens.
@@ -43,7 +21,7 @@ pub struct CircuitBreakerConfig {
     pub open_for: Duration,
     /// Maximum number of distinct breaker-state slots to keep before
     /// LRU-evicting the oldest. Bounds memory under high cardinality
-    /// (e.g. a malicious caller cycling through circle ids).
+    /// (e.g. a malicious caller cycling through route tokens).
     pub max_breaker_states: usize,
     /// Per-provider override of `open_for`. Falls back to the global
     /// `open_for` when no provider-specific entry is set.
@@ -61,24 +39,24 @@ impl Default for CircuitBreakerConfig {
     }
 }
 
-/// Provider + Realm + (optional) Circle composite key.
+/// Provider, Realm route and optional opaque scope route.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BreakerKey {
     pub provider: String,
     pub realm_id: Option<String>,
-    pub circle_id: Option<String>,
+    pub scope_route_token: Option<String>,
 }
 
 impl BreakerKey {
     pub fn new(
         provider: impl Into<String>,
         realm_id: Option<&str>,
-        circle_id: Option<&str>,
+        scope_route_token: Option<&str>,
     ) -> Self {
         Self {
             provider: provider.into(),
             realm_id: realm_id.map(str::to_owned),
-            circle_id: circle_id.map(str::to_owned),
+            scope_route_token: scope_route_token.map(str::to_owned),
         }
     }
 }
@@ -89,12 +67,12 @@ struct BreakerState {
     opened_at: Option<Instant>,
 }
 
-/// In-process circuit breaker keyed by `(provider, realm, circle)`.
+/// In-process circuit breaker keyed by `(provider, realm, scope route)`.
 /// Cheap enough to consult on every dispatch.
 ///
 /// Backed by an [`LruCache`] so the breaker-state slot count is bounded
 /// at `max_breaker_states` with O(1) access + eviction — a malicious
-/// caller cycling through circle ids can no longer force an O(n) scan on
+/// caller cycling through route tokens can no longer force an O(n) scan on
 /// every dispatch (the previous hand-rolled `min_by_key` eviction).
 #[derive(Debug)]
 pub struct CircuitBreaker {
@@ -255,7 +233,7 @@ mod tests {
     #[test]
     fn closes_under_threshold() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("ak:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("opaque-scope-route"));
         assert!(!breaker.is_open(&key));
         assert!(!breaker.record_failure(&key));
         assert!(!breaker.record_failure(&key));
@@ -265,7 +243,7 @@ mod tests {
     #[test]
     fn opens_at_threshold() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("ak:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("opaque-scope-route"));
         breaker.record_failure(&key);
         breaker.record_failure(&key);
         assert!(breaker.record_failure(&key));
@@ -288,7 +266,7 @@ mod tests {
     #[test]
     fn auto_resets_after_open_for_window() {
         let breaker = CircuitBreaker::new(cfg());
-        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("ak:circle:c"));
+        let key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("opaque-scope-route"));
         breaker.record_failure(&key);
         breaker.record_failure(&key);
         breaker.record_failure(&key);
@@ -298,16 +276,16 @@ mod tests {
     }
 
     #[test]
-    fn realm_and_circle_keys_are_independent() {
+    fn realm_and_scope_keys_are_independent() {
         let breaker = CircuitBreaker::new(cfg());
         let realm_key = BreakerKey::new("fcm", Some("ak:realm:r"), None);
-        let circle_key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("ak:circle:c"));
+        let scope_key = BreakerKey::new("fcm", Some("ak:realm:r"), Some("opaque-scope-route"));
         breaker.record_failure(&realm_key);
         breaker.record_failure(&realm_key);
         breaker.record_failure(&realm_key);
         assert!(breaker.is_open(&realm_key));
-        // A Circle-scoped breaker tripping must NOT bleed up into the
+        // A scope route-scoped breaker tripping must NOT bleed up into the
         // Realm-scoped breaker, and vice versa.
-        assert!(!breaker.is_open(&circle_key));
+        assert!(!breaker.is_open(&scope_key));
     }
 }

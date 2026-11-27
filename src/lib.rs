@@ -67,10 +67,6 @@ pub struct AppState {
     pub notify_nonce_store: Option<Arc<NonceStore>>,
     pub notify_retry_queue: Option<Arc<RetryQueue>>,
     pub circuit_breaker: Option<Arc<CircuitBreaker>>,
-    /// AKP-0007 — when `true`, per-(provider, scope) metrics use the
-    /// `circle_id` (cardinality up to the number of active Circles).
-    /// Default `false` — labels key off the parent `realm_id`.
-    pub metrics_detailed_circle_labels: bool,
 }
 
 impl AppState {
@@ -107,7 +103,6 @@ impl AppState {
             notify_nonce_store: None,
             notify_retry_queue: None,
             circuit_breaker: Some(Arc::new(CircuitBreaker::default())),
-            metrics_detailed_circle_labels: false,
         }
     }
 

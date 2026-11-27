@@ -22,18 +22,10 @@ Out-of-scope:
 - Self-hosted dev defaults intended to be overridden in production
 - Theoretical issues without practical exploitation
 
-## AKP-0007 Circle Invariants
+## Blind wakeups
 
-Per spec, Circle is an intra-Realm cryptographic sub-boundary:
-- Circle member lists MUST NOT leak to directory services or push gateways in plaintext
-- The security scope of an Event lives in its producer-signed `scope_ref`
-  (`models/circle.md` §6.2 — the Event wire has exactly one scope field).
-  Object read projections MAY materialize `effective_scope`, which must equal
-  the creating Event's `scope_ref`; neither name may reach a push gateway.
-- Raw Realm ids, Circle ids and `effective_scope` MUST NOT enter the
-  `/_arkret/edge/push/notify` wire (`discovery/push-notifications.md` §5.1).
-  Routing is expressed only through `route_tokens` and
-  `devices[].target_route_token`.
+Blind wakeups use opaque route tokens. Raw Realm IDs, signed security scopes,
+and membership lists must stay outside the provider-facing payload.
 
 Violations of these invariants are treated as security issues.
 

@@ -43,10 +43,8 @@ see `docs/en/internal-endpoints.md`).
 **Triage**:
 
 1. Identify the offending provider — check
-   `floria_notify_retry_enqueued_total{pushkin}` and the new
-   `floria_notify_retry_queue_depth{provider}` labels (only emitted
-   when `metrics_detailed_circle_labels=true`, otherwise reconstruct
-   from counter deltas).
+   `floria_notify_retry_enqueued_total{pushkin}` and the
+   `floria_notify_retry_queue_depth` gauge by provider.
 2. Look at `floria_pushkin_dispatch_seconds{outcome="error"}` — slow
    provider responses are usually a provider-side outage or a stale
    credential.
@@ -91,19 +89,3 @@ retryable state.
 - For a hard credential failure, rotate per
   `docs/en/credential-rotation.md` then SIGHUP / rolling-restart;
   rotated credentials reset the breaker state.
-
-## Cardinality guard auto-downgrade
-
-**Symptom**: log line
-`metrics_detailed_circle_labels=true cardinality guard tripped`; the
-detailed per-Circle metrics stop updating.
-
-**Triage / Recovery**:
-
-This is by design — floria automatically downgrades to realm-keyed
-labels once the unique-circle count crosses 5,000 so Prometheus
-storage does not explode. Either accept the downgrade (the
-realm-keyed series still answers the SLI dashboards) or shard your
-deployment so each floria instance only serves a subset of Circles.
-
-A process restart resets the guard.

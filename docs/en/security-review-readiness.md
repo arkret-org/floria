@@ -127,28 +127,19 @@ or open follow-up tickets:
    in-flight dispatches per pod but does not coordinate across
    replicas. Operators sizing a clustered floria deployment must
    set per-pod budgets accordingly.
-2. **Cardinality guard is process-local and sticky** — when
-   `metrics_detailed_circle_labels=true` and unique circle_ids exceed
-   5,000, floria auto-downgrades to realm-keyed labels for the rest
-   of the process lifetime. The downgrade is per-replica and is
-   logged once at the warn level.
-3. **Retry-queue per-Circle metric is realm-keyed** — the
-   `floria_notify_retry_queue_depth` labelled gauge always uses
-   `scope_kind=realm` because retry envelopes do not currently carry
-   circle_id. Operators reconstruct per-Circle retry health from the
-   counter deltas (`floria_notify_retry_enqueued_total`,
-   `floria_notify_retry_replayed_total`).
-4. **Plaintext bearer tokens are development-only** — the
+2. **Retry-queue depth aggregates per provider.** The labelled gauge uses
+   `scope_kind=realm` and does not provide per-Realm backlog counts.
+3. **Plaintext bearer tokens are development-only** — the
    `notify_auth.bearer_tokens` field is accepted outside production,
    but `production_mode=true` rejects both gateway-wide and
    per-principal plaintext bearer tokens at config validation. Production callers must use HTTP Message
    Signatures or mTLS; bearer hashes are retained only as non-production
    fallback material. See `docs/en/configuration.md`.
-5. **Takedown notification path is not implemented** — there is no
+4. **Takedown notification path is not implemented** — there is no
    takedown-notification handler yet (TODO(P5-impl)). No placeholder
    metric is exported for it; the counter and stub were removed so the
    `/metrics` surface only reflects implemented paths.
-6. **Internal endpoints share the public listener** — see
+5. **Internal endpoints share the public listener** — see
    `docs/en/internal-endpoints.md`. They now require
    `http.internal_auth` and fail closed when it is unset; private
    binds / service-mesh mTLS remain recommended defense-in-depth.

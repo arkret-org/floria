@@ -95,7 +95,6 @@ floria attaches these to every `/notify` span:
 | `floria.origin_id` | resolved origin stable identity |
 | `floria.app_id` | target app id |
 | `floria.realm_id` | realm scope (always present) |
-| `floria.circle_id` | circle scope (when set; respects detailed-labels toggle) |
 | `floria.dispatch_outcome` | `accepted` / `rejected` / `retryable` / `failed` |
 
 Provider dispatch is a child span named `pushkin.dispatch` with the

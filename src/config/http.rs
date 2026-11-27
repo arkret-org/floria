@@ -32,15 +32,6 @@ pub struct HttpConfig {
     pub internal_auth: InternalAuthConfig,
     pub notify_rate_limits: NotifyRateLimitConfig,
     pub notify_retry_queue: NotifyRetryQueueConfig,
-    /// AKP-0007 Circle primitive — when `true`, the per-(provider,
-    /// scope) delivery counter (`floria_notify_delivery_total`) labels
-    /// `scope_id` with the `circle_id` instead of the parent
-    /// `realm_id` when a Circle is set. Default `false` keeps the
-    /// label cardinality bounded by realm count; operators only opt
-    /// in for environments where per-Circle delivery dashboards are
-    /// needed.
-    #[serde(default)]
-    pub metrics_detailed_circle_labels: bool,
     #[serde(flatten)]
     pub(super) extra: Map<String, Value>,
 }
@@ -60,7 +51,6 @@ impl Default for HttpConfig {
             internal_auth: InternalAuthConfig::default(),
             notify_rate_limits: NotifyRateLimitConfig::default(),
             notify_retry_queue: NotifyRetryQueueConfig::default(),
-            metrics_detailed_circle_labels: false,
             extra: Map::new(),
         }
     }

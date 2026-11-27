@@ -148,11 +148,6 @@ fn http_schema() -> Value {
                         "description": "Table the deadletter overlay writes into. Must be `table` or `schema.table` with simple SQL identifiers."
                     }
                 }
-            },
-            "metrics_detailed_circle_labels": {
-                "type": "boolean",
-                "default": false,
-                "description": "AKP-0007 Circle primitive. When true, the per-(provider, scope) delivery counter (floria_notify_delivery_total) labels scope_id with the circle_id instead of the parent realm_id. Default false bounds label cardinality by realm count."
             }
         }
     })

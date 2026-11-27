@@ -143,7 +143,6 @@ pub(super) async fn finish_dispatch(
     record_notify_delivery_by_scope(
         notification,
         &delivery_receipts,
-        state.metrics_detailed_circle_labels,
     );
     finish_standard_notify_json(res, StatusCode::OK, &response, started);
 }

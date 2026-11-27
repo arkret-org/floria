@@ -359,10 +359,7 @@ pub(super) fn normalized_notify_dedup_key(
     if let Some(value) = notification.realm_id() {
         normalized.insert("realm_id".to_owned(), Value::String(value.to_owned()));
     }
-    // `push-notifications.md` §5.1/§6.2 — the wakeup carries no Circle or scope identifier, so the
-    // opaque `scope_route_token` is the only thing that separates two
-    // pushes for the same Strand in different Circles. It is therefore
-    // dedup-affecting and must be part of the normalized fingerprint.
+    // Include both opaque route tokens so deliveries to distinct routes stay distinct.
     if let Some(value) = notification.realm_route_token() {
         normalized.insert(
             "realm_route_token".to_owned(),

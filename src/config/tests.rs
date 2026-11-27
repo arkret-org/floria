@@ -82,7 +82,6 @@ fn keeps_explicit_http_ports() {
         internal_auth: InternalAuthConfig::default(),
         notify_rate_limits: NotifyRateLimitConfig::default(),
         notify_retry_queue: NotifyRetryQueueConfig::default(),
-        metrics_detailed_circle_labels: false,
         extra: Map::new(),
     };
 
@@ -107,7 +106,6 @@ fn supports_bracketed_ipv6_without_explicit_port() {
         internal_auth: InternalAuthConfig::default(),
         notify_rate_limits: NotifyRateLimitConfig::default(),
         notify_retry_queue: NotifyRetryQueueConfig::default(),
-        metrics_detailed_circle_labels: false,
         extra: Map::new(),
     };
 
