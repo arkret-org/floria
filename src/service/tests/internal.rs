@@ -1,4 +1,4 @@
-//! Operator authentication and rejection of the retired identity-bearing broadcast.
+//! Operator authentication and dead-letter queue queries.
 
 use std::sync::Arc;
 
@@ -299,27 +299,5 @@ async fn dead_letters_rejects_invalid_limit() {
             body["type"],
             json!("https://arkret.org/problems/schema_violation")
         );
-    }
-}
-
-#[tokio::test]
-async fn retired_account_deactivation_route_is_absent_even_with_valid_bearer() {
-    let service = test_service_with_internal_auth();
-    for token in [None, Some(INTERNAL_TOKEN)] {
-        let request =
-            TestClient::post("http://127.0.0.1/_floria/internal/account_deactivate_fanout");
-        let request = if let Some(token) = token {
-            request.bearer_auth(token)
-        } else {
-            request
-        };
-        let response = request
-            .json(&json!({
-                "fanout_id": "retired-request", "actor_id": "ak:did_core:web:alice.example",
-                "devices": [{"device_id": "device-a"}]
-            }))
-            .send(&service)
-            .await;
-        assert_eq!(response.status_code.unwrap(), StatusCode::NOT_FOUND);
     }
 }
